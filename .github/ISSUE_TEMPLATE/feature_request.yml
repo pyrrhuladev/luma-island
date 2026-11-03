@@ -1,0 +1,28 @@
+name: "Идея / Feature request"
+description: "Предложить функцию, улучшение интерфейса или поведения."
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: "Какую задачу хочется решить"
+      description: "Опишите ситуацию и то, что сейчас неудобно."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: "Как это могло бы работать"
+      description: "Какое поведение или управление вы ожидаете?"
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Другие варианты — если рассматривали"
+  - type: textarea
+    id: context
+    attributes:
+      label: "Примеры и дополнительный контекст"
+      description: "Можно добавить эскиз или обезличенный скриншот. Если идея требует фонового сбора данных, расскажите, когда он нужен и как его выключать."

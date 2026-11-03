@@ -1,0 +1,48 @@
+name: "Ошибка / Bug report"
+description: "Сообщить о сбое, неправильном поведении или проблеме интерфейса."
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Опишите одну воспроизводимую проблему. Вопросы по использованию тоже приветствуются — для них можно открыть пустой issue."
+  - type: input
+    id: version
+    attributes:
+      label: "Версия Luma Island"
+      placeholder: "Например: 0.5.2, portable из Releases / сборка из исходников и commit"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: "Версия Windows"
+      description: "Для проблемы с размещением добавьте масштаб интерфейса и число мониторов."
+      placeholder: "Например: Windows 11 24H2, масштаб 150%, два монитора"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Как повторить"
+      description: "Укажите нужные компоненты и настройки; для FPS — доступный источник FrameView."
+      placeholder: |
+        1. Запустить Luma Island.
+        2. Включить...
+        3. Сделать...
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: "Что произошло и что ожидалось"
+      placeholder: |
+        Фактический результат:
+        Ожидаемый результат:
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: "Скриншоты, журнал или измерения — если есть"
+      description: "Для ошибки интерфейса приложите скриншот с демонстрационными данными. Уберите личные пути, имена и токены. Для нагрузки укажите длительность, компоненты, состояние панели и отдельный расход процессов FrameView."

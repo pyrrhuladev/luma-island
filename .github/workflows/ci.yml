@@ -1,0 +1,87 @@
+name: Build, checks and release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          [xml]$project = Get-Content src/Luma.Island/Luma.Island.csproj -Raw
+          $version = [string]$project.Project.PropertyGroup.Version
+          if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') { throw 'Invalid version.' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Publish and run checks
+        shell: pwsh
+        run: ./tools/Test.ps1
+      - name: Build verified portable archive
+        shell: pwsh
+        run: ./tools/Package.ps1 -SkipPublish
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: portable-windows-x64
+          path: artifacts/release/*
+          retention-days: 14
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: portable-windows-x64
+          path: dist
+      - name: Publish a new version once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v${RELEASE_VERSION}"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists; keeping its assets unchanged."
+            exit 0
+          fi
+          (cd dist && sha256sum --check *SHA256SUMS.txt)
+          cat > notes.md <<'NOTES'
+          Portable-сборка для Windows 10 22H2 / Windows 11, x64. Распакуйте ZIP целиком и запустите Luma.Island.exe; .NET включён.
+
+          Музыка, громкость, часы, батарея, настраиваемое стекло, показатели CPU/GPU/RAM/FPS, мини-графики и отключаемый автозапуск. Для FPS нужен отдельно установленный NVIDIA FrameView SDK; он не входит в архив.
+
+          Исходники Luma Island распространяются под MIT. Лицензии включённых зависимостей находятся в архиве. Перед обновлением завершите старую версию через меню в трее. Сборка без цифровой подписи.
+          NOTES
+          gh release create "$tag" dist/* --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "Luma Island $RELEASE_VERSION" --notes-file notes.md
