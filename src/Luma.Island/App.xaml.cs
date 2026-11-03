@@ -148,7 +148,7 @@ public partial class App : System.Windows.Application
 
     private async void ConfigureComponents(ComponentSettings settings)
     {
-        _performance?.Configure(settings.Cpu, settings.Gpu, settings.Memory);
+        _performance?.Configure(settings.Cpu, settings.Gpu, settings.Memory, settings.GpuTemperature);
         _fps?.Configure(settings.Fps);
         ScheduleClock();
         try { if (_media is not null) await _media.SetEnabledAsync(settings.Music); }

@@ -10,7 +10,8 @@ using System.Windows.Threading;
 
 namespace Luma.Island.Services;
 
-public sealed record PerformanceSnapshot(double? CpuPercent, double? GpuPercent, double? MemoryPercent, ulong UsedMemoryBytes, ulong TotalMemoryBytes)
+public sealed record PerformanceSnapshot(double? CpuPercent, double? GpuPercent, double? MemoryPercent, ulong UsedMemoryBytes, ulong TotalMemoryBytes,
+    double? GpuTemperatureCelsius = null, string? GpuTemperatureStatus = null)
 {
     public static PerformanceSnapshot Empty { get; } = new(null, null, null, 0, 0);
 }
@@ -29,6 +30,7 @@ public sealed class PerformanceService : IDisposable
     private ulong _idle, _kernel, _user;
     private long _lastSampleTimestamp;
     private IntPtr _query, _gpuCounter;
+    private GpuTemperatureReader? _temperatureReader;
     private static readonly Regex EngineName = new(
         @"luid_(?<luid>0x[0-9a-f]+_0x[0-9a-f]+)_phys_(?<physical>\d+)_eng_(?<engine>\d+)(?:_engtype_|$)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -39,17 +41,17 @@ public sealed class PerformanceService : IDisposable
     /// <summary>Raised on the WPF application dispatcher.</summary>
     public event Action<PerformanceSnapshot>? Changed;
 
-    public void Configure(bool cpu, bool gpu, bool memory)
+    public void Configure(bool cpu, bool gpu, bool memory, bool gpuTemperature = false)
     {
         _dispatcher.VerifyAccess();
         ObjectDisposedException.ThrowIf(_disposed, this);
-        int flags = (cpu ? 1 : 0) | (gpu ? 2 : 0) | (memory ? 4 : 0);
+        int flags = (cpu ? 1 : 0) | (gpu ? 2 : 0) | (memory ? 4 : 0) | (gpuTemperature ? 8 : 0);
         if (Volatile.Read(ref _configuration).Flags == flags) return;
         var configuration = new Configuration(++_version, flags);
         Volatile.Write(ref _configuration, configuration);
         _timer.Change(flags == 0 ? Timeout.Infinite : 0, flags == 0 ? Timeout.Infinite : 2000);
         Publish(PerformanceSnapshot.Empty);
-        if (!gpu)
+        if (!gpu || !gpuTemperature)
         {
             // Serialize cleanup with an already-running PDH call, without blocking UI.
             _ = Task.Run(() =>
@@ -58,7 +60,8 @@ public sealed class PerformanceService : IDisposable
                 {
                     if (ReferenceEquals(configuration, Volatile.Read(ref _configuration)))
                     {
-                        CloseGpu();
+                        if (!gpu) CloseGpu();
+                        if (!gpuTemperature) CloseTemperature();
                         if (flags == 0) _hasCpuSample = false;
                     }
                 }
@@ -98,7 +101,15 @@ public sealed class PerformanceService : IDisposable
                 var status = new MemoryStatus { Length = (uint)Marshal.SizeOf<MemoryStatus>() };
                 if (GlobalMemoryStatusEx(ref status)) memory = CalculateMemory(status.TotalPhysical, status.AvailablePhysical);
             }
-            snapshot = new PerformanceSnapshot(cpu, gpu, memory.Percent, memory.Used, memory.Total);
+            double? temperature = null;
+            string? temperatureStatus = null;
+            if ((configuration.Flags & 8) != 0)
+            {
+                _temperatureReader ??= new GpuTemperatureReader();
+                temperature = _temperatureReader.ReadCelsius();
+                temperatureStatus = _temperatureReader.Status;
+            }
+            snapshot = new PerformanceSnapshot(cpu, gpu, memory.Percent, memory.Used, memory.Total, temperature, temperatureStatus);
         }
         catch (Exception ex)
         {
@@ -219,6 +230,12 @@ public sealed class PerformanceService : IDisposable
         _hasGpuSample = false;
     }
 
+    private void CloseTemperature()
+    {
+        _temperatureReader?.Dispose();
+        _temperatureReader = null;
+    }
+
     public void Dispose()
     {
         _dispatcher.VerifyAccess();
@@ -226,7 +243,7 @@ public sealed class PerformanceService : IDisposable
         _disposed = true;
         _timer.Dispose();
         Volatile.Write(ref _configuration, new Configuration(++_version, 0));
-        lock (_nativeGate) CloseGpu();
+        lock (_nativeGate) { CloseGpu(); CloseTemperature(); }
         Changed = null;
     }
 

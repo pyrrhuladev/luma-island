@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/Luma.Island/Services/PerformanceService.cs" Link="PerformanceService.cs" />
+    <Compile Include="../../src/Luma.Island/Services/GpuTemperatureReader.cs" Link="GpuTemperatureReader.cs" />
   </ItemGroup>
 </Project>

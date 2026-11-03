@@ -195,7 +195,7 @@
                             <TextBlock x:Name="CompactCpu" FontSize="12" Foreground="{DynamicResource TextSecondary}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                             <TextBlock x:Name="CompactGpu" FontSize="12" Foreground="{DynamicResource TextSecondary}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" LineHeight="16" Visibility="Collapsed"/>
                             <TextBlock x:Name="CompactMemory" FontSize="12" Foreground="{DynamicResource TextSecondary}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                             <TextBlock x:Name="CompactFps" FontSize="12" Foreground="{StaticResource Mint}"
@@ -286,10 +286,10 @@
                     </Grid>
                     <StackPanel x:Name="ExpandedPerformance" Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center"
                                 VerticalAlignment="Center" Visibility="Collapsed">
-                        <TextBlock x:Name="ExpandedCpu" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,0,12,0"/>
-                        <TextBlock x:Name="ExpandedGpu" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,0,12,0"/>
-                        <TextBlock x:Name="ExpandedMemory" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,0,12,0"/>
-                        <TextBlock x:Name="ExpandedFps" FontSize="11" Foreground="{StaticResource Mint}"/>
+                        <TextBlock x:Name="ExpandedCpu" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <TextBlock x:Name="ExpandedGpu" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" TextAlignment="Center" LineHeight="16" Margin="0,0,12,0"/>
+                        <TextBlock x:Name="ExpandedMemory" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <TextBlock x:Name="ExpandedFps" FontSize="11" Foreground="{StaticResource Mint}" VerticalAlignment="Center"/>
                     </StackPanel>
                     <Grid x:Name="ChartsPanel" Grid.Row="5" Margin="0,4,0,4" Visibility="Collapsed" IsVisibleChanged="OnChartsVisibleChanged">
                         <Grid.ColumnDefinitions>

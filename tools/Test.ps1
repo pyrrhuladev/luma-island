@@ -15,11 +15,11 @@ $version = [string]$metadata.Project.PropertyGroup.Version
 $publishedDirectory = Join-Path $projectRoot ('artifacts\Luma-Island-' + $version)
 $resultsDirectory = Join-Path $projectRoot 'work\checks'
 New-Item -ItemType Directory -Path $resultsDirectory -Force | Out-Null
-$checks = @('PlacementChecks', 'AppearanceChecks', 'ComponentChecks', 'PerformanceChecks', 'HistoryChecks', 'ArtworkChecks', 'AutostartChecks', 'AutostartUiChecks')
+$checks = @('PlacementChecks', 'AppearanceChecks', 'ComponentChecks', 'PerformanceChecks', 'HistoryChecks', 'ArtworkChecks', 'AutostartChecks', 'AutostartUiChecks', 'GpuTemperatureChecks', 'GpuTemperatureUiChecks')
 foreach ($check in $checks) {
     $project = Join-Path $projectRoot ('tests\' + $check)
     $arguments = @('run', '--project', $project, '-c', 'Release')
-    if ($check -eq 'AutostartUiChecks') { $arguments += ('-p:PublishedAppDirectory=' + $publishedDirectory) }
+    if ($check -like '*UiChecks') { $arguments += ('-p:PublishedAppDirectory=' + $publishedDirectory) }
     $arguments += @('--', (Join-Path $resultsDirectory $check))
     Write-Host "Checking $check..."
     & $dotnetCommand @arguments

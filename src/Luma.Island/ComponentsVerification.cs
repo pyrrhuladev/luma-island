@@ -37,7 +37,7 @@ public static class ComponentsVerification
             window.SetComponents(ComponentSettings.Default);
             var menu = window.CreateComponentsMenu();
             menuItems = menu.Items.Count;
-            Check(menuItems == 12 && menu.Items.OfType<MenuItem>().Count() == 10 && menu.Items[5] is Separator,
+            Check(menuItems == 13 && menu.Items.OfType<MenuItem>().Count() == 11 && menu.Items[5] is Separator,
                 "Меню компонентов не содержит переключатели и расширенный режим.");
             void ClickOff(int index)
             {

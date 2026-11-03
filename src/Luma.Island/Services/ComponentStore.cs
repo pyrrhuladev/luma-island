@@ -14,7 +14,8 @@ public sealed record ComponentSettings(
     bool Gpu = false,
     bool Memory = false,
     bool Fps = false,
-    bool Charts = false)
+    bool Charts = false,
+    bool GpuTemperature = false)
 {
     public static ComponentSettings Default { get; } = new();
 }
