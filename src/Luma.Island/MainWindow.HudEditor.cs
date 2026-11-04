@@ -1,0 +1,149 @@
+using System;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using Luma.Island.Services;
+
+namespace Luma.Island;
+
+public partial class MainWindow
+{
+    public bool IsHudEditorOpen { get; private set; }
+
+    public MenuItem CreateHudEditorMenuItem()
+    {
+        var item = new MenuItem { Header = "Редактор HUD и предупреждения…" };
+        item.Click += (_, _) => OpenHudEditor();
+        return item;
+    }
+
+    public void OpenHudEditor()
+    {
+        VerifyAccess();
+        if (_closed || IsProfileEditorOpen || IsHudDragging) return;
+        SaveCurrentProfileEdits();
+        IsHudEditorOpen = IsProfileEditorOpen = true;
+        ProfileEditorVisibilityChanged?.Invoke(true);
+        try
+        {
+            using var preview = new HudPreviewSession();
+            var editor = new HudEditorWindow(Appearance, Components,
+                _profiles?.ActiveProfile?.Name ?? "Общий HUD", preview.Render) { Owner = this };
+            double availableHeight = Placement.CurrentDisplay.WorkArea.Height / DisplayService.GetWindowScale(this) - 16;
+            editor.MaxHeight = Math.Max(editor.MinHeight, availableHeight);
+            editor.Height = Math.Min(editor.Height, editor.MaxHeight);
+            double availableWidth = Placement.CurrentDisplay.WorkArea.Width / DisplayService.GetWindowScale(this) - 16;
+            editor.MaxWidth = Math.Max(editor.MinWidth, availableWidth);
+            editor.Width = Math.Min(editor.Width, editor.MaxWidth);
+            if (editor.ShowDialog() == true && !ApplyHudEditorSettings(editor.DraftAppearance, editor.DraftComponents))
+                ShowProfileSaveWarning();
+        }
+        finally
+        {
+            IsHudEditorOpen = IsProfileEditorOpen = false;
+            ProfileEditorVisibilityChanged?.Invoke(false);
+        }
+    }
+
+    public bool ApplyHudEditorSettings(AppearanceSettings appearance, ComponentSettings components)
+    {
+        VerifyAccess();
+        if (_closed) return false;
+        CompleteTransition();
+        // Input recovery remains a separate global preference, outside the editor's draft.
+        Appearance = AppearanceStore.Normalize(appearance with { ClickThrough = Appearance.ClickThrough });
+        Components = components ?? ComponentSettings.Default;
+        ResetAlerts();
+        UpdateClockAndBattery();
+        ApplyComponentVisibility();
+        ApplyAppearance();
+        OnMediaChanged(_lastMedia ?? _media.Current);
+        bool saved = _appearanceStore.Save(Appearance) & _componentStore.Save(Components);
+        if (saved) _savedAppearance = Appearance;
+        saved &= SaveCurrentProfileEdits();
+        ComponentsChanged?.Invoke(Components);
+        return saved;
+    }
+
+    public static BitmapSource RenderHudPreview(AppearanceSettings appearance, ComponentSettings components)
+    {
+        using var preview = new HudPreviewSession();
+        return preview.Render(appearance, components);
+    }
+
+    private sealed class HudPreviewSession : IDisposable
+    {
+        private readonly MediaService _media = new();
+        private readonly SystemService _system = new();
+        private readonly MainWindow _window;
+        private readonly FrameworkElement _content;
+
+        public HudPreviewSession()
+        {
+            // A never-shown visual tree needs no media session, SDK, collector, tray or native HWND.
+            _system.Dispose();
+            _window = new MainWindow(_media, _system, new PreviewPlacementStore(),
+                new PreviewAppearanceStore(), new PreviewComponentStore(), new AutostartService(readOnly: true));
+            _content = (FrameworkElement)_window.Content;
+            _window.Content = null;
+            _content.Resources = _window.Resources;
+            NameScope.SetNameScope(_content, NameScope.GetNameScope(_window));
+        }
+
+        public BitmapSource Render(AppearanceSettings appearance, ComponentSettings components)
+        {
+            _window.Appearance = AppearanceStore.Normalize(appearance);
+            _window.Components = components;
+            _window.ApplyComponentVisibility();
+            _window.ApplyAppearance();
+            _window.OnMediaChanged(new MediaSnapshot("Вечерняя сессия", "Пример · предпросмотр", true, true, true, true, true, null));
+            _window.ApplyPerformance(new PerformanceSnapshot(43, 76, 48, 16UL << 30, 32UL << 30,
+                GpuTemperatureCelsius: 68, CpuTemperatureCelsius: 62, MemoryTemperatureCelsius: 51));
+            _window.ApplyFps(new FpsSnapshot(144, "Предпросмотр", "Пример данных", 120, 6.9));
+            _window.CompactClock.Text = "21:48";
+            _window.ResetAlerts();
+            var alerts = _window.Appearance.Alerts;
+            if (alerts.NeedsCpuTemperature || alerts.NeedsGpuTemperature || alerts.NeedsMemoryTemperature || alerts.NeedsFrames)
+            {
+                _window.QuietAlertIndicator.Visibility = Visibility.Visible;
+                _window.QuietAlertIndicator.Fill = Brushes.Goldenrod;
+            }
+            var transform = new ScaleTransform(_window.EffectiveHudScale, _window.EffectiveHudScale);
+            transform.Freeze();
+            _content.LayoutTransform = transform;
+            var size = new Size(_window.Width, _window.Height);
+            _content.Measure(size);
+            _content.Arrange(new Rect(size));
+            _content.UpdateLayout();
+            var bitmap = new RenderTargetBitmap((int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height),
+                96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(_content);
+            bitmap.Freeze();
+            return bitmap;
+        }
+
+        public void Dispose()
+        {
+            _window.Close();
+            _media.Dispose();
+            _system.Dispose();
+        }
+    }
+
+    private sealed class PreviewAppearanceStore : AppearanceStore
+    {
+        public override AppearanceSettings Load() => AppearanceSettings.Default;
+        public override bool Save(AppearanceSettings settings) => true;
+    }
+    private sealed class PreviewComponentStore : ComponentStore
+    {
+        public override ComponentSettings Load() => ComponentSettings.Default;
+        public override bool Save(ComponentSettings settings) => true;
+    }
+    private sealed class PreviewPlacementStore : PlacementStore
+    {
+        public override PlacementSettings Load() => PlacementSettings.Default;
+        public override bool Save(PlacementSettings settings) => true;
+    }
+}

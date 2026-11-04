@@ -44,6 +44,8 @@ public sealed class PerformanceService : IDisposable
     public PerformanceSnapshot Current { get; private set; } = PerformanceSnapshot.Empty;
     /// <summary>Raised on the WPF application dispatcher.</summary>
     public event Action<PerformanceSnapshot>? Changed;
+    /// <summary>Raised for every fresh result, including equal readings and resets; on the application dispatcher.</summary>
+    public event Action<PerformanceSnapshot>? Sampled;
 
     public void Configure(bool cpu, bool gpu, bool memory, bool gpuTemperature = false,
         bool cpuTemperature = false, bool memoryTemperature = false)
@@ -145,6 +147,7 @@ public sealed class PerformanceService : IDisposable
 
     private void Publish(PerformanceSnapshot snapshot)
     {
+        Sampled?.Invoke(snapshot);
         if (snapshot == Current) return;
         Current = snapshot;
         Changed?.Invoke(snapshot);

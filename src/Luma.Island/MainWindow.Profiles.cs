@@ -64,6 +64,7 @@ public partial class MainWindow
         CompleteTransition();
         using (_profiles.SuppressWrites())
         {
+            ResetAlerts();
             bool inputPreference = Appearance.ClickThrough;
             Appearance = AppearanceStore.Normalize(settings.Appearance with { ClickThrough = inputPreference });
             Components = settings.Components;

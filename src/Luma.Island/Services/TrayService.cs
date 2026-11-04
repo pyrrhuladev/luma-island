@@ -30,7 +30,8 @@ public sealed class TrayService : IDisposable
     public TrayService(Window window, Action toggleVisible, Action toggleExpanded, Action exit,
         Func<MenuItem>? positionMenuFactory = null, Func<MenuItem>? appearanceMenuFactory = null, Func<MenuItem>? componentsMenuFactory = null,
         Func<MenuItem>? autostartMenuFactory = null, Action? menuOpening = null, Action? showVisible = null,
-        Func<MenuItem>? inputMenuFactory = null, Func<MenuItem>? profilesMenuFactory = null)
+        Func<MenuItem>? inputMenuFactory = null, Func<MenuItem>? profilesMenuFactory = null,
+        Func<MenuItem>? hudEditorMenuFactory = null)
     {
         window.Dispatcher.VerifyAccess();
         _source = HwndSource.FromHwnd(new WindowInteropHelper(window).Handle)
@@ -49,6 +50,7 @@ public sealed class TrayService : IDisposable
         AddItem("Развернуть / свернуть", toggleExpanded);
         if (inputMenuFactory is not null) _menu.Items.Add(inputMenuFactory());
         if (profilesMenuFactory is not null) _menu.Items.Add(profilesMenuFactory());
+        if (hudEditorMenuFactory is not null) _menu.Items.Add(hudEditorMenuFactory());
         if (positionMenuFactory is not null) _menu.Items.Add(positionMenuFactory());
         if (appearanceMenuFactory is not null) _menu.Items.Add(appearanceMenuFactory());
         if (componentsMenuFactory is not null) _menu.Items.Add(componentsMenuFactory());

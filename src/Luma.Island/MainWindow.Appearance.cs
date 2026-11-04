@@ -75,6 +75,7 @@ public partial class MainWindow
             SetBrush("AlbumSurface", "#25332E");
             SetBrush("VolumeTrack", "#343B42");
         }
+        RefreshAlerts();
         ApplyHudScale();
     }
 

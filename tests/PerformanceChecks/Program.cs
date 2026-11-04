@@ -63,7 +63,8 @@ internal static class Program
             {
                 (Engine(1, "00000001", 0, 0), double.MaxValue), (Engine(2, "00000001", 0, 0), double.MaxValue)
             }), "GPU finite extreme inputs cannot overflow aggregate");
-            Console.WriteLine($"PASS: {_checks} performance calculation checks.");
+            VerifyFreshEqualTemperatures();
+            Console.WriteLine($"PASS: {_checks} performance calculation and freshness checks.");
             return 0;
         }
         catch (Exception exception)
@@ -75,6 +76,32 @@ internal static class Program
 
     private static string Engine(int pid, string adapter, int physical, int engine)
         => $"pid_{pid}_luid_0x00000000_0x{adapter}_phys_{physical}_eng_{engine}_engtype_3D";
+
+    private static void VerifyFreshEqualTemperatures()
+    {
+        using var service = new PerformanceService();
+        var publish = typeof(PerformanceService).GetMethod("Publish", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Performance publication entry point is missing.");
+        var alerts = new HudAlertEngine();
+        alerts.Configure(new AlertSettings(Enabled: true, GpuTemperature: false, Stutters: false), 0);
+        int sampled = 0, changed = 0;
+        double now = 0;
+        service.Sampled += snapshot => { sampled++; alerts.ObserveTemperatures(snapshot.CpuTemperatureCelsius, null, null, now); };
+        service.Changed += _ => changed++;
+        var hot = new PerformanceSnapshot(null, null, null, 0, 0, CpuTemperatureCelsius: 96);
+        for (int second = 0; second <= 4; second += 2) { now = second; publish.Invoke(service, new object[] { hot }); }
+        Check(sampled == 3 && changed == 1, "Equal fresh measurements notify alert observers without redrawing unchanged labels");
+        Check(alerts.View(4).Active, "Constant hot temperature reaches sustained warning after four seconds");
+        now = 6; publish.Invoke(service, new object[] { hot });
+        Check(alerts.View(9).Active, "Equal fresh hot readings extend warning freshness");
+        Check(changed == 1 && service.Current == hot, "Equal readings preserve UI deduplication and current snapshot");
+        Check(!alerts.View(13).Active, "Cached value cannot keep warning alive after measurement stops");
+        now = 14; publish.Invoke(service, new object[] { PerformanceSnapshot.Empty });
+        Check(!alerts.View(14).Active && changed == 2, "Missing measurement resets warning and updates display once");
+        now = 16; publish.Invoke(service, new object[] { PerformanceSnapshot.Empty });
+        Check(sampled == 6 && changed == 2, "Repeated missing readings remain fresh events without redundant display updates");
+        Check(!service.IsRunning, "Freshness regression uses no real system collector or native sampling");
+    }
     private static void Equal(double expected, double? actual, string description)
         => Check(actual.HasValue && double.IsFinite(actual.Value) && Math.Abs(expected - actual.Value) < 0.000001,
             description + $" (expected {expected}, got {actual?.ToString() ?? "null"})");

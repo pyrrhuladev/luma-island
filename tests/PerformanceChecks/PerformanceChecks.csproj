@@ -8,6 +8,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/Luma.Island/Services/PerformanceService.cs" Link="PerformanceService.cs" />
+    <Compile Include="../../src/Luma.Island/Services/AlertSettings.cs" Link="AlertSettings.cs" />
+    <Compile Include="../../src/Luma.Island/Services/HudAlertEngine.cs" Link="HudAlertEngine.cs" />
     <Compile Include="../../src/Luma.Island/Services/GpuTemperatureReader.cs" Link="GpuTemperatureReader.cs" />
     <Compile Include="../../src/Luma.Island/Services/SensorClient.cs" Link="SensorClient.cs" />
     <Compile Include="../../src/Luma.Island/Services/SensorProtocol.cs" Link="SensorProtocol.cs" />

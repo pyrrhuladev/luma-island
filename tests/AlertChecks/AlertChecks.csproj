@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/Luma.Island/Services/AlertSettings.cs" Link="AlertSettings.cs" />
+    <Compile Include="../../src/Luma.Island/Services/HudAlertEngine.cs" Link="HudAlertEngine.cs" />
+  </ItemGroup>
+</Project>

@@ -71,7 +71,8 @@ public partial class App : System.Windows.Application
                 _profileController.ComponentStore, autostart, _profileController);
             _performance = new PerformanceService();
             _fps = new FpsService();
-            _performance.Changed += _island.ApplyPerformance;
+            _performance.Changed += _island.ApplyPerformanceDisplay;
+            _performance.Sampled += snapshot => _island.ApplyAlertPerformance(snapshot);
             _fps.Changed += _island.ApplyFps;
             _island.ComponentsChanged += ConfigureComponents;
             _island.IsVisibleChanged += (_, _) =>
@@ -166,9 +167,12 @@ public partial class App : System.Windows.Application
     private async void ConfigureComponents(ComponentSettings settings)
     {
         bool visible = _island?.IsVisible == true;
-        _performance?.Configure(visible && settings.Cpu, visible && settings.Gpu, visible && settings.Memory, visible && settings.GpuTemperature,
-            visible && settings.CpuTemperature, visible && settings.MemoryTemperature);
-        _fps?.Configure(visible && settings.Fps, visible && settings.OnePercentLow, visible && settings.FrameTime);
+        var monitors = MonitorRequirements.Resolve(settings, _island?.Appearance.Alerts, visible);
+        // Alerts share the existing collectors, including when the corresponding number is hidden.
+        _performance?.Configure(monitors.Cpu, monitors.Gpu, monitors.Memory,
+            monitors.GpuTemperature, monitors.CpuTemperature, monitors.MemoryTemperature);
+        _fps?.Configure(monitors.Fps, monitors.OnePercentLow, monitors.FrameTime);
+        if (visible) _island?.RefreshAlerts(); else _island?.ResetAlerts();
         ScheduleClock();
         try { if (_media is not null) await _media.SetEnabledAsync(settings.Music); }
         catch (Exception ex) { Log(ex); }
@@ -181,7 +185,7 @@ public partial class App : System.Windows.Application
             _island!.RestoreForInteraction(); _island.ToggleExpanded();
         }, () => Shutdown(), _island!.CreatePositionMenu, _island!.CreateAppearanceMenu, _island!.CreateComponentsMenu,
             _island!.CreateAutostartMenu, _island!.RefreshAutostartMenus, _island!.RestoreForInteraction,
-            _island!.CreateInputMenuItem, _island!.CreateProfilesMenu);
+            _island!.CreateInputMenuItem, _island!.CreateProfilesMenu, _island!.CreateHudEditorMenuItem);
         _tray.RegistrationChanged += OnTrayRegistrationChanged;
         _island.InputModeChanged += OnInputModeChanged;
     }

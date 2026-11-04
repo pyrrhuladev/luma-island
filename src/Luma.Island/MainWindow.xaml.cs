@@ -65,6 +65,7 @@ public partial class MainWindow : Window
         InitializeTrayVisibility();
         IslandSurface.ContextMenu.Items.Insert(2, CreateInputMenuItem());
         IslandSurface.ContextMenu.Items.Insert(3, CreateProfilesMenu());
+        IslandSurface.ContextMenu.Items.Insert(4, CreateHudEditorMenuItem());
         IslandSurface.ContextMenu.Opened += (_, _) => RefreshAutostartMenus();
     }
 
@@ -411,6 +412,7 @@ public partial class MainWindow : Window
     {
         SaveCurrentProfileEdits();
         _closed = true;
+        ResetAlerts();
         _transitionCompletion?.TrySetCanceled();
         if (_placement is not null) _placement.DragCompleted -= OnProfileDragCompleted;
         _placement?.Dispose();

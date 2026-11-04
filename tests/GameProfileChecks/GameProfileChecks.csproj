@@ -14,6 +14,8 @@
     <Compile Include="../../src/Luma.Island/Services/GameProfileMonitor.cs" Link="GameProfileMonitor.cs" />
     <Compile Include="../../src/Luma.Island/Services/GameProcessReader.cs" Link="GameProcessReader.cs" />
     <Compile Include="../../src/Luma.Island/Services/AppearanceStore.cs" Link="AppearanceStore.cs" />
+    <Compile Include="../../src/Luma.Island/Services/HudLayoutSettings.cs" Link="HudLayoutSettings.cs" />
+    <Compile Include="../../src/Luma.Island/Services/AlertSettings.cs" Link="AlertSettings.cs" />
     <Compile Include="../../src/Luma.Island/Services/ComponentStore.cs" Link="ComponentStore.cs" />
     <Compile Include="../../src/Luma.Island/Services/PlacementStore.cs" Link="PlacementStore.cs" />
   </ItemGroup>

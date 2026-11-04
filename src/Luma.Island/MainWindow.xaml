@@ -424,6 +424,9 @@
                         <TextBlock x:Name="BatteryLabel" Grid.Column="1" FontSize="11" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
                     </Grid>
                 </Grid>
+                <Ellipse x:Name="QuietAlertIndicator" Width="7" Height="7" HorizontalAlignment="Right"
+                         VerticalAlignment="Top" Margin="0,8,10,0" Fill="#F3BE64" Visibility="Collapsed"
+                         AutomationProperties.Name="Предупреждение HUD"/>
             </Grid>
         </Border>
     </Grid>

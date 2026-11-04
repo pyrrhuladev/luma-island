@@ -10,6 +10,8 @@ public enum IslandAppearance { Matte, Glass }
 public sealed record AppearanceSettings(IslandAppearance Mode = IslandAppearance.Glass, double GlassOpacity = .40, bool Compact = false, bool ClickThrough = false, double Scale = 1)
 {
     public static AppearanceSettings Default { get; } = new();
+    public HudLayoutSettings Layout { get; init; } = HudLayoutSettings.Default;
+    public AlertSettings Alerts { get; init; } = AlertSettings.Default;
 }
 
 /// <summary>Independent appearance preferences, replaced atomically after a complete write.</summary>
@@ -26,7 +28,7 @@ public class AppearanceStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
-        MaxDepth = 8,
+        MaxDepth = 16,
         Converters = { new JsonStringEnumConverter<IslandAppearance>(allowIntegerValues: false) }
     };
 
@@ -89,7 +91,9 @@ public class AppearanceStore
                 : AppearanceSettings.Default.GlassOpacity,
             Scale = double.IsFinite(settings.Scale)
                 ? Math.Clamp(settings.Scale, MinScale, MaxScale)
-                : AppearanceSettings.Default.Scale
+                : AppearanceSettings.Default.Scale,
+            Layout = HudLayoutSettings.Normalize(settings.Layout),
+            Alerts = AlertSettings.Normalize(settings.Alerts)
         };
     }
 }

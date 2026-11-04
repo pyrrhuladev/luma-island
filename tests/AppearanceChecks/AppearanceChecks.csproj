@@ -10,5 +10,7 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="../../src/Luma.Island/Services/AppearanceStore.cs" Link="AppearanceStore.cs" />
+    <Compile Include="../../src/Luma.Island/Services/HudLayoutSettings.cs" Link="HudLayoutSettings.cs" />
+    <Compile Include="../../src/Luma.Island/Services/AlertSettings.cs" Link="AlertSettings.cs" />
   </ItemGroup>
 </Project>
