@@ -3,5 +3,7 @@
 *.jpg binary
 *.ico binary
 *.zip binary
+*.gz binary
 *.rtf binary
 docs/licenses/* -text
+docs/licenses/sensors/** -text

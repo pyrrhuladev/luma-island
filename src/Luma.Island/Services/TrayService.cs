@@ -14,22 +14,27 @@ public sealed class TrayService : IDisposable
     private const int CallbackMessage = 0x8000 + 42;
     private readonly HwndSource _source;
     private readonly ContextMenu _menu;
-    private readonly Action _toggleVisible;
+    private readonly Window _window;
+    private readonly MenuItem _visibilityItem;
+    private readonly Action _showVisible;
     private readonly Action? _menuOpening;
     private readonly uint _taskbarCreated = RegisterWindowMessage("TaskbarCreated");
     private NotifyIconData _data;
     private bool _ownsIcon;
+    private bool _usingVersion4;
+    private bool _hotkeyAvailable = true;
     private bool _disposed;
     public bool IsRegistered { get; private set; }
 
     public TrayService(Window window, Action toggleVisible, Action toggleExpanded, Action exit,
         Func<MenuItem>? positionMenuFactory = null, Func<MenuItem>? appearanceMenuFactory = null, Func<MenuItem>? componentsMenuFactory = null,
-        Func<MenuItem>? autostartMenuFactory = null, Action? menuOpening = null)
+        Func<MenuItem>? autostartMenuFactory = null, Action? menuOpening = null, Action? showVisible = null)
     {
         window.Dispatcher.VerifyAccess();
         _source = HwndSource.FromHwnd(new WindowInteropHelper(window).Handle)
             ?? throw new InvalidOperationException("Сначала покажите окно приложения.");
-        _toggleVisible = toggleVisible;
+        _window = window;
+        _showVisible = showVisible ?? toggleVisible;
         _menuOpening = menuOpening;
         _menu = new ContextMenu
         {
@@ -37,7 +42,8 @@ public sealed class TrayService : IDisposable
             Background = new SolidColorBrush(Color.FromRgb(28, 32, 38)),
             Foreground = Brushes.WhiteSmoke, BorderBrush = new SolidColorBrush(Color.FromRgb(58, 66, 75))
         };
-        AddItem("Показать / скрыть", toggleVisible);
+        _visibilityItem = AddItem(string.Empty, toggleVisible);
+        _visibilityItem.InputGestureText = "Ctrl+Alt+Space";
         AddItem("Развернуть / свернуть", toggleExpanded);
         if (positionMenuFactory is not null) _menu.Items.Add(positionMenuFactory());
         if (appearanceMenuFactory is not null) _menu.Items.Add(appearanceMenuFactory());
@@ -47,6 +53,8 @@ public sealed class TrayService : IDisposable
         AddItem("Выход", exit);
         _menu.Closed += OnMenuClosed;
         _menu.Opened += OnMenuOpened;
+        _window.IsVisibleChanged += OnOwnerVisibilityChanged;
+        RefreshVisibilityItem();
         var icon = CreateTrayIcon();
         _data = new NotifyIconData
         {
@@ -61,16 +69,18 @@ public sealed class TrayService : IDisposable
     private void AddIcon()
     {
         IsRegistered = ShellNotifyIcon(0, ref _data);
+        _usingVersion4 = false;
         if (!IsRegistered) return; // NIM_ADD; Explorer may still be starting.
         _data.TimeoutOrVersion = 4;
-        ShellNotifyIcon(4, ref _data); // NIM_SETVERSION, repeated after Explorer restarts.
+        _usingVersion4 = ShellNotifyIcon(4, ref _data); // NIM_SETVERSION, repeated after Explorer restarts.
     }
 
-    private void AddItem(string label, Action action)
+    private MenuItem AddItem(string label, Action action)
     {
         var item = new MenuItem { Header = label };
         item.Click += (_, _) => action();
         _menu.Items.Add(item);
+        return item;
     }
 
     private IntPtr WindowMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -79,7 +89,10 @@ public sealed class TrayService : IDisposable
         if (_taskbarCreated != 0 && unchecked((uint)msg) == _taskbarCreated) AddIcon();
         if (msg != CallbackMessage) return IntPtr.Zero;
         int notification = unchecked((int)lParam.ToInt64()) & 0xFFFF;
-        if (notification is 0x0203 or 0x0401) _toggleVisible(); // WM_LBUTTONDBLCLK / NIN_KEYSELECT
+        // Version 4 delivers NIN_SELECT for a mouse click and NIN_KEYSELECT
+        // for the keyboard. Showing is idempotent, including a double click.
+        if ((_usingVersion4 && notification is 0x0400 or 0x0401) ||
+            (!_usingVersion4 && notification is 0x0202 or 0x0401)) _showVisible();
         else if (notification is 0x0205 or 0x007B) // WM_RBUTTONUP / WM_CONTEXTMENU
         {
             SetForegroundWindow(hwnd);
@@ -89,7 +102,30 @@ public sealed class TrayService : IDisposable
         return IntPtr.Zero;
     }
 
-    private void OnMenuOpened(object sender, RoutedEventArgs args) => _menuOpening?.Invoke();
+    private void OnMenuOpened(object sender, RoutedEventArgs args)
+    {
+        RefreshVisibilityItem();
+        _menuOpening?.Invoke();
+    }
+
+    private void OnOwnerVisibilityChanged(object sender, DependencyPropertyChangedEventArgs args) => RefreshVisibilityItem();
+
+    private void RefreshVisibilityItem()
+    {
+        _visibilityItem.Header = _window.IsVisible ? "Скрыть в трей" : "Показать капсулу";
+        _visibilityItem.InputGestureText = _hotkeyAvailable ? "Ctrl+Alt+Space" : string.Empty;
+        _visibilityItem.ToolTip = _hotkeyAvailable
+            ? "Левый щелчок по значку показывает капсулу. Ctrl+Alt+Space показывает или скрывает её."
+            : "Ctrl+Alt+Space недоступна: сочетание занято другой программой или заблокировано Windows. Левый щелчок по значку показывает капсулу.";
+    }
+
+    public void SetHotkeyStatus(bool available)
+    {
+        _source.Dispatcher.VerifyAccess();
+        if (_disposed) return;
+        _hotkeyAvailable = available;
+        RefreshVisibilityItem();
+    }
 
     private void OnMenuClosed(object sender, RoutedEventArgs args)
     {
@@ -128,6 +164,7 @@ public sealed class TrayService : IDisposable
         _menu.IsOpen = false;
         _menu.Closed -= OnMenuClosed;
         _menu.Opened -= OnMenuOpened;
+        _window.IsVisibleChanged -= OnOwnerVisibilityChanged;
         ShellNotifyIcon(2, ref _data); // NIM_DELETE
         IsRegistered = false;
         if (!_source.IsDisposed) _source.RemoveHook(WindowMessage);

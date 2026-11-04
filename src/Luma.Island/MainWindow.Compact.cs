@@ -35,9 +35,14 @@ public partial class MainWindow
         CompactBattery.FontSize = compact ? 10 : 11;
         CompactBattery.Margin = compact ? new Thickness(2, 0, 5, 0) : new Thickness(4, 0, 8, 0);
         CompactArrowColumn.Width = new GridLength(compact ? 14 : 16);
+        foreach (var button in new[] { CompactPreviousButton, CompactPlayButton, CompactNextButton })
+        {
+            button.Width = compact ? 22 : 24;
+            button.Height = compact ? 26 : 28;
+        }
         CompactPerformance.Margin = compact ? new Thickness(0, 4, 0, 4) : new Thickness(0, 8, 0, 8);
         CompactCpu.FontSize = CompactGpu.FontSize = CompactMemory.FontSize = CompactFps.FontSize = compact ? 11 : 12;
-        CompactGpu.LineHeight = compact ? 14 : 16;
+        CompactCpu.LineHeight = CompactGpu.LineHeight = CompactMemory.LineHeight = compact ? 14 : 16;
         UpdateSurfaceRounding();
     }
 

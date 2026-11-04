@@ -1,0 +1,12 @@
+{
+  "runtimepack.Microsoft.NETCore.App.Runtime.win-x64": "10.0.14",
+  "BlackSharp.Core": "1.0.7",
+  "DiskInfoToolkit": "1.1.2",
+  "HidSharp": "2.6.4",
+  "LibreHardwareMonitorLib": "0.9.6",
+  "Mono.Posix.NETStandard": "1.0.0",
+  "RAMSPDToolkit-NDD": "1.4.2",
+  "System.CodeDom": "10.0.2",
+  "System.IO.Ports": "10.0.3",
+  "System.Management": "10.0.2"
+}

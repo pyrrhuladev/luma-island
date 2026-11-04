@@ -60,6 +60,7 @@ public partial class MainWindow : Window
         IslandSurface.ContextMenu.Items.Insert(2, CreateAppearanceMenu());
         IslandSurface.ContextMenu.Items.Insert(3, CreateComponentsMenu());
         IslandSurface.ContextMenu.Items.Insert(4, CreateAutostartMenu());
+        InitializeTrayVisibility();
         IslandSurface.ContextMenu.Opened += (_, _) => RefreshAutostartMenus();
     }
 

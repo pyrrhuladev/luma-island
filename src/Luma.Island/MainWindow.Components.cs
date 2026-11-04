@@ -12,8 +12,10 @@ public partial class MainWindow
     private PerformanceSnapshot _lastPerformance = PerformanceSnapshot.Empty;
     public ComponentSettings Components { get; private set; } = ComponentSettings.Default;
     public event Action<ComponentSettings>? ComponentsChanged;
-    public bool HasPerformance => Components.Cpu || Components.Gpu || Components.Memory || Components.Fps || Components.GpuTemperature;
-    private double TemperatureRowHeight => Components.Gpu && Components.GpuTemperature ? 16 : 0;
+    public bool HasPerformance => Components.Cpu || Components.Gpu || Components.Memory || Components.Fps
+        || Components.GpuTemperature || Components.CpuTemperature || Components.MemoryTemperature;
+    private double TemperatureRowHeight => (Components.Gpu && Components.GpuTemperature)
+        || (Components.Cpu && Components.CpuTemperature) || (Components.Memory && Components.MemoryTemperature) ? 16 : 0;
     public double CollapsedWindowHeight => (Appearance.Compact
         ? 44 + (HasPerformance ? 28 + TemperatureRowHeight : 0)
         : HasPerformance ? 100 + TemperatureRowHeight : 56) + 24;
@@ -63,14 +65,15 @@ public partial class MainWindow
         CompactPerformance.Height = (Appearance.Compact ? 20 : 28) + TemperatureRowHeight;
         PerformanceRow.Height = new GridLength(HasPerformance ? 32 + TemperatureRowHeight : 0);
         ChartsRow.Height = new GridLength(ChartsHeight);
-        CompactPerformance.Columns = Math.Max(1, (Components.Cpu ? 1 : 0) + (Components.Gpu || Components.GpuTemperature ? 1 : 0)
-            + (Components.Memory ? 1 : 0) + (Components.Fps ? 1 : 0));
-        CompactCpu.Visibility = ExpandedCpu.Visibility = Show(Components.Cpu);
+        CompactPerformance.Columns = Math.Max(1, (Components.Cpu || Components.CpuTemperature ? 1 : 0) + (Components.Gpu || Components.GpuTemperature ? 1 : 0)
+            + (Components.Memory || Components.MemoryTemperature ? 1 : 0) + (Components.Fps ? 1 : 0));
+        CompactCpu.Visibility = ExpandedCpu.Visibility = Show(Components.Cpu || Components.CpuTemperature);
         CompactGpu.Visibility = ExpandedGpu.Visibility = Show(Components.Gpu || Components.GpuTemperature);
-        CompactMemory.Visibility = ExpandedMemory.Visibility = Show(Components.Memory);
+        CompactMemory.Visibility = ExpandedMemory.Visibility = Show(Components.Memory || Components.MemoryTemperature);
         CompactFps.Visibility = ExpandedFps.Visibility = Show(Components.Fps);
         FooterRow.Height = new GridLength(Components.Date || _batteryVisible ? 26 : 0);
         RefreshGpuMetric();
+        RefreshCpuMemoryMetrics();
         RefreshChartsVisibility();
         RefreshComponentSize();
     }
@@ -105,13 +108,52 @@ public partial class MainWindow
         if (!Dispatcher.CheckAccess()) { _ = Dispatcher.BeginInvoke(new Action(() => ApplyPerformance(snapshot))); return; }
         if (_closed) return;
         _lastPerformance = snapshot;
-        CompactCpu.Text = ExpandedCpu.Text = Percent("CPU", snapshot.CpuPercent);
         RefreshGpuMetric();
-        CompactMemory.Text = ExpandedMemory.Text = Percent("RAM", snapshot.MemoryPercent);
-        CompactMemory.ToolTip = ExpandedMemory.ToolTip = snapshot.TotalMemoryBytes > 0
-            ? $"Память: {snapshot.UsedMemoryBytes / 1073741824d:0.0} / {snapshot.TotalMemoryBytes / 1073741824d:0.0} ГБ" : "Нет данных о памяти";
+        RefreshCpuMemoryMetrics();
         RecordPerformanceHistory(snapshot);
     }
+
+    private void RefreshCpuMemoryMetrics()
+    {
+        string cpuLabel = Components.Cpu ? Percent("CPU", _lastPerformance.CpuPercent) : "CPU";
+        string memoryLabel = Components.Memory ? Percent("RAM", _lastPerformance.MemoryPercent) : "RAM";
+        string cpuTip = Components.Cpu ? "Общая загрузка процессора" : string.Empty;
+        string memoryTip = Components.Memory && _lastPerformance.TotalMemoryBytes > 0
+            ? $"Память: {_lastPerformance.UsedMemoryBytes / 1073741824d:0.0} / {_lastPerformance.TotalMemoryBytes / 1073741824d:0.0} ГБ" : string.Empty;
+        if (Components.CpuTemperature)
+        {
+            cpuLabel += (Components.Cpu ? "\n" : " ") + Degrees(_lastPerformance.CpuTemperatureCelsius);
+            cpuTip += (cpuTip.Length > 0 ? "\n" : "") + "Температура CPU Package / Tctl/Tdie.\n"
+                + SensorStatusText(_lastPerformance.CpuTemperatureStatus);
+        }
+        if (Components.MemoryTemperature)
+        {
+            memoryLabel += (Components.Memory ? "\n" : " ") + Degrees(_lastPerformance.MemoryTemperatureCelsius, memory: true);
+            memoryTip += (memoryTip.Length > 0 ? "\n" : "") + "Максимальная температура доступных модулей RAM (датчик DIMM / SPD hub).\n"
+                + SensorStatusText(_lastPerformance.MemoryTemperatureStatus);
+        }
+        CompactCpu.Text = ExpandedCpu.Text = cpuLabel;
+        CompactMemory.Text = ExpandedMemory.Text = memoryLabel;
+        CompactCpu.ToolTip = ExpandedCpu.ToolTip = cpuTip;
+        CompactMemory.ToolTip = ExpandedMemory.ToolTip = memoryTip;
+    }
+
+    private string Degrees(double? temperature, bool memory = false) => (SensorProtocol.IsValidCelsius(temperature, memory)
+        ? temperature.GetValueOrDefault().ToString("0", _culture) : "—") + "\u00a0°C";
+
+    private static string SensorStatusText(string? status) => status switch
+    {
+        "ok" => "Данные получены от модуля датчиков Luma.",
+        "driver_missing" => "Не найден драйвер PawnIO. Откройте настройку датчиков в меню компонентов.",
+        "not_installed" => "Модуль Luma не установлен или не запущен. Откройте настройку датчиков в меню компонентов.",
+        "access_denied" => "Нет доступа к модулю датчиков для этого пользователя Windows.",
+        "timeout" => "Модуль датчиков не ответил вовремя.",
+        "protocol_error" => "Версии модуля и Luma несовместимы. Обновите модуль в настройке датчиков.",
+        "provider_error" => "Ошибка чтения аппаратных датчиков.",
+        "unavailable" => "Совместимый датчик недоступен на этом компьютере.",
+        "disabled" => "Опрос выключен.",
+        _ => "Ожидание датчиков. Настройка — в меню компонентов."
+    };
 
     private void RefreshGpuMetric()
     {
@@ -166,13 +208,20 @@ public partial class MainWindow
             Add("Батарея (при работе от батареи)", s => s.Battery, (s, v) => s with { Battery = v });
             menu.Items.Add(new Separator());
             Add("Нагрузка CPU", s => s.Cpu, (s, v) => s with { Cpu = v });
+            Add("Температура CPU", s => s.CpuTemperature, (s, v) => s with { CpuTemperature = v }).ToolTip =
+                "Требует модуля датчиков Luma и драйвера PawnIO. При отсутствии датчика — прочерк.";
             Add("Нагрузка GPU", s => s.Gpu, (s, v) => s with { Gpu = v });
             Add("Температура GPU", s => s.GpuTemperature, (s, v) => s with { GpuTemperature = v }).ToolTip =
                 "Температура ядра через установленный драйвер NVIDIA. Не требует отдельной программы; при отсутствии данных — прочерк.";
             Add("Память RAM", s => s.Memory, (s, v) => s with { Memory = v });
+            Add("Температура RAM", s => s.MemoryTemperature, (s, v) => s with { MemoryTemperature = v }).ToolTip =
+                "Датчик DIMM / SPD hub: максимум среди доступных модулей. Доступность зависит от памяти и платы.";
             Add("FPS активной игры", s => s.Fps, (s, v) => s with { Fps = v }).ToolTip =
                 "Источник: установленный NVIDIA FrameView. Включение запускает его счётчик; без данных отображается прочерк.";
             menu.Items.Add(new Separator());
+            var setup = new MenuItem { Header = "Настроить датчики CPU / RAM…" };
+            setup.Click += (_, _) => new SensorSetupWindow { Owner = this }.ShowDialog();
+            menu.Items.Add(setup);
             Add("Расширенный режим: мини-графики", s => s.Charts, (s, v) => s with { Charts = v }).ToolTip =
                 "Графики выбранных CPU, GPU, RAM и FPS в раскрытой панели; нагрузка показана в процентах.";
         }

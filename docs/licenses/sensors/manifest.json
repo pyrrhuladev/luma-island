@@ -1,0 +1,592 @@
+{
+  "schemaVersion": 1,
+  "applicationVersion": "0.8.0",
+  "targetRuntime": "win-x64",
+  "frameworkRuntimeVersion": "10.0.14",
+  "packageVersions": {
+    "BlackSharp.Core": "1.0.7",
+    "DiskInfoToolkit": "1.1.2",
+    "HidSharp": "2.6.4",
+    "LibreHardwareMonitorLib": "0.9.6",
+    "Mono.Posix.NETStandard": "1.0.0",
+    "RAMSPDToolkit-NDD": "1.4.2",
+    "System.CodeDom": "10.0.2",
+    "System.IO.Ports": "10.0.3",
+    "System.Management": "10.0.2"
+  },
+  "packages": [
+    {
+      "id": "BlackSharp.Core",
+      "version": "1.0.7",
+      "license": "MPL-2.0",
+      "declaredLicense": "MPL-2.0",
+      "declaredLicenseType": "expression",
+      "licenseUrl": "https://licenses.nuget.org/MPL-2.0",
+      "copyright": "Florian K.",
+      "requireLicenseAcceptance": false,
+      "packageUrl": "https://www.nuget.org/packages/BlackSharp.Core/1.0.7",
+      "packageSha512": "LbEc4w0oZ7w4p6+8OjPZgwsJW470aQRuYZgZ9aMN2PW9R79pW3OnZQ32AVVx/21rstX9mKbXaOLWpSAxoANYxQ==",
+      "repositoryUrl": "https://github.com/Blacktempel/BlackSharp",
+      "repositoryCommit": "c70b735c6cec123ee8a046ac4a0bc6c606f52cf0",
+      "sourceUrl": "https://github.com/Blacktempel/BlackSharp/tree/c70b735c6cec123ee8a046ac4a0bc6c606f52cf0",
+      "licenseFiles": [
+        "blacksharp-core-1.0.7-LICENSE.txt"
+      ],
+      "metadataFile": "blacksharp.core-1.0.7.nuspec",
+      "dependencies": null,
+      "assets": [
+        {
+          "file": "BlackSharp.Core.dll",
+          "packagePath": "lib/net10.0/BlackSharp.Core.dll",
+          "assetType": "runtime",
+          "bytes": 32768,
+          "sha256": "fbacd3ae711be82f35edbf0dd1da00d01cc2629e19d3cbf24a1b5eadcd9d4872",
+          "matchesNuGetOriginal": true
+        }
+      ]
+    },
+    {
+      "id": "DiskInfoToolkit",
+      "version": "1.1.2",
+      "license": "MPL-2.0",
+      "declaredLicense": "MPL-2.0",
+      "declaredLicenseType": "expression",
+      "licenseUrl": "https://licenses.nuget.org/MPL-2.0",
+      "copyright": "Florian K.",
+      "requireLicenseAcceptance": false,
+      "packageUrl": "https://www.nuget.org/packages/DiskInfoToolkit/1.1.2",
+      "packageSha512": "vN46svt1hQDkm269p6CzfwDpb/fbyp8oNQuePcvjNSryPLfsxIJZU8amEhir+x5bsKd0ymOXTySzPwFO8o0dpw==",
+      "repositoryUrl": "https://github.com/Blacktempel/DiskInfoToolkit",
+      "repositoryCommit": "25319eae5781e75bcf141e844ceab2afe94d40ea",
+      "sourceUrl": "https://github.com/Blacktempel/DiskInfoToolkit/tree/25319eae5781e75bcf141e844ceab2afe94d40ea",
+      "licenseFiles": [
+        "diskinfotoolkit-1.1.2-LICENSE.txt",
+        "diskinfotoolkit-1.1.2-THIRD-PARTY-NOTICES.txt"
+      ],
+      "metadataFile": "diskinfotoolkit-1.1.2.nuspec",
+      "dependencies": {
+        "BlackSharp.Core": "1.0.7"
+      },
+      "assets": [
+        {
+          "file": "DiskInfoToolkit.dll",
+          "packagePath": "lib/net10.0/DiskInfoToolkit.dll",
+          "assetType": "runtime",
+          "bytes": 904192,
+          "sha256": "f3e9030740e6351fd3586d38b72bdeb21d530cd7ccde5d18743c25d28584226d",
+          "matchesNuGetOriginal": true
+        }
+      ]
+    },
+    {
+      "id": "HidSharp",
+      "version": "2.6.4",
+      "license": "Apache-2.0",
+      "declaredLicense": "LICENSE.txt",
+      "declaredLicenseType": "file",
+      "licenseUrl": "https://aka.ms/deprecateLicenseUrl",
+      "copyright": "Copyright 2010-2025 James Bellinger",
+      "requireLicenseAcceptance": true,
+      "packageUrl": "https://www.nuget.org/packages/HidSharp/2.6.4",
+      "packageSha512": "UcGvtnXFcatwHBXr+ei8GEXvg//wjGmDGQ6Xvb+7M4vHjURAhSLIJ+dSZv0BnAhQEpNlH8G4P7JxYnMH8Aph4g==",
+      "repositoryUrl": "",
+      "repositoryCommit": "",
+      "sourceUrl": "https://software.seekye.com/hidsharp",
+      "licenseFiles": [
+        "hidsharp-2.6.4-LICENSE.txt"
+      ],
+      "metadataFile": "hidsharp-2.6.4.nuspec",
+      "dependencies": null,
+      "assets": [
+        {
+          "file": "HidSharp.dll",
+          "packagePath": "lib/netstandard2.0/HidSharp.dll",
+          "assetType": "runtime",
+          "bytes": 239616,
+          "sha256": "79f2bc8ddff102e6dbede84b2c211a3aea2ed675bf762fa0f02ecb65f61ee812",
+          "matchesNuGetOriginal": true
+        }
+      ]
+    },
+    {
+      "id": "LibreHardwareMonitorLib",
+      "version": "0.9.6",
+      "license": "MPL-2.0",
+      "declaredLicense": "MPL-2.0",
+      "declaredLicenseType": "expression",
+      "licenseUrl": "https://licenses.nuget.org/MPL-2.0",
+      "copyright": "LibreHardwareMonitor",
+      "requireLicenseAcceptance": false,
+      "packageUrl": "https://www.nuget.org/packages/LibreHardwareMonitorLib/0.9.6",
+      "packageSha512": "W4hQ5Ja51/1cEDZnh9kG5UHFBwjjY2+oIpSUhSsgeYXKRKezrkw3sEFrhQkrOuo53xkXyfWV8ZErMqQuGqWIMQ==",
+      "repositoryUrl": "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor",
+      "repositoryCommit": "3d331e3370efb858411f19511373eff65a218701",
+      "sourceUrl": "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/tree/3d331e3370efb858411f19511373eff65a218701",
+      "licenseFiles": [
+        "librehardwaremonitor-0.9.6-LICENSE.txt",
+        "librehardwaremonitor-0.9.6-THIRD-PARTY-NOTICES.txt",
+        "pawnio-modules-0.2.2-COPYING.txt"
+      ],
+      "metadataFile": "librehardwaremonitorlib-0.9.6.nuspec",
+      "dependencies": {
+        "DiskInfoToolkit": "1.1.2",
+        "HidSharp": "2.6.4",
+        "Mono.Posix.NETStandard": "1.0.0",
+        "RAMSPDToolkit-NDD": "1.4.2",
+        "System.IO.FileSystem.AccessControl": "5.0.0",
+        "System.IO.Ports": "10.0.3",
+        "System.Management": "10.0.2"
+      },
+      "assets": [
+        {
+          "file": "LibreHardwareMonitorLib.dll",
+          "packagePath": "runtimes/win-x64/lib/net10.0/LibreHardwareMonitorLib.dll",
+          "assetType": "runtime",
+          "bytes": 1214976,
+          "sha256": "984b539048880d37257a5edeab36378152c54943069f400d68a34565292d35da",
+          "matchesNuGetOriginal": true
+        }
+      ]
+    },
+    {
+      "id": "Mono.Posix.NETStandard",
+      "version": "1.0.0",
+      "license": "MIT (upstream linked LICENSE; see licenseProvenanceNote)",
+      "declaredLicense": "",
+      "declaredLicenseType": "",
+      "licenseUrl": "https://go.microsoft.com/fwlink/?linkid=869050",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "requireLicenseAcceptance": true,
+      "packageUrl": "https://www.nuget.org/packages/Mono.Posix.NETStandard/1.0.0",
+      "packageSha512": "vSN/L1uaVwKsiLa95bYu2SGkF0iY3xMblTfxc8alSziPuVfJpj3geVqHGAA75J7cZkMuKpFVikz82Lo6y6LLdA==",
+      "repositoryUrl": "",
+      "repositoryCommit": "",
+      "sourceUrl": "https://go.microsoft.com/fwlink/?linkid=869051",
+      "licenseFiles": [
+        "mono-Posix-NETStandard-1.0.0-LICENSE.txt",
+        "mono-PATENTS.txt"
+      ],
+      "metadataFile": "mono.posix.netstandard-1.0.0.nuspec",
+      "dependencies": null,
+      "assets": [
+        {
+          "file": "Mono.Posix.NETStandard.dll",
+          "packagePath": "runtimes/win-x64/lib/netstandard2.0/Mono.Posix.NETStandard.dll",
+          "assetType": "runtime",
+          "bytes": 189504,
+          "sha256": "be0215d90462adbae5f03d6e5c3a969c9842a866b013df7a395769c5c352fa7e",
+          "matchesNuGetOriginal": true
+        },
+        {
+          "file": "MonoPosixHelper.dll",
+          "packagePath": "runtimes/win-x64/native/MonoPosixHelper.dll",
+          "assetType": "native",
+          "bytes": 87600,
+          "sha256": "a57141b26d6ea3326b165bdcb15ca2bcd34737370f52358e12ffc8df41b92c62",
+          "matchesNuGetOriginal": true
+        },
+        {
+          "file": "libMonoPosixHelper.dll",
+          "packagePath": "runtimes/win-x64/native/libMonoPosixHelper.dll",
+          "assetType": "native",
+          "bytes": 1495800,
+          "sha256": "b16f77c155a36559a44da32e17e0bf63d899db0bb48c6590bc8eba7bb0ff87a8",
+          "matchesNuGetOriginal": true
+        }
+      ]
+    },
+    {
+      "id": "RAMSPDToolkit-NDD",
+      "version": "1.4.2",
+      "license": "MPL-2.0",
+      "declaredLicense": "MPL-2.0",
+      "declaredLicenseType": "expression",
+      "licenseUrl": "https://licenses.nuget.org/MPL-2.0",
+      "copyright": "Florian K.",
+      "requireLicenseAcceptance": false,
+      "packageUrl": "https://www.nuget.org/packages/RAMSPDToolkit-NDD/1.4.2",
+      "packageSha512": "pqIwn/HqXFnW4FVKybq6gZh3YK14OOLGWkgZzDdewjAInCOu86EO2L+FCQo8j1/v1sKwv+vgX5pnehxyrlJYJw==",
+      "repositoryUrl": "https://github.com/Blacktempel/RAMSPDToolkit",
+      "repositoryCommit": "3b47b960e0830fef344624ad5e389675d5f0a1ce",
+      "sourceUrl": "https://github.com/Blacktempel/RAMSPDToolkit/tree/3b47b960e0830fef344624ad5e389675d5f0a1ce",
+      "licenseFiles": [
+        "ramspdtoolkit-ndd-1.4.2-LICENSE.txt"
+      ],
+      "metadataFile": "ramspdtoolkit-ndd-1.4.2.nuspec",
+      "dependencies": {
+        "BlackSharp.Core": "1.0.4",
+        "System.Management": "10.0.0"
+      },
+      "assets": [
+        {
+          "file": "RAMSPDToolkit-NDD.dll",
+          "packagePath": "lib/net10.0/RAMSPDToolkit-NDD.dll",
+          "assetType": "runtime",
+          "bytes": 237056,
+          "sha256": "42c1ccaf90592542ec64e801ae599ed803bb98f4039b2abb7119cb8ea2087cba",
+          "matchesNuGetOriginal": true
+        }
+      ]
+    },
+    {
+      "id": "System.CodeDom",
+      "version": "10.0.2",
+      "license": "MIT",
+      "declaredLicense": "MIT",
+      "declaredLicenseType": "expression",
+      "licenseUrl": "https://licenses.nuget.org/MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "requireLicenseAcceptance": false,
+      "packageUrl": "https://www.nuget.org/packages/System.CodeDom/10.0.2",
+      "packageSha512": "eih1MnL4tnSjHUhzae0dmpu50Sm0s54faHZc8yhzYfmubAubkBIIulYYN28fasD1m41mhl6Cenhs9/F0aLv3FA==",
+      "repositoryUrl": "https://github.com/dotnet/dotnet",
+      "repositoryCommit": "44525024595742ebe09023abe709df51de65009b",
+      "sourceUrl": "https://github.com/dotnet/dotnet/tree/44525024595742ebe09023abe709df51de65009b",
+      "licenseFiles": [
+        "dotnet-system-LICENSE.txt",
+        "dotnet-system-THIRD-PARTY-NOTICES.txt"
+      ],
+      "metadataFile": "system.codedom-10.0.2.nuspec",
+      "dependencies": null,
+      "assets": [
+        {
+          "file": "System.CodeDom.dll",
+          "packagePath": "lib/net10.0/System.CodeDom.dll",
+          "assetType": "runtime",
+          "bytes": 185096,
+          "sha256": "4601240981dae4637ad8bd2e731dd18aa69298e83d61e9b1b67bd679e401eeeb",
+          "matchesNuGetOriginal": true
+        }
+      ]
+    },
+    {
+      "id": "System.IO.Ports",
+      "version": "10.0.3",
+      "license": "MIT",
+      "declaredLicense": "MIT",
+      "declaredLicenseType": "expression",
+      "licenseUrl": "https://licenses.nuget.org/MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "requireLicenseAcceptance": false,
+      "packageUrl": "https://www.nuget.org/packages/System.IO.Ports/10.0.3",
+      "packageSha512": "Zs04mZ/dQtaFQ+hpQNDtijBs+6aM9j2fQPp8zNZTfh8DboVNNv7Sw6gH00hT+PVcAhEozlfT+n59Svm6Ug8ROA==",
+      "repositoryUrl": "https://github.com/dotnet/dotnet",
+      "repositoryCommit": "c2435c3e0f46de784341ac3ed62863ce77e117b4",
+      "sourceUrl": "https://github.com/dotnet/dotnet/tree/c2435c3e0f46de784341ac3ed62863ce77e117b4",
+      "licenseFiles": [
+        "dotnet-system-LICENSE.txt",
+        "dotnet-system-THIRD-PARTY-NOTICES.txt"
+      ],
+      "metadataFile": "system.io.ports-10.0.3.nuspec",
+      "dependencies": {
+        "runtime.native.System.IO.Ports": "10.0.3"
+      },
+      "assets": [
+        {
+          "file": "System.IO.Ports.dll",
+          "packagePath": "runtimes/win/lib/net10.0/System.IO.Ports.dll",
+          "assetType": "runtime",
+          "bytes": 89400,
+          "sha256": "331ff3528809bf54382461fdf0fbdfdcb6c221d770da7c755ef531801a80554a",
+          "matchesNuGetOriginal": true
+        }
+      ]
+    },
+    {
+      "id": "System.Management",
+      "version": "10.0.2",
+      "license": "MIT",
+      "declaredLicense": "MIT",
+      "declaredLicenseType": "expression",
+      "licenseUrl": "https://licenses.nuget.org/MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "requireLicenseAcceptance": false,
+      "packageUrl": "https://www.nuget.org/packages/System.Management/10.0.2",
+      "packageSha512": "eFftuy3i844lVKCb4lJvvjKfcvPVcW8KrAdSaIOcRL42/Fisj46hwUs8Bky+4avzMe5Snm5t7aSayOI1mybYXg==",
+      "repositoryUrl": "https://github.com/dotnet/dotnet",
+      "repositoryCommit": "44525024595742ebe09023abe709df51de65009b",
+      "sourceUrl": "https://github.com/dotnet/dotnet/tree/44525024595742ebe09023abe709df51de65009b",
+      "licenseFiles": [
+        "dotnet-system-LICENSE.txt",
+        "dotnet-system-THIRD-PARTY-NOTICES.txt"
+      ],
+      "metadataFile": "system.management-10.0.2.nuspec",
+      "dependencies": {
+        "System.CodeDom": "10.0.2"
+      },
+      "assets": [
+        {
+          "file": "System.Management.dll",
+          "packagePath": "runtimes/win/lib/net10.0/System.Management.dll",
+          "assetType": "runtime",
+          "bytes": 314680,
+          "sha256": "7e84191a217de1647d75e3f7bf52d09b85bf14a303c30a3974cc47266819f468",
+          "matchesNuGetOriginal": true
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "file": "librehardwaremonitor-0.9.6-LICENSE.txt",
+      "bytes": 16725,
+      "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
+      "sourceKind": "upstream-original",
+      "sourceUrl": "https://raw.githubusercontent.com/LibreHardwareMonitor/LibreHardwareMonitor/3d331e3370efb858411f19511373eff65a218701/LICENSE"
+    },
+    {
+      "file": "librehardwaremonitor-0.9.6-THIRD-PARTY-NOTICES.txt",
+      "bytes": 25905,
+      "sha256": "a60d5ee62f4d700caff38566f42874d554b8b530437c72804fb28b958cfbda9b",
+      "sourceKind": "upstream-original",
+      "sourceUrl": "https://raw.githubusercontent.com/LibreHardwareMonitor/LibreHardwareMonitor/3d331e3370efb858411f19511373eff65a218701/THIRD-PARTY-NOTICES.txt"
+    },
+    {
+      "file": "blacksharp-core-1.0.7-LICENSE.txt",
+      "bytes": 16757,
+      "sha256": "c6c0fb1ab8557f8a068689cdb4522bfd09e01b6cc853f5aa9aa3f7c141c2f67c",
+      "sourceKind": "upstream-original",
+      "sourceUrl": "https://raw.githubusercontent.com/Blacktempel/BlackSharp/c70b735c6cec123ee8a046ac4a0bc6c606f52cf0/LICENSE"
+    },
+    {
+      "file": "diskinfotoolkit-1.1.2-LICENSE.txt",
+      "bytes": 16726,
+      "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+      "sourceKind": "upstream-original",
+      "sourceUrl": "https://raw.githubusercontent.com/Blacktempel/DiskInfoToolkit/25319eae5781e75bcf141e844ceab2afe94d40ea/LICENSE"
+    },
+    {
+      "file": "diskinfotoolkit-1.1.2-THIRD-PARTY-NOTICES.txt",
+      "bytes": 1142,
+      "sha256": "88bfe8bcf6132ccd09e4a99e96df3d981346e9161def35577c28aa9aa4bbb1f9",
+      "sourceKind": "upstream-original",
+      "sourceUrl": "https://raw.githubusercontent.com/Blacktempel/DiskInfoToolkit/25319eae5781e75bcf141e844ceab2afe94d40ea/THIRD-PARTY-NOTICES"
+    },
+    {
+      "file": "ramspdtoolkit-ndd-1.4.2-LICENSE.txt",
+      "bytes": 16726,
+      "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+      "sourceKind": "upstream-original",
+      "sourceUrl": "https://raw.githubusercontent.com/Blacktempel/RAMSPDToolkit/3b47b960e0830fef344624ad5e389675d5f0a1ce/LICENSE"
+    },
+    {
+      "file": "dotnet-system-LICENSE.txt",
+      "bytes": 1115,
+      "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b",
+      "sourceKind": "upstream-original",
+      "sourceUrl": "https://raw.githubusercontent.com/dotnet/dotnet/44525024595742ebe09023abe709df51de65009b/LICENSE.TXT"
+    },
+    {
+      "file": "mono-Posix-NETStandard-1.0.0-LICENSE.txt",
+      "bytes": 73470,
+      "sha256": "844242559dbdb96cb9cbe103b06c2bc8a349f19ad0b89d5c3cf830a8914333f6",
+      "sourceKind": "upstream-original",
+      "sourceUrl": "https://raw.githubusercontent.com/mono/mono/0f53e9e151d92944cacab3e24ac359410c606df6/LICENSE"
+    },
+    {
+      "file": "mono-PATENTS.txt",
+      "bytes": 2303,
+      "sha256": "4d764e3d098f8aad23f70f29e34165c7836b7e1cc49ced2a73b175edb89e4891",
+      "sourceKind": "upstream-original",
+      "sourceUrl": "https://raw.githubusercontent.com/mono/mono/0f53e9e151d92944cacab3e24ac359410c606df6/PATENTS.TXT"
+    },
+    {
+      "file": "pawnio-modules-0.2.2-COPYING.txt",
+      "bytes": 26530,
+      "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
+      "sourceKind": "upstream-original",
+      "sourceUrl": "https://raw.githubusercontent.com/namazso/PawnIO.Modules/e12a858d952461ee2e919897cacbff7f905fe370/COPYING"
+    },
+    {
+      "file": "pawnio-modules-0.2.2-source.tar.gz",
+      "bytes": 994808,
+      "sha256": "e82ef4c5c06461c74685fa60ebf28297e4830876f8bbf388187d7aa063bcf096",
+      "sourceKind": "upstream-original",
+      "sourceUrl": "https://codeload.github.com/namazso/PawnIO.Modules/tar.gz/e12a858d952461ee2e919897cacbff7f905fe370"
+    },
+    {
+      "file": "hidsharp-2.6.4-LICENSE.txt",
+      "bytes": 10784,
+      "sha256": "b065e07179f06490c96bf946e73f821086b2f29efde395f092aea69a907eae16",
+      "sourceKind": "nuget-package",
+      "sourceUrl": "https://api.nuget.org/v3-flatcontainer/hidsharp/2.6.4/hidsharp.2.6.4.nupkg",
+      "sourcePath": "LICENSE.txt"
+    },
+    {
+      "file": "dotnet-system-THIRD-PARTY-NOTICES.txt",
+      "bytes": 78041,
+      "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21",
+      "sourceKind": "nuget-package",
+      "sourceUrl": "https://api.nuget.org/v3-flatcontainer/system.codedom/10.0.2/system.codedom.10.0.2.nupkg",
+      "sourcePath": "THIRD-PARTY-NOTICES.TXT"
+    },
+    {
+      "file": "blacksharp.core-1.0.7.nuspec",
+      "bytes": 1102,
+      "sha256": "50eec9d5f705951fd1a1b1ba79cc5fc3f65ca69b25204d377e64bfcc3b15dbfb",
+      "sourceKind": "nuget-package",
+      "sourceUrl": "https://api.nuget.org/v3-flatcontainer/blacksharp.core/1.0.7/blacksharp.core.1.0.7.nupkg",
+      "sourcePath": "blacksharp.core.nuspec"
+    },
+    {
+      "file": "diskinfotoolkit-1.1.2.nuspec",
+      "bytes": 2076,
+      "sha256": "51fb967d8fcf5621aa5a506ec6c72a2c926f5f8e04f71fa525eababfb1743334",
+      "sourceKind": "nuget-package",
+      "sourceUrl": "https://api.nuget.org/v3-flatcontainer/diskinfotoolkit/1.1.2/diskinfotoolkit.1.1.2.nupkg",
+      "sourcePath": "diskinfotoolkit.nuspec"
+    },
+    {
+      "file": "hidsharp-2.6.4.nuspec",
+      "bytes": 6585,
+      "sha256": "53bbd0f12c642fecb3e8339609636e0be29150411510ab12a0df4634b1d586c2",
+      "sourceKind": "nuget-package",
+      "sourceUrl": "https://api.nuget.org/v3-flatcontainer/hidsharp/2.6.4/hidsharp.2.6.4.nupkg",
+      "sourcePath": "hidsharp.nuspec"
+    },
+    {
+      "file": "librehardwaremonitorlib-0.9.6.nuspec",
+      "bytes": 4525,
+      "sha256": "74cffddf13444ceef384ad2acbe4b08edba35ef248aff9fc1122abcf44b14801",
+      "sourceKind": "nuget-package",
+      "sourceUrl": "https://api.nuget.org/v3-flatcontainer/librehardwaremonitorlib/0.9.6/librehardwaremonitorlib.0.9.6.nupkg",
+      "sourcePath": "librehardwaremonitorlib.nuspec"
+    },
+    {
+      "file": "mono.posix.netstandard-1.0.0.nuspec",
+      "bytes": 814,
+      "sha256": "06833942a09ab8a40536ee7c9b7d3b2524e457c1eae2333eb4281ba24b6798c8",
+      "sourceKind": "nuget-package",
+      "sourceUrl": "https://api.nuget.org/v3-flatcontainer/mono.posix.netstandard/1.0.0/mono.posix.netstandard.1.0.0.nupkg",
+      "sourcePath": "mono.posix.netstandard.nuspec"
+    },
+    {
+      "file": "ramspdtoolkit-ndd-1.4.2.nuspec",
+      "bytes": 2459,
+      "sha256": "bd7c448bcae8e74c5ea0c9f6b34e9aa2927fe83b0c8c4002546d0738598946df",
+      "sourceKind": "nuget-package",
+      "sourceUrl": "https://api.nuget.org/v3-flatcontainer/ramspdtoolkit-ndd/1.4.2/ramspdtoolkit-ndd.1.4.2.nupkg",
+      "sourcePath": "ramspdtoolkit-ndd.nuspec"
+    },
+    {
+      "file": "system.codedom-10.0.2.nuspec",
+      "bytes": 1230,
+      "sha256": "11f4233d9bc519f7baadef0f4be7b97dcd4225a53acb8c2d92b12968115b1bdd",
+      "sourceKind": "nuget-package",
+      "sourceUrl": "https://api.nuget.org/v3-flatcontainer/system.codedom/10.0.2/system.codedom.10.0.2.nupkg",
+      "sourcePath": "system.codedom.nuspec"
+    },
+    {
+      "file": "system.io.ports-10.0.3.nuspec",
+      "bytes": 1653,
+      "sha256": "e3b0a7f5da8b7de0d988babca5fa7f72d130bf7004218bf6fe988d971094b8c9",
+      "sourceKind": "nuget-package",
+      "sourceUrl": "https://api.nuget.org/v3-flatcontainer/system.io.ports/10.0.3/system.io.ports.10.0.3.nupkg",
+      "sourcePath": "system.io.ports.nuspec"
+    },
+    {
+      "file": "system.management-10.0.2.nuspec",
+      "bytes": 1917,
+      "sha256": "c9792328dab4bd3495e35e65c3a35e734da242f23d909892b21d4039a3577007",
+      "sourceKind": "nuget-package",
+      "sourceUrl": "https://api.nuget.org/v3-flatcontainer/system.management/10.0.2/system.management.10.0.2.nupkg",
+      "sourcePath": "system.management.nuspec"
+    }
+  ],
+  "embeddedComponents": [
+    {
+      "id": "PawnIO.Modules",
+      "version": "0.2.2",
+      "license": "LGPL-2.1-or-later",
+      "repositoryUrl": "https://github.com/namazso/PawnIO.Modules",
+      "repositoryCommit": "e12a858d952461ee2e919897cacbff7f905fe370",
+      "sourceUrl": "https://github.com/namazso/PawnIO.Modules/tree/e12a858d952461ee2e919897cacbff7f905fe370",
+      "sourceArchive": "pawnio-modules-0.2.2-source.tar.gz",
+      "licenseFile": "pawnio-modules-0.2.2-COPYING.txt",
+      "inclusion": "Twelve signed modules embedded in the unmodified LibreHardwareMonitorLib package; the PawnIO kernel driver is not bundled.",
+      "matchingLhmRepositoryResources": [
+        {
+          "file": "AMDFamily0F.bin",
+          "sha256": "1788550c02100ad6bbc91604399ed6e055058ea0f6c0c828c02d9b01a09ad27f"
+        },
+        {
+          "file": "AMDFamily10.bin",
+          "sha256": "79be1396621aa44eb149c5dc6d1bab4519b9cfa49a32af5e022cb9f9ca887658"
+        },
+        {
+          "file": "AMDFamily17.bin",
+          "sha256": "099dc01d6db97ea997fec4a461e191cc64b9d7ce47c9d2153c451c56c2adcf50"
+        },
+        {
+          "file": "IntelMSR.bin",
+          "sha256": "ed41a0d0de082f4668a9caccb9681ebbad97a8ed3452c41918dda1eb454b77a9"
+        },
+        {
+          "file": "IsaBridgeEC.bin",
+          "sha256": "7218c633384bd019cce09e8df91f74996f980765ac44dde0f22b0b5318c20f03"
+        },
+        {
+          "file": "LpcACPIEC.bin",
+          "sha256": "c38fd116e7aff4d1fdb0a494e296be0a6708e5a22fc72f14587442fb7f8f7906"
+        },
+        {
+          "file": "LpcCrOSEC.bin",
+          "sha256": "277ed6ce6b5f647d5dae9b06c83ed39e904974b06f95598d49f4737237974776"
+        },
+        {
+          "file": "LpcIO.bin",
+          "sha256": "3dcf8b2bc80ff642d97c4608511a818642b5bf315ff53df3df393d043e71d101"
+        },
+        {
+          "file": "RyzenSMU.bin",
+          "sha256": "0cf0fe1296c5c38f4bee0f96352b35f14d32ab97cb58fd17600646d98507d8aa"
+        },
+        {
+          "file": "SmbusI801.bin",
+          "sha256": "76b082a144027244fe7bbf3ca0e987e7dfa279aa87e0ccc2a6a918e10e2038e1"
+        },
+        {
+          "file": "SmbusNCT6793.bin",
+          "sha256": "385bd1b229faa44aefe2eb1f938ac629f6d897f1a4931dab5341b18b3bd432c1"
+        },
+        {
+          "file": "SmbusPIIX4.bin",
+          "sha256": "3f8b44c93eb030d59fb68c6fdc6857c61313eab2b6aa0ed64595396d71bf3ea3"
+        }
+      ]
+    }
+  ],
+  "licenseProvenanceNotes": [
+    "The original NuGet .nuspec files are included unchanged. Package license expressions, file licenses, repository commits and dependencies are recorded separately from observations.",
+    "Mono.Posix.NETStandard 1.0.0 does not declare an SPDX license expression or a source commit. Its package licenseUrl redirects to mono/mono LICENSE. That original aggregate LICENSE and PATENTS.TXT are included from pinned commit 0f53e9e151d92944cacab3e24ac359410c606df6; this is not asserted to be the original 1.0.0 build commit.",
+    "The three redistributed System.* NuGet packages have byte-identical THIRD-PARTY-NOTICES.TXT files. A single unchanged copy is shared. Their common MIT license text is copied from the repository commit declared by System.CodeDom/System.Management; System.IO.Ports declares commit c2435c3e0f46de784341ac3ed62863ce77e117b4.",
+    "The complete original PawnIO.Modules 0.2.2 source archive includes the upstream build scripts, includes and compiler RPMs. It is source/build material; no driver is installed or shipped as an executable by Luma."
+  ],
+  "resolvedNotRedistributed": [
+    "runtime.android-arm.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.android-arm64.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.android-x64.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.android-x86.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.linux-arm.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.linux-arm64.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.linux-bionic-arm64.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.linux-bionic-x64.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.linux-musl-arm.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.linux-musl-arm64.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.linux-musl-x64.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.linux-x64.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.maccatalyst-arm64.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.maccatalyst-x64.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.native.System.IO.Ports/10.0.3",
+    "runtime.osx-arm64.runtime.native.System.IO.Ports/10.0.3",
+    "runtime.osx-x64.runtime.native.System.IO.Ports/10.0.3",
+    "System.IO.FileSystem.AccessControl/5.0.0"
+  ],
+  "supersededPackages": [
+    {
+      "id": "System.IO.FileSystem.AccessControl",
+      "version": "5.0.0",
+      "reason": "Resolved transitively but replaced in the self-contained publish by the .NET 10.0.14 runtime assembly; the 5.0.0 NuGet DLL is not redistributed."
+    }
+  ]
+}

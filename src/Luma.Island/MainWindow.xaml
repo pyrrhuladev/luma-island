@@ -22,11 +22,21 @@
         <SolidColorBrush x:Key="ButtonPressed" Color="#343D45"/>
         <SolidColorBrush x:Key="AlbumSurface" Color="#25332E"/>
         <SolidColorBrush x:Key="VolumeTrack" Color="#343B42"/>
+        <Style x:Key="KeyboardFocusRing" TargetType="Control">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Control">
+                        <Border BorderBrush="{StaticResource Mint}" BorderThickness="1" CornerRadius="11" Margin="1"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="QuietButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusRing}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -44,10 +54,6 @@
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.34"/>
-                            </Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="ButtonSurface" Property="BorderBrush" Value="{StaticResource Mint}"/>
-                                <Setter TargetName="ButtonSurface" Property="BorderThickness" Value="1"/>
                             </Trigger>
                             <Trigger Property="Tag" Value="capsule">
                                 <Setter TargetName="ButtonSurface" Property="CornerRadius" Value="28"/>
@@ -149,11 +155,8 @@
                         </LinearGradientBrush>
                     </Border.Background>
                 </Border>
-                <Button x:Name="CompactView" Click="OnToggleExpanded"
-                        PreviewMouseLeftButtonDown="OnCompactPointerDown"
-                        PreviewMouseMove="OnCompactPointerMove"
-                        Style="{StaticResource QuietButton}" Tag="capsule"
-                        AutomationProperties.Name="Раскрыть Luma Island" Padding="13,0">
+                <Grid x:Name="CompactView" Margin="13,0"
+                      AutomationProperties.Name="Раскрыть Luma Island">
                     <Grid x:Name="CompactContentGrid" Width="348">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
@@ -162,11 +165,16 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition x:Name="CompactArtworkColumn" Width="30"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition x:Name="CompactClockColumn" Width="Auto"/>
                             <ColumnDefinition x:Name="CompactBatteryColumn" Width="Auto"/>
                             <ColumnDefinition x:Name="CompactArrowColumn" Width="16"/>
                         </Grid.ColumnDefinitions>
-                        <Border x:Name="CompactArtworkFrame" Width="29" Height="29" CornerRadius="9" Background="{DynamicResource AlbumSurface}" ClipToBounds="True">
+                        <Button x:Name="CompactExpandButton" Grid.RowSpan="2" Grid.ColumnSpan="6" Margin="-13,0"
+                                Click="OnCompactExpand" PreviewMouseLeftButtonDown="OnCompactPointerDown"
+                                PreviewMouseMove="OnCompactPointerMove" Style="{StaticResource QuietButton}" Tag="capsule"
+                                AutomationProperties.Name="Раскрыть Luma Island"/>
+                        <Border x:Name="CompactArtworkFrame" IsHitTestVisible="False" Width="29" Height="29" CornerRadius="9" Background="{DynamicResource AlbumSurface}" ClipToBounds="True">
                             <Grid>
                                 <TextBlock x:Name="CompactFallback" Text="&#xE8D6;" FontFamily="Segoe MDL2 Assets"
                                            FontSize="14" Foreground="{StaticResource Mint}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -176,33 +184,54 @@
                                 </Image>
                             </Grid>
                         </Border>
-                        <StackPanel x:Name="CompactMusicText" Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
+                        <StackPanel x:Name="CompactMusicText" IsHitTestVisible="False" Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
                             <TextBlock x:Name="CompactTitle" Text="Откройте музыку" FontSize="12" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
                             <TextBlock x:Name="CompactArtist" Text="Luma Island" FontSize="11" Foreground="{DynamicResource Muted}"
                                        Margin="0,1,0,0" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
-                        <TextBlock x:Name="CompactClock" Grid.Column="2" Text="--:--" FontSize="13"
+                        <StackPanel x:Name="CompactPlaybackControls" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Visibility="{Binding Visibility, ElementName=ExpandedPlaybackControls}">
+                            <Button x:Name="CompactPreviousButton" Width="24" Height="28" Style="{StaticResource QuietButton}"
+                                    IsEnabled="{Binding IsEnabled, ElementName=PreviousButton}" Click="OnPrevious"
+                                    AutomationProperties.Name="Предыдущий трек" ToolTip="Предыдущий трек">
+                                <Path Data="M 1,1 L 1,13 M 13,1 L 4,7 L 13,13 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Width="10" Height="11" Stretch="Uniform"/>
+                            </Button>
+                            <Button x:Name="CompactPlayButton" Width="24" Height="28" Style="{StaticResource QuietButton}" Foreground="{StaticResource Mint}"
+                                    IsEnabled="{Binding IsEnabled, ElementName=PlayButton}" Click="OnTogglePlayback"
+                                    AutomationProperties.Name="{Binding Path=(AutomationProperties.Name), ElementName=PlayButton}" ToolTip="Воспроизвести / пауза">
+                                <Path x:Name="CompactPlayIcon" Data="{Binding Data, ElementName=PlayIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      Width="10" Height="12" Stretch="Uniform"/>
+                            </Button>
+                            <Button x:Name="CompactNextButton" Width="24" Height="28" Style="{StaticResource QuietButton}"
+                                    IsEnabled="{Binding IsEnabled, ElementName=NextButton}" Click="OnNext"
+                                    AutomationProperties.Name="Следующий трек" ToolTip="Следующий трек">
+                                <Path Data="M 13,1 L 13,13 M 1,1 L 10,7 L 1,13 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Width="10" Height="11" Stretch="Uniform"/>
+                            </Button>
+                        </StackPanel>
+                        <TextBlock x:Name="CompactClock" IsHitTestVisible="False" Grid.Column="3" Text="--:--" FontSize="13"
                                    Margin="6,0,8,0"
                                    Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="CompactBattery" Grid.Column="3" Text="—" FontSize="11"
+                        <TextBlock x:Name="CompactBattery" IsHitTestVisible="False" Grid.Column="4" Text="—" FontSize="11"
                                    Margin="4,0,8,0"
                                    Foreground="{DynamicResource Muted}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                        <Path Grid.Column="4" Data="M 1,1 L 5,5 L 9,1" Stroke="{DynamicResource Muted}" StrokeThickness="1.4"
+                        <Path Grid.Column="5" IsHitTestVisible="False" Data="M 1,1 L 5,5 L 9,1" Stroke="{DynamicResource Muted}" StrokeThickness="1.4"
                               Width="10" Height="6" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                        <UniformGrid x:Name="CompactPerformance" Grid.Row="1" Grid.ColumnSpan="5" Columns="4"
+                        <UniformGrid x:Name="CompactPerformance" IsHitTestVisible="False" Grid.Row="1" Grid.ColumnSpan="6" Columns="4"
                                      Height="28" Margin="0,8,0,8" Visibility="Collapsed">
                             <TextBlock x:Name="CompactCpu" FontSize="12" Foreground="{DynamicResource TextSecondary}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" LineHeight="16" Visibility="Collapsed"/>
                             <TextBlock x:Name="CompactGpu" FontSize="12" Foreground="{DynamicResource TextSecondary}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" LineHeight="16" Visibility="Collapsed"/>
                             <TextBlock x:Name="CompactMemory" FontSize="12" Foreground="{DynamicResource TextSecondary}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" LineHeight="16" Visibility="Collapsed"/>
                             <TextBlock x:Name="CompactFps" FontSize="12" Foreground="{StaticResource Mint}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                         </UniformGrid>
                     </Grid>
-                </Button>
+                </Grid>
 
                 <Grid x:Name="ExpandedView" Visibility="Collapsed" Opacity="0" Margin="18,10,18,13">
                     <Grid.RowDefinitions>
@@ -286,9 +315,9 @@
                     </Grid>
                     <StackPanel x:Name="ExpandedPerformance" Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center"
                                 VerticalAlignment="Center" Visibility="Collapsed">
-                        <TextBlock x:Name="ExpandedCpu" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <TextBlock x:Name="ExpandedCpu" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" TextAlignment="Center" LineHeight="16" Margin="0,0,12,0"/>
                         <TextBlock x:Name="ExpandedGpu" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" TextAlignment="Center" LineHeight="16" Margin="0,0,12,0"/>
-                        <TextBlock x:Name="ExpandedMemory" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <TextBlock x:Name="ExpandedMemory" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" TextAlignment="Center" LineHeight="16" Margin="0,0,12,0"/>
                         <TextBlock x:Name="ExpandedFps" FontSize="11" Foreground="{StaticResource Mint}" VerticalAlignment="Center"/>
                     </StackPanel>
                     <Grid x:Name="ChartsPanel" Grid.Row="5" Margin="0,4,0,4" Visibility="Collapsed" IsVisibleChanged="OnChartsVisibleChanged">

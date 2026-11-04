@@ -18,13 +18,14 @@ Check(ComponentSettings.Default == new ComponentSettings(true, true, true, true,
     "only basic components enabled by default");
 Check(!ComponentSettings.Default.Charts, "charts disabled in defaults and legacy nine-argument constructor");
 Check(!store.Load().GpuTemperature, "missing settings leave GPU temperature disabled");
+Check(!store.Load().CpuTemperature && !store.Load().MemoryTemperature, "CPU and RAM temperatures are opt-in");
 Check(!new ComponentSettings(true, true, true, true, true, false, false, false, false, true).GpuTemperature,
     "legacy ten-argument constructor leaves GPU temperature disabled");
 
 var allOff = new ComponentSettings(false, false, false, false, false, false, false, false, false, false, false);
 Check(store.Save(allOff), "all disabled settings save");
 Check(new ComponentStore(path).Load() == allOff, "all disabled settings survive fresh store");
-var allOn = new ComponentSettings(true, true, true, true, true, true, true, true, true, true, true);
+var allOn = new ComponentSettings(true, true, true, true, true, true, true, true, true, true, true, true, true);
 Check(store.Save(allOn), "all enabled settings save");
 Check(new ComponentStore(path).Load() == allOn, "every boolean preserves true through fresh store");
 var mixed = new ComponentSettings(false, true, false, true, false, true, false, true, true, true, true);
@@ -55,6 +56,12 @@ foreach (bool enabled in new[] { true, false })
 File.WriteAllText(path, "{\"time\":false,\"cpu\":true}");
 Check(store.Load() == (ComponentSettings.Default with { Time = false, Cpu = true }),
     "partial JSON preserves defaults for missing properties");
+foreach (var temperatures in new[] { (true, false), (false, true), (true, true) })
+{
+    var settings = allOff with { CpuTemperature = temperatures.Item1, MemoryTemperature = temperatures.Item2 };
+    Check(store.Save(settings) && new ComponentStore(path).Load() == settings,
+        "CPU and RAM temperatures save independently without turning on load or other components");
+}
 File.WriteAllText(path, "{\"music\":false,\"futureComponent\":{\"enabled\":true}}");
 Check(store.Load() == (ComponentSettings.Default with { Music = false }), "unknown fields ignored");
 File.WriteAllText(path, "{\"MuSiC\":false,\"BATTERY\":false}");
@@ -63,7 +70,8 @@ Check(store.Load() == (ComponentSettings.Default with { Music = false, Battery =
 foreach (var content in new[]
 {
     "{}", "null", "{oops", "[]", "{\"music\":\"false\"}", "{\"volume\":42}", "{\"cpu\":null}",
-    "{\"gpuTemperature\":\"true\"}", "{\"gpuTemperature\":1}", "{\"gpuTemperature\":null}"
+    "{\"gpuTemperature\":\"true\"}", "{\"gpuTemperature\":1}", "{\"gpuTemperature\":null}",
+    "{\"cpuTemperature\":\"true\"}", "{\"memoryTemperature\":null}"
 })
 {
     File.WriteAllText(path, content);

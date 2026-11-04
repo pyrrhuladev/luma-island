@@ -11,7 +11,9 @@ using System.Windows.Threading;
 namespace Luma.Island.Services;
 
 public sealed record PerformanceSnapshot(double? CpuPercent, double? GpuPercent, double? MemoryPercent, ulong UsedMemoryBytes, ulong TotalMemoryBytes,
-    double? GpuTemperatureCelsius = null, string? GpuTemperatureStatus = null)
+    double? GpuTemperatureCelsius = null, string? GpuTemperatureStatus = null,
+    double? CpuTemperatureCelsius = null, string? CpuTemperatureStatus = null,
+    double? MemoryTemperatureCelsius = null, string? MemoryTemperatureStatus = null)
 {
     public static PerformanceSnapshot Empty { get; } = new(null, null, null, 0, 0);
 }
@@ -31,6 +33,7 @@ public sealed class PerformanceService : IDisposable
     private long _lastSampleTimestamp;
     private IntPtr _query, _gpuCounter;
     private GpuTemperatureReader? _temperatureReader;
+    private SensorClient? _cpuMemoryTemperatureReader;
     private static readonly Regex EngineName = new(
         @"luid_(?<luid>0x[0-9a-f]+_0x[0-9a-f]+)_phys_(?<physical>\d+)_eng_(?<engine>\d+)(?:_engtype_|$)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -41,17 +44,19 @@ public sealed class PerformanceService : IDisposable
     /// <summary>Raised on the WPF application dispatcher.</summary>
     public event Action<PerformanceSnapshot>? Changed;
 
-    public void Configure(bool cpu, bool gpu, bool memory, bool gpuTemperature = false)
+    public void Configure(bool cpu, bool gpu, bool memory, bool gpuTemperature = false,
+        bool cpuTemperature = false, bool memoryTemperature = false)
     {
         _dispatcher.VerifyAccess();
         ObjectDisposedException.ThrowIf(_disposed, this);
-        int flags = (cpu ? 1 : 0) | (gpu ? 2 : 0) | (memory ? 4 : 0) | (gpuTemperature ? 8 : 0);
+        int flags = (cpu ? 1 : 0) | (gpu ? 2 : 0) | (memory ? 4 : 0) | (gpuTemperature ? 8 : 0)
+            | (cpuTemperature ? 16 : 0) | (memoryTemperature ? 32 : 0);
         if (Volatile.Read(ref _configuration).Flags == flags) return;
         var configuration = new Configuration(++_version, flags);
         Volatile.Write(ref _configuration, configuration);
         _timer.Change(flags == 0 ? Timeout.Infinite : 0, flags == 0 ? Timeout.Infinite : 2000);
         Publish(PerformanceSnapshot.Empty);
-        if (!gpu || !gpuTemperature)
+        if (!gpu || !gpuTemperature || !(cpuTemperature || memoryTemperature))
         {
             // Serialize cleanup with an already-running PDH call, without blocking UI.
             _ = Task.Run(() =>
@@ -62,6 +67,7 @@ public sealed class PerformanceService : IDisposable
                     {
                         if (!gpu) CloseGpu();
                         if (!gpuTemperature) CloseTemperature();
+                        if (!(cpuTemperature || memoryTemperature)) CloseCpuMemoryTemperature();
                         if (flags == 0) _hasCpuSample = false;
                     }
                 }
@@ -109,7 +115,14 @@ public sealed class PerformanceService : IDisposable
                 temperature = _temperatureReader.ReadCelsius();
                 temperatureStatus = _temperatureReader.Status;
             }
-            snapshot = new PerformanceSnapshot(cpu, gpu, memory.Percent, memory.Used, memory.Total, temperature, temperatureStatus);
+            SensorResponse? hardware = null;
+            if ((configuration.Flags & 48) != 0)
+            {
+                _cpuMemoryTemperatureReader ??= new SensorClient();
+                hardware = _cpuMemoryTemperatureReader.Read((configuration.Flags & 16) != 0, (configuration.Flags & 32) != 0);
+            }
+            snapshot = new PerformanceSnapshot(cpu, gpu, memory.Percent, memory.Used, memory.Total, temperature, temperatureStatus,
+                hardware?.CpuCelsius, hardware?.CpuStatus, hardware?.MemoryCelsius, hardware?.MemoryStatus);
         }
         catch (Exception ex)
         {
@@ -236,6 +249,12 @@ public sealed class PerformanceService : IDisposable
         _temperatureReader = null;
     }
 
+    private void CloseCpuMemoryTemperature()
+    {
+        _cpuMemoryTemperatureReader?.Dispose();
+        _cpuMemoryTemperatureReader = null;
+    }
+
     public void Dispose()
     {
         _dispatcher.VerifyAccess();
@@ -243,7 +262,7 @@ public sealed class PerformanceService : IDisposable
         _disposed = true;
         _timer.Dispose();
         Volatile.Write(ref _configuration, new Configuration(++_version, 0));
-        lock (_nativeGate) { CloseGpu(); CloseTemperature(); }
+        lock (_nativeGate) { CloseGpu(); CloseTemperature(); CloseCpuMemoryTemperature(); }
         Changed = null;
     }
 

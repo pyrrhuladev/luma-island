@@ -45,7 +45,7 @@ public partial class App : System.Windows.Application
         if (!diagnostic)
         {
             _instance = new Mutex(true, "Local\\LumaIsland-0.1", out _ownsMutex);
-            if (!_ownsMutex) { Shutdown(); return; }
+            if (!_ownsMutex) { Luma.Island.MainWindow.RequestRestoreExistingInstance(); Shutdown(); return; }
         }
         try
         {
@@ -67,6 +67,11 @@ public partial class App : System.Windows.Application
             _performance.Changed += _island.ApplyPerformance;
             _fps.Changed += _island.ApplyFps;
             _island.ComponentsChanged += ConfigureComponents;
+            _island.IsVisibleChanged += (_, _) =>
+            {
+                if (_island.IsVisible) _island.UpdateClockAndBattery();
+                ConfigureComponents(_island.Components);
+            };
             if (Array.IndexOf(e.Args, "--ui-check") >= 0)
             {
                 _island.ShowInTaskbar = true;
@@ -114,7 +119,9 @@ public partial class App : System.Windows.Application
             CreateTray();
             _windowSource = HwndSource.FromHwnd(new WindowInteropHelper(_island).Handle);
             _windowSource?.AddHook(WindowMessage);
-            RegisterHotKey(_windowSource!.Handle, HotkeyId, 0x0001 | 0x0002 | 0x4000, 0x20);
+            bool hotkeyAvailable = RegisterHotKey(_windowSource!.Handle, HotkeyId, 0x0001 | 0x0002 | 0x4000, 0x20);
+            _island.SetTrayHotkeyStatus(hotkeyAvailable);
+            _tray?.SetHotkeyStatus(hotkeyAvailable);
             ScheduleClock();
             try { await _media.InitializeAsync(); }
             catch (Exception ex) { Log(ex); }
@@ -148,8 +155,10 @@ public partial class App : System.Windows.Application
 
     private async void ConfigureComponents(ComponentSettings settings)
     {
-        _performance?.Configure(settings.Cpu, settings.Gpu, settings.Memory, settings.GpuTemperature);
-        _fps?.Configure(settings.Fps);
+        bool visible = _island?.IsVisible == true;
+        _performance?.Configure(visible && settings.Cpu, visible && settings.Gpu, visible && settings.Memory, visible && settings.GpuTemperature,
+            visible && settings.CpuTemperature, visible && settings.MemoryTemperature);
+        _fps?.Configure(visible && settings.Fps);
         ScheduleClock();
         try { if (_media is not null) await _media.SetEnabledAsync(settings.Music); }
         catch (Exception ex) { Log(ex); }
@@ -159,14 +168,14 @@ public partial class App : System.Windows.Application
     {
         _tray = new TrayService(_island!, ToggleVisible, () =>
         {
-            _island!.Show(); _island.ToggleExpanded();
+            _island!.RestoreFromTray(); _island.ToggleExpanded();
         }, () => Shutdown(), _island!.CreatePositionMenu, _island!.CreateAppearanceMenu, _island!.CreateComponentsMenu,
-            _island!.CreateAutostartMenu, _island!.RefreshAutostartMenus);
+            _island!.CreateAutostartMenu, _island!.RefreshAutostartMenus, _island!.RestoreFromTray);
     }
 
     private void ToggleVisible()
     {
-        if (_island!.IsVisible) _island.Hide(); else _island.Show();
+        _island?.ToggleTrayVisibility();
     }
 
     private IntPtr WindowMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -174,8 +183,7 @@ public partial class App : System.Windows.Application
         if (msg == 0x0218 && wParam.ToInt32() == 0x000A) _island?.UpdateClockAndBattery();
         if (msg == 0x0312 && wParam.ToInt32() == HotkeyId)
         {
-            _island!.Show();
-            _island.ToggleExpanded();
+            ToggleVisible();
             handled = true;
         }
         return IntPtr.Zero;
