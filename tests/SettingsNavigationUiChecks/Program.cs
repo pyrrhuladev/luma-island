@@ -145,8 +145,148 @@ internal static class Program
         finally { editor.Close(); }
 
         await VerifyExtensions();
+        await VerifyScrollRouting(context, widgets);
         Check(SamePreferences(preferences, RealPreferences()), "Every actual user preference file stays byte-identical");
     }
+
+    private static async Task VerifyScrollRouting(SettingsEditorContext context, ComponentSettings widgets)
+    {
+        var appearance = AppearanceSettings.Default with { Alerts = AlertSettings.Default with { Enabled = true } };
+        var editor = new HudEditorWindow(appearance, widgets, "Тестовая игра", MainWindow.RenderHudPreview, context);
+        try
+        {
+            Prepare(editor); editor.Width = 800; editor.Height = 420; editor.Show(); await Settle();
+            string before = DraftSnapshot(editor);
+            var cases = new[] { ("appearance", "SpacingSlider"), ("layout", "ResetLayoutButton"),
+                ("components", "BatteryCheckBox"), ("alerts", "StutterCountSlider"),
+                ("placement", "PlacementLockCheckBox"), ("profiles", "CopyProfileButton"), ("application", "SettingsVersionText") };
+            foreach (var (section, bottomName) in cases)
+            {
+                editor.SelectSection(section); await Settle();
+                var scroll = PageScroll(editor);
+                Check(scroll.ScrollableHeight > 0, "Short-window page has a scrollable viewport: " + section);
+                scroll.ScrollToTop(); await Settle();
+                Wheel((UIElement)scroll.Content, -120); await Settle();
+                Check(scroll.VerticalOffset > 0, "A routed wheel event moves the page: " + section);
+                await WheelToEnd(scroll);
+                var bottom = (FrameworkElement)(editor.FindSettingsControl(bottomName) ?? throw new InvalidOperationException("Missing bottom control " + bottomName));
+                InViewport(bottom, scroll, "Wheel scrolling reaches the last control: " + section);
+                if (section is "placement" or "profiles" or "application") Save(editor, "settings-" + section + "-short-bottom.png");
+            }
+            Check(DraftSnapshot(editor) == before, "Scrolling all seven sections does not alter any preference draft");
+
+            editor.SelectSection("appearance"); await Settle();
+            var appearanceScroll = PageScroll(editor);
+            var scale = Named<Slider>(editor, "ScaleSlider"); scale.BringIntoView(); await Settle();
+            double scaleBefore = scale.Value, offsetBefore = appearanceScroll.VerticalOffset;
+            Wheel(scale, -120); await Settle();
+            Check(scale.Value == scaleBefore && appearanceScroll.VerticalOffset > offsetBefore,
+                "Wheel over a HUD scale slider scrolls the page without changing the scale");
+
+            editor.SelectSection("placement"); await Settle();
+            var positionScroll = PageScroll(editor); positionScroll.ScrollToTop(); await Settle();
+            var monitor = (ComboBox)editor.FindSettingsControl("PlacementMonitorCombo")!;
+            object? monitorBefore = monitor.SelectedItem;
+            Wheel(monitor, -120); await Settle();
+            Check(ReferenceEquals(monitor.SelectedItem, monitorBefore) && positionScroll.VerticalOffset > 0,
+                "Wheel over a closed monitor picker scrolls the page without switching displays");
+
+            editor.SelectSection("profiles"); await Settle();
+            var profilesScroll = PageScroll(editor); profilesScroll.ScrollToTop(); await Settle();
+            var profileList = (ListBox)editor.FindSettingsControl("SettingsProfileList")!;
+            var inner = VisualScroll(profileList) ?? throw new InvalidOperationException("Profile list viewport is missing.");
+            Check(inner.ScrollableHeight == 0, "The one-profile list has no inner scroll range");
+            Wheel(WheelContent(inner), -120); await Settle();
+            Check(profilesScroll.VerticalOffset > 0, "Wheel over a short profile list falls through to the outer page");
+
+            FrameworkElement? last = null;
+            editor.RegisterSection(new SettingsSectionDefinition("long-scroll-fixture", "Длинный раздел", "", "", () =>
+            {
+                var panel = new StackPanel();
+                for (int index = 0; index < 40; index++) panel.Children.Add(last = new TextBlock { Text = "Строка " + index, Height = 28 });
+                return panel;
+            }));
+            editor.SelectSection("long-scroll-fixture"); await Settle();
+            var extensionScroll = PageScroll(editor);
+            Check(extensionScroll.ScrollableHeight > 0, "A registered raw page receives the same scroll host automatically");
+            await WheelToEnd(extensionScroll);
+            InViewport(last!, extensionScroll, "Wheel scrolling reaches the bottom of a lazy extension page");
+            Check(DraftSnapshot(editor) == before, "Wheel routing leaves slider, monitor, profile and startup settings unchanged");
+        }
+        finally { editor.Close(); }
+
+        var manyProfiles = new GameProfileSettings(true, Enumerable.Range(0, 40).Select(index => new GameProfile(
+            Guid.NewGuid().ToString("D"), "Игра " + index, @"D:\Games\Example\game" + index + ".exe", HudProfileSettings.Default)).ToArray());
+        var longContext = context with { Profiles = manyProfiles, ActiveProfileId = null };
+        var nestedEditor = new HudEditorWindow(appearance, widgets, "Общий HUD", MainWindow.RenderHudPreview, longContext);
+        try
+        {
+            Prepare(nestedEditor); nestedEditor.Width = 800; nestedEditor.Height = 420; nestedEditor.Show();
+            nestedEditor.SelectSection("profiles"); await Settle();
+            string before = DraftSnapshot(nestedEditor);
+            var outer = PageScroll(nestedEditor);
+            var list = (ListBox)nestedEditor.FindSettingsControl("SettingsProfileList")!;
+            var inner = VisualScroll(list) ?? throw new InvalidOperationException("Long profile list viewport is missing.");
+            Check(inner.ScrollableHeight > 0, "A long profile list has its own scroll range");
+            outer.ScrollToTop(); inner.ScrollToTop(); await Settle();
+            double outerBefore = outer.VerticalOffset;
+            Wheel(WheelContent(inner), -120); await Settle();
+            Check(inner.VerticalOffset > 0 && outer.VerticalOffset == outerBefore,
+                "An inner list consumes the wheel while it has room in that direction");
+            inner.ScrollToEnd(); outer.ScrollToTop(); await Settle();
+            Wheel(WheelContent(inner), -120); await Settle();
+            Check(outer.VerticalOffset > 0 && Math.Abs(inner.VerticalOffset - inner.ScrollableHeight) < .1,
+                "At the inner list bottom, downward wheel moves the outer page");
+            inner.ScrollToTop(); outer.ScrollToEnd(); await Settle();
+            outerBefore = outer.VerticalOffset;
+            Wheel(WheelContent(inner), 120); await Settle();
+            Check(inner.VerticalOffset == 0 && outer.VerticalOffset < outerBefore,
+                "At the inner list top, upward wheel moves the outer page");
+            Check(DraftSnapshot(nestedEditor) == before, "Nested wheel routing never changes the selected profile or its settings");
+        }
+        finally { nestedEditor.Close(); }
+    }
+
+    private static ScrollViewer PageScroll(HudEditorWindow editor)
+        => ((TabItem)Named<TabControl>(editor, "EditorTabs").SelectedItem).Content as ScrollViewer
+           ?? throw new InvalidOperationException("Selected page has no outer ScrollViewer: " + editor.SelectedSectionId);
+    private static ScrollViewer? VisualScroll(DependencyObject root)
+    {
+        if (root is ScrollViewer scroll) return scroll;
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+            if (VisualScroll(VisualTreeHelper.GetChild(root, index)) is { } found) return found;
+        return null;
+    }
+    private static UIElement WheelContent(ScrollViewer scroll)
+        => VisualDescendant<System.Windows.Controls.ScrollContentPresenter>(scroll) ?? (UIElement)scroll.Content;
+    private static T? VisualDescendant<T>(DependencyObject root) where T : DependencyObject
+    {
+        if (root is T match) return match;
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+            if (VisualDescendant<T>(VisualTreeHelper.GetChild(root, index)) is { } found) return found;
+        return null;
+    }
+    private static void Wheel(UIElement target, int delta)
+    {
+        var preview = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, delta) { RoutedEvent = Mouse.PreviewMouseWheelEvent };
+        target.RaiseEvent(preview);
+        if (!preview.Handled) target.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, delta) { RoutedEvent = Mouse.MouseWheelEvent });
+    }
+    private static async Task WheelToEnd(ScrollViewer scroll)
+    {
+        for (int batch = 0; batch < 30 && scroll.VerticalOffset < scroll.ScrollableHeight - .1; batch++)
+        {
+            for (int notch = 0; notch < 5; notch++) Wheel((UIElement)scroll.Content, -120);
+            await Settle();
+        }
+        Check(Math.Abs(scroll.VerticalOffset - scroll.ScrollableHeight) < .1, "Routed wheel reaches the page's actual bottom");
+    }
+    private static void InViewport(FrameworkElement element, ScrollViewer scroll, string message)
+    {
+        var bounds = element.TransformToAncestor(scroll).TransformBounds(new Rect(element.RenderSize));
+        Check(element.IsVisible && element.ActualHeight > 0 && bounds.Top >= -1 && bounds.Bottom <= scroll.ActualHeight + 1, message);
+    }
+    private static string DraftSnapshot(HudEditorWindow editor) => JsonSerializer.Serialize(new { editor.DraftAppearance, editor.DraftComponents, editor.DraftApplication });
 
     private static async Task VerifyExtensions()
     {

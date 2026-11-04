@@ -26,6 +26,7 @@ public partial class HudEditorWindow : Window
     private readonly SettingsSectionRegistry _sections = new();
     private readonly ObservableCollection<SettingsSectionDefinition> _filteredSections = new();
     private readonly Dictionary<string, TabItem> _sectionTabs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<ScrollViewer> _sectionScrollHosts = new();
     private readonly SettingsApplicationPages? _applicationPages;
     private readonly SettingsEditorContext? _context;
     private readonly AppearanceSettings _initialAppearance;
@@ -414,7 +415,18 @@ public partial class HudEditorWindow : Window
         {
             var content = section.GetContent();
             TabItem tab = _sectionTabs[section.Id];
-            if (tab.Content is null) tab.Content = content;
+            if (tab.Content is null)
+                tab.Content = content is ScrollViewer ? content : new ScrollViewer
+                {
+                    Content = content,
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                    CanContentScroll = false,
+                    PanningMode = PanningMode.VerticalOnly,
+                    Padding = new Thickness(0, 0, 10, 0)
+                };
+            if (tab.Content is ScrollViewer scroll && _sectionScrollHosts.Add(scroll))
+                scroll.PreviewMouseWheel += OnSectionMouseWheel;
             _selectingNavigation = true;
             if (!_filteredSections.Contains(section)) { SettingsSearchBox.Text = string.Empty; ApplySearch(); }
             EditorTabs.SelectedItem = tab;
@@ -435,6 +447,29 @@ public partial class HudEditorWindow : Window
         }
         finally { _selectingNavigation = wasSelecting; }
     }
+
+    private void OnSectionMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is not ScrollViewer outer || outer.ScrollableHeight <= 0 || e.Delta == 0) return;
+        for (DependencyObject? node = e.OriginalSource as DependencyObject; node is not null && node != outer; node = ScrollParent(node))
+        {
+            if (node is ComboBox { IsDropDownOpen: true }) return;
+            if (node is ScrollViewer inner && inner != outer && inner.ScrollableHeight > 0 &&
+                (e.Delta > 0 ? inner.VerticalOffset > 0 : inner.VerticalOffset < inner.ScrollableHeight)) return;
+        }
+        int lines = SystemParameters.WheelScrollLines;
+        if (lines < 0)
+        {
+            if (e.Delta < 0) outer.PageDown(); else outer.PageUp();
+        }
+        else if (lines > 0) outer.ScrollToVerticalOffset(outer.VerticalOffset - e.Delta / 120d * lines * 16);
+        e.Handled = true;
+    }
+
+    private static DependencyObject? ScrollParent(DependencyObject node)
+        => node is Visual or System.Windows.Media.Media3D.Visual3D
+            ? VisualTreeHelper.GetParent(node) ?? LogicalTreeHelper.GetParent(node)
+            : LogicalTreeHelper.GetParent(node);
 
     public IReadOnlyList<SettingsSectionDefinition> SearchSections(string? query)
     {
