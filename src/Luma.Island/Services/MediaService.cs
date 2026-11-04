@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media.Imaging;
@@ -33,17 +35,21 @@ public sealed class MediaService : IDisposable
     private GlobalSystemMediaTransportControlsSession? _session;
     private Task? _initialization;
     private int _generation;
-    private int _metadataVersion;
+    private readonly MediaArtworkCoordinator<BitmapSource> _metadata;
     private string _title = string.Empty;
     private string _artist = string.Empty;
-    private string? _metadataKey;
     private BitmapSource? _artwork;
+    private string? _lastArtworkDigest;
+    private BitmapSource? _lastDecodedArtwork;
     private bool _disposed;
 
     public bool IsEnabled { get; private set; } = true;
     public MediaSnapshot Current { get; private set; } = MediaSnapshot.Empty;
     /// <summary>Raised on the WPF application dispatcher.</summary>
     public event Action<MediaSnapshot>? Changed;
+
+    public MediaService() => _metadata = new MediaArtworkCoordinator<BitmapSource>(ApplyMetadata,
+        exception => Trace.WriteLine("SMTC metadata/artwork: " + exception.Message));
 
     public Task InitializeAsync()
     {
@@ -107,13 +113,14 @@ public sealed class MediaService : IDisposable
         {
             var next = _manager.GetCurrentSession() ?? _manager.GetSessions().FirstOrDefault();
             if (ReferenceEquals(next, _session)) return;
+            _metadata.Reset();
             UnsubscribeSession();
             _session = next;
-            _metadataVersion++;
-            _metadataKey = null;
             _title = string.Empty;
             _artist = string.Empty;
             _artwork = null;
+            _lastArtworkDigest = null;
+            _lastDecodedArtwork = null;
             if (next is not null)
             {
                 next.MediaPropertiesChanged += OnMediaPropertiesChanged;
@@ -128,62 +135,67 @@ public sealed class MediaService : IDisposable
         }
     }
 
-    private void RequestMetadata()
+    private void RequestMetadata(bool expectTrackChange = false)
     {
         if (_disposed || !IsEnabled || _session is null) return;
-        _ = RefreshMetadataAsync(_session, ++_metadataVersion);
+        var session = _session;
+        int generation = _generation;
+        _ = _metadata.RefreshAsync(token => ReadMetadataAsync(session, generation, token), expectTrackChange);
     }
 
-    private async Task RefreshMetadataAsync(GlobalSystemMediaTransportControlsSession session, int version)
+    private async Task<MediaArtworkInput<BitmapSource>> ReadMetadataAsync(GlobalSystemMediaTransportControlsSession session,
+        int generation, CancellationToken cancellation)
     {
-        try
-        {
-            if (!IsCurrent(session, version)) return;
-            var properties = await session.TryGetMediaPropertiesAsync();
-            if (!IsCurrent(session, version)) return;
-            var key = properties.Title + "\0" + properties.Artist + "\0" + properties.AlbumTitle;
-            BitmapSource? artwork = _artwork;
-            if (key != _metadataKey)
-            {
-                artwork = await ReadArtworkAsync(properties.Thumbnail, session, version);
-                if (!IsCurrent(session, version)) return;
-            }
-            _title = properties.Title ?? string.Empty;
-            _artist = properties.Artist ?? string.Empty;
-            _metadataKey = key;
-            _artwork = artwork;
-            Publish();
-        }
-        catch (Exception ex)
-        {
-            // A player can disappear while WinRT is returning its metadata.
-            Trace.WriteLine("SMTC metadata: " + ex.Message);
-        }
+        if (!IsCurrent(session, generation, cancellation)) throw new OperationCanceledException(cancellation);
+        var properties = await session.TryGetMediaPropertiesAsync().AsTask(cancellation);
+        if (!IsCurrent(session, generation, cancellation)) throw new OperationCanceledException(cancellation);
+        return new MediaArtworkInput<BitmapSource>(properties.Title ?? string.Empty, properties.Artist ?? string.Empty,
+            properties.AlbumTitle ?? string.Empty, token => ReadArtworkAsync(properties.Thumbnail, session, generation, token));
     }
 
-    private bool IsCurrent(GlobalSystemMediaTransportControlsSession session, int version)
-        => !_disposed && IsEnabled && version == _metadataVersion && ReferenceEquals(session, _session);
+    private void ApplyMetadata(MediaArtworkState<BitmapSource> state)
+    {
+        _dispatcher.VerifyAccess();
+        if (_disposed || !IsEnabled) return;
+        _title = state.Title;
+        _artist = state.Artist;
+        _artwork = state.Artwork;
+        Publish();
+    }
+
+    private bool IsCurrent(GlobalSystemMediaTransportControlsSession session, int generation, CancellationToken cancellation)
+        => IsActive(generation) && !cancellation.IsCancellationRequested && ReferenceEquals(session, _session);
 
     private bool IsActive(int generation) => !_disposed && IsEnabled && generation == _generation;
 
     private async Task<BitmapSource?> ReadArtworkAsync(IRandomAccessStreamReference? thumbnail,
-        GlobalSystemMediaTransportControlsSession session, int version)
+        GlobalSystemMediaTransportControlsSession session, int generation, CancellationToken cancellation)
     {
-        if (thumbnail is null || !IsCurrent(session, version)) return null;
+        if (thumbnail is null) return null;
+        if (!IsCurrent(session, generation, cancellation)) throw new OperationCanceledException(cancellation);
         try
         {
-            using var source = await thumbnail.OpenReadAsync();
-            if (!IsCurrent(session, version) || source.Size == 0 || source.Size > 8 * 1024 * 1024) return null;
+            using var source = await thumbnail.OpenReadAsync().AsTask(cancellation);
+            if (!IsCurrent(session, generation, cancellation)) throw new OperationCanceledException(cancellation);
+            if (source.Size == 0 || source.Size > 8 * 1024 * 1024) return null;
             using var input = source.GetInputStreamAt(0);
             using var reader = new DataReader(input);
             var size = checked((uint)source.Size);
-            var loaded = await reader.LoadAsync(size);
-            if (!IsCurrent(session, version) || loaded != size) return null;
+            var loaded = await reader.LoadAsync(size).AsTask(cancellation);
+            if (!IsCurrent(session, generation, cancellation)) throw new OperationCanceledException(cancellation);
+            if (loaded != size) return null;
             var bytes = new byte[size];
             reader.ReadBytes(bytes);
+            string digest = Convert.ToHexString(SHA256.HashData(bytes));
+            if (digest == _lastArtworkDigest && _lastDecodedArtwork is not null) return _lastDecodedArtwork;
             using var stream = new MemoryStream(bytes, writable: false);
-            return ArtworkDecoder.Decode(stream);
+            BitmapSource artwork = ArtworkDecoder.Decode(stream);
+            if (!IsCurrent(session, generation, cancellation)) throw new OperationCanceledException(cancellation);
+            _lastArtworkDigest = digest;
+            _lastDecodedArtwork = artwork;
+            return artwork;
         }
+        catch (Exception) when (!IsCurrent(session, generation, cancellation)) { throw new OperationCanceledException(cancellation); }
         catch (Exception ex)
         {
             Trace.WriteLine("SMTC artwork: " + ex.Message);
@@ -212,7 +224,12 @@ public sealed class MediaService : IDisposable
         catch (Exception ex) when (ex is COMException or InvalidOperationException)
         {
             Trace.WriteLine("SMTC playback: " + ex.Message);
-            return;
+            // Fresh metadata must still clear a previous track's image if playback
+            // controls are temporarily unavailable while the player switches tracks.
+            snapshot = _session is null ? MediaSnapshot.Empty : new MediaSnapshot(
+                string.IsNullOrWhiteSpace(_title) ? "Медиаплеер" : _title,
+                string.IsNullOrWhiteSpace(_artist) ? "Сейчас играет" : _artist,
+                false, true, false, false, false, _artwork);
         }
         if (snapshot == Current) return;
         Current = snapshot;
@@ -239,6 +256,7 @@ public sealed class MediaService : IDisposable
         catch (Exception) when (!IsActive(generation)) { return; }
         if (!IsActive(generation) || !ReferenceEquals(session, _session)) return;
         if (!accepted) throw new InvalidOperationException("Плеер не выполнил команду. Попробуйте управлять воспроизведением в самом приложении.");
+        if (command is 1 or 2) RequestMetadata(expectTrackChange: true);
         Publish();
     }
 
@@ -275,15 +293,16 @@ public sealed class MediaService : IDisposable
     private void Disconnect()
     {
         _generation++;
-        _metadataVersion++;
+        _metadata.Reset();
         _initialization = null;
         UnsubscribeSession();
         _session = null;
         UnsubscribeManager();
-        _metadataKey = null;
         _title = string.Empty;
         _artist = string.Empty;
         _artwork = null;
+        _lastArtworkDigest = null;
+        _lastDecodedArtwork = null;
     }
 
     public void Dispose()
@@ -293,6 +312,7 @@ public sealed class MediaService : IDisposable
         _disposed = true;
         IsEnabled = false;
         Disconnect();
+        _metadata.Dispose();
         Current = MediaSnapshot.Empty;
         Changed = null;
     }

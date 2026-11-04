@@ -75,14 +75,18 @@ public partial class MainWindow : Window
         _transitionCompletion?.TrySetResult();
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _transitionCompletion = completion;
+        UpdateLayout();
         Rect oldBounds = DisplayService.GetWindowBounds(this);
         double scale = DisplayService.GetWindowScale(this);
-        double oldSurfaceTop = oldBounds.Top + (12 + _surfaceOffset.Y) * scale;
+        Point oldInset = IslandSurface.TransformToAncestor(this).Transform(new Point());
+        double oldSurfaceTop = oldBounds.Top + oldInset.Y * scale;
+        double oldSurfaceLeft = oldBounds.Left + oldInset.X * scale;
         double oldHeight = IslandSurface.Height;
         double oldWidth = IslandSurface.Width;
         IslandSurface.BeginAnimation(HeightProperty, null);
         IslandSurface.BeginAnimation(WidthProperty, null);
         _surfaceOffset.BeginAnimation(TranslateTransform.YProperty, null);
+        _surfaceOffset.BeginAnimation(TranslateTransform.XProperty, null);
         IslandSurface.Height = oldHeight;
         IslandSurface.Width = oldWidth;
         _expanded = !_expanded;
@@ -90,16 +94,24 @@ public partial class MainWindow : Window
         bool animate = SystemParameters.ClientAreaAnimation && IsVisible;
         _animating = animate;
         double targetHeight = (_expanded ? ExpandedWindowHeight : CollapsedWindowHeight) - 24;
-        double targetWidth = _expanded ? 384 : 376;
+        double targetWidth = _expanded ? 384 : CollapsedSurfaceWidth;
+        double targetWindowWidth = _expanded ? 408 : CollapsedWindowWidth;
+        double targetWindowHeight = _expanded ? ExpandedWindowHeight : CollapsedWindowHeight;
 
         // Preserve the anchor during both transitions. The surface moves inside
         // a temporary larger host, so bottom/custom positions do not drift.
         Height = Math.Max(ExpandedWindowHeight, CollapsedWindowHeight);
+        Width = Math.Max(408, CollapsedWindowWidth);
         Placement.Apply(Height);
+        UpdateLayout();
         Rect hostBounds = DisplayService.GetWindowBounds(this);
         scale = DisplayService.GetWindowScale(this);
         _surfaceOffset.Y = (oldSurfaceTop - hostBounds.Top) / scale - 12;
-        double targetOffset = (Placement.DesiredBounds(_expanded ? ExpandedWindowHeight : CollapsedWindowHeight).Top - hostBounds.Top) / scale;
+        _surfaceOffset.X = (oldSurfaceLeft - hostBounds.Left) / scale - (Width - oldWidth) / 2;
+        Rect targetBounds = Placement.DesiredBounds(targetWindowHeight, targetWindowWidth);
+        double targetOffset = (targetBounds.Top - hostBounds.Top) / scale;
+        double targetOffsetX = (targetBounds.Left - hostBounds.Left) / scale + (targetWindowWidth - Width) / 2;
+        UpdateSurfaceRounding();
         if (_expanded)
         {
             CompactView.Visibility = Visibility.Collapsed;
@@ -120,8 +132,9 @@ public partial class MainWindow : Window
             IslandSurface.Height = targetHeight;
             IslandSurface.Width = targetWidth;
             ExpandedView.Opacity = _expanded ? 1 : 0;
-            Height = _expanded ? ExpandedWindowHeight : CollapsedWindowHeight;
-            _surfaceOffset.Y = 0;
+            Height = targetWindowHeight;
+            Width = targetWindowWidth;
+            _surfaceOffset.X = _surfaceOffset.Y = 0;
             Placement.Apply();
             completion.TrySetResult();
             return;
@@ -136,10 +149,12 @@ public partial class MainWindow : Window
             IslandSurface.BeginAnimation(HeightProperty, null);
             IslandSurface.BeginAnimation(WidthProperty, null);
             _surfaceOffset.BeginAnimation(TranslateTransform.YProperty, null);
+            _surfaceOffset.BeginAnimation(TranslateTransform.XProperty, null);
             IslandSurface.Height = targetHeight;
             IslandSurface.Width = targetWidth;
-            _surfaceOffset.Y = 0;
-            Height = _expanded ? ExpandedWindowHeight : CollapsedWindowHeight;
+            _surfaceOffset.X = _surfaceOffset.Y = 0;
+            Height = targetWindowHeight;
+            Width = targetWindowWidth;
             Placement.Apply();
             completion.TrySetResult();
         };
@@ -152,6 +167,9 @@ public partial class MainWindow : Window
             HandoffBehavior.SnapshotAndReplace);
         _surfaceOffset.BeginAnimation(TranslateTransform.YProperty,
             new DoubleAnimation(targetOffset, TimeSpan.FromMilliseconds(190)) { EasingFunction = easing },
+            HandoffBehavior.SnapshotAndReplace);
+        _surfaceOffset.BeginAnimation(TranslateTransform.XProperty,
+            new DoubleAnimation(targetOffsetX, TimeSpan.FromMilliseconds(190)) { EasingFunction = easing },
             HandoffBehavior.SnapshotAndReplace);
     }
 
@@ -210,11 +228,14 @@ public partial class MainWindow : Window
         IslandSurface.BeginAnimation(WidthProperty, null);
         ExpandedView.BeginAnimation(OpacityProperty, null);
         _surfaceOffset.BeginAnimation(TranslateTransform.YProperty, null);
+        _surfaceOffset.BeginAnimation(TranslateTransform.XProperty, null);
         IslandSurface.Height = (_expanded ? ExpandedWindowHeight : CollapsedWindowHeight) - 24;
-        IslandSurface.Width = _expanded ? 384 : 376;
+        IslandSurface.Width = _expanded ? 384 : CollapsedSurfaceWidth;
         ExpandedView.Opacity = _expanded ? 1 : 0;
-        _surfaceOffset.Y = 0;
+        _surfaceOffset.X = _surfaceOffset.Y = 0;
         Height = _expanded ? ExpandedWindowHeight : CollapsedWindowHeight;
+        Width = _expanded ? 408 : CollapsedWindowWidth;
+        UpdateSurfaceRounding();
         Placement.Apply();
         _transitionCompletion?.TrySetResult();
     }
@@ -250,9 +271,10 @@ public partial class MainWindow : Window
         {
             CompactTitle.Text = "Luma Island";
             CompactArtist.Visibility = Visibility.Collapsed;
+            CompactArtwork.Source = ExpandedArtwork.Source = null;
             return;
         }
-        CompactArtist.Visibility = Visibility.Visible;
+        CompactArtist.Visibility = Appearance.Compact ? Visibility.Collapsed : Visibility.Visible;
         CompactTitle.Text = ExpandedTitle.Text = state.HasSession && !string.IsNullOrWhiteSpace(state.Title)
             ? state.Title : "Откройте музыку";
         CompactArtist.Text = state.HasSession && !string.IsNullOrWhiteSpace(state.Artist) ? state.Artist : "Luma Island";

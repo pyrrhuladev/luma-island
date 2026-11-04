@@ -14,7 +14,9 @@ public partial class MainWindow
     public event Action<ComponentSettings>? ComponentsChanged;
     public bool HasPerformance => Components.Cpu || Components.Gpu || Components.Memory || Components.Fps || Components.GpuTemperature;
     private double TemperatureRowHeight => Components.Gpu && Components.GpuTemperature ? 16 : 0;
-    public double CollapsedWindowHeight => (HasPerformance ? 100 + TemperatureRowHeight : 56) + 24;
+    public double CollapsedWindowHeight => (Appearance.Compact
+        ? 44 + (HasPerformance ? 28 + TemperatureRowHeight : 0)
+        : HasPerformance ? 100 + TemperatureRowHeight : 56) + 24;
     public double ExpandedWindowHeight => 25 + 29 + (Components.Music ? 130 : 0) + (Components.Volume ? 34 : 0)
         + (HasPerformance ? 32 + TemperatureRowHeight : 0) + ChartsHeight + (Components.Date || _batteryVisible ? 26 : 0) + 24;
 
@@ -46,18 +48,19 @@ public partial class MainWindow
     private static Visibility Show(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
     private void ApplyComponentVisibility()
     {
+        ApplyCompactDensity();
         CompactArtworkFrame.Visibility = Show(Components.Music);
-        CompactArtworkColumn.Width = new GridLength(Components.Music ? 30 : 0);
+        CompactArtworkColumn.Width = new GridLength(Components.Music ? Appearance.Compact ? 25 : 30 : 0);
         CompactClock.Visibility = ExpandedClock.Visibility = Show(Components.Time);
         DateLabel.Visibility = Show(Components.Date);
-        CompactArtist.Visibility = Show(Components.Music);
+        CompactArtist.Visibility = Show(Components.Music && !Appearance.Compact);
         ExpandedMusicInfo.Visibility = ExpandedPlaybackControls.Visibility = Show(Components.Music);
         ExpandedVolume.Visibility = Show(Components.Volume);
         MusicInfoRow.Height = new GridLength(Components.Music ? 78 : 0);
         MusicControlsRow.Height = new GridLength(Components.Music ? 52 : 0);
         VolumeRow.Height = new GridLength(Components.Volume ? 34 : 0);
         CompactPerformance.Visibility = ExpandedPerformance.Visibility = Show(HasPerformance);
-        CompactPerformance.Height = 28 + TemperatureRowHeight;
+        CompactPerformance.Height = (Appearance.Compact ? 20 : 28) + TemperatureRowHeight;
         PerformanceRow.Height = new GridLength(HasPerformance ? 32 + TemperatureRowHeight : 0);
         ChartsRow.Height = new GridLength(ChartsHeight);
         CompactPerformance.Columns = Math.Max(1, (Components.Cpu ? 1 : 0) + (Components.Gpu || Components.GpuTemperature ? 1 : 0)
@@ -76,7 +79,11 @@ public partial class MainWindow
     {
         CompleteTransition();
         IslandSurface.Height = (_expanded ? ExpandedWindowHeight : CollapsedWindowHeight) - 24;
+        IslandSurface.Width = _expanded ? 384 : CollapsedSurfaceWidth;
         Height = _expanded ? ExpandedWindowHeight : CollapsedWindowHeight;
+        Width = _expanded ? 408 : CollapsedWindowWidth;
+        _surfaceOffset.X = _surfaceOffset.Y = 0;
+        UpdateSurfaceRounding();
         _placement?.Apply();
     }
 

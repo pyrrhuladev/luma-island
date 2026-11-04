@@ -16,6 +16,11 @@ Check(!File.Exists(path), "reading missing settings does not create a file");
 Check(AppearanceStore.Normalize(null) == AppearanceSettings.Default, "null settings normalize");
 Check(AppearanceSettings.Default == new AppearanceSettings(IslandAppearance.Matte, .76), "existing appearance defaults unchanged");
 Check(AppearanceStore.MinOpacity == .25 && AppearanceStore.MaxOpacity == .9, "supported opacity range is .25 through .90");
+Check(!store.Load().Compact && !AppearanceSettings.Default.Compact, "missing/default settings leave compact mode disabled");
+Check(!new AppearanceSettings(IslandAppearance.Glass, .35).Compact, "legacy two-argument constructor leaves compact mode disabled");
+File.WriteAllText(path, "{\"mode\":\"Glass\",\"glassOpacity\":0.35}");
+Check(new AppearanceStore(path).Load() == new AppearanceSettings(IslandAppearance.Glass, .35, false),
+    "legacy JSON preserves mode/opacity and defaults compact to false");
 
 var glass = new AppearanceSettings(IslandAppearance.Glass, .82);
 Check(store.Save(glass), "valid settings save");
@@ -31,13 +36,36 @@ foreach (double opacity in new[] { .50, .35, .25 })
     Check(store.Save(airy), "high-transparency preset saves: " + opacity);
     Check(new AppearanceStore(path).Load() == airy, "high-transparency preset survives fresh store: " + opacity);
 }
+foreach (var mode in new[] { IslandAppearance.Matte, IslandAppearance.Glass })
+foreach (bool compact in new[] { true, false })
+{
+    var expected = new AppearanceSettings(mode, .35, compact);
+    Check(store.Save(expected), "compact/full mode saves independently of appearance: " + mode + "/" + compact);
+    Check(new AppearanceStore(path).Load() == expected, "compact/full mode roundtrips independently of appearance: " + mode + "/" + compact);
+    using var json = JsonDocument.Parse(File.ReadAllText(path));
+    Check(json.RootElement.GetProperty("compact").GetBoolean() == compact, "compact is stored as a boolean");
+}
+Check(AppearanceStore.Normalize(new AppearanceSettings(IslandAppearance.Glass, -1, true)) ==
+    new AppearanceSettings(IslandAppearance.Glass, AppearanceStore.MinOpacity, true), "lower opacity clamp preserves compact mode");
+Check(AppearanceStore.Normalize(new AppearanceSettings(IslandAppearance.Glass, 9, true)) ==
+    new AppearanceSettings(IslandAppearance.Glass, AppearanceStore.MaxOpacity, true), "upper opacity clamp preserves compact mode");
+Check(AppearanceStore.Normalize(new AppearanceSettings((IslandAppearance)999, .35, true)) ==
+    new AppearanceSettings(IslandAppearance.Matte, .35, true), "invalid appearance mode fallback preserves compact mode");
+foreach (double opacity in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
+{
+    var normalized = new AppearanceSettings(IslandAppearance.Glass, .76, true);
+    Check(AppearanceStore.Normalize(new AppearanceSettings(IslandAppearance.Glass, opacity, true)) == normalized,
+        "non-finite opacity normalization preserves compact mode");
+    Check(store.Save(new AppearanceSettings(IslandAppearance.Glass, opacity, true)) && new AppearanceStore(path).Load() == normalized,
+        "normalized compact settings survive persistence");
+}
 
 foreach (var content in new[]
 {
     "{}", "null", "{oops", "[]",
     "{\"mode\":\"Unknown\"}", "{\"mode\":999}",
     "{\"glassOpacity\":\"NaN\"}", "{\"glassOpacity\":NaN}",
-    "{\"glassOpacity\":\"Infinity\"}"
+    "{\"glassOpacity\":\"Infinity\"}", "{\"compact\":\"true\"}", "{\"compact\":1}", "{\"compact\":null}"
 })
 {
     File.WriteAllText(path, content);

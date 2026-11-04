@@ -35,11 +35,11 @@ public sealed class PlacementController : IDisposable
         Apply();
     }
 
-    public Rect DesiredBounds(double logicalHeight)
+    public Rect DesiredBounds(double logicalHeight, double? logicalWidth = null)
     {
         double scale = DisplayService.GetWindowScale(_window);
         return PlacementMath.Bounds(CurrentDisplay.WorkArea,
-            new Size(_window.Width * scale, logicalHeight * scale), PlacementMath.Fractions(Settings), 8 * scale);
+            new Size((logicalWidth ?? _window.Width) * scale, logicalHeight * scale), PlacementMath.Fractions(Settings), 8 * scale);
     }
 
     public void Apply(double? logicalHeight = null)

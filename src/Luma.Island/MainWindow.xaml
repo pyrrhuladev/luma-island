@@ -154,7 +154,7 @@
                         PreviewMouseMove="OnCompactPointerMove"
                         Style="{StaticResource QuietButton}" Tag="capsule"
                         AutomationProperties.Name="Раскрыть Luma Island" Padding="13,0">
-                    <Grid Width="348">
+                    <Grid x:Name="CompactContentGrid" Width="348">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
@@ -164,7 +164,7 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition x:Name="CompactClockColumn" Width="Auto"/>
                             <ColumnDefinition x:Name="CompactBatteryColumn" Width="Auto"/>
-                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition x:Name="CompactArrowColumn" Width="16"/>
                         </Grid.ColumnDefinitions>
                         <Border x:Name="CompactArtworkFrame" Width="29" Height="29" CornerRadius="9" Background="{DynamicResource AlbumSurface}" ClipToBounds="True">
                             <Grid>
@@ -176,7 +176,7 @@
                                 </Image>
                             </Grid>
                         </Border>
-                        <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
+                        <StackPanel x:Name="CompactMusicText" Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
                             <TextBlock x:Name="CompactTitle" Text="Откройте музыку" FontSize="12" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
                             <TextBlock x:Name="CompactArtist" Text="Luma Island" FontSize="11" Foreground="{DynamicResource Muted}"

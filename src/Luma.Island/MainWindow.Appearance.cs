@@ -26,6 +26,11 @@ public partial class MainWindow
         CompleteTransition();
         Appearance = AppearanceStore.Normalize(Appearance with { Mode = mode, GlassOpacity = opacity ?? Appearance.GlassOpacity });
         ApplyAppearance();
+        SaveAppearance();
+    }
+
+    private void SaveAppearance()
+    {
         if (!_appearanceStore.Save(Appearance)) System.Windows.MessageBox.Show(
             "Оформление изменено, но сохранить выбор не удалось.", "Luma Island", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
@@ -118,6 +123,10 @@ public partial class MainWindow
                 item.Click += (_, _) => SetAppearance(IslandAppearance.Glass, preset.Item2);
                 menu.Items.Add(item);
             }
+            menu.Items.Add(new Separator());
+            var compact = new MenuItem { Header = "Компактная капсула", IsCheckable = true, IsChecked = Appearance.Compact };
+            compact.Click += (_, _) => SetCompactMode(compact.IsChecked);
+            menu.Items.Add(compact);
         }
         Populate();
         menu.SubmenuOpened += (_, e) => { if (ReferenceEquals(e.OriginalSource, menu)) Populate(); };
