@@ -25,7 +25,9 @@ public partial class App : System.Windows.Application
     private Mutex? _instance;
     private HwndSource? _windowSource;
     private bool _ownsMutex;
+    private bool _inputHotkeyAvailable;
     private const int HotkeyId = 0x4C55;
+    private const int InputHotkeyId = 0x4C56;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -122,6 +124,8 @@ public partial class App : System.Windows.Application
             bool hotkeyAvailable = RegisterHotKey(_windowSource!.Handle, HotkeyId, 0x0001 | 0x0002 | 0x4000, 0x20);
             _island.SetTrayHotkeyStatus(hotkeyAvailable);
             _tray?.SetHotkeyStatus(hotkeyAvailable);
+            _inputHotkeyAvailable = RegisterHotKey(_windowSource.Handle, InputHotkeyId, 0x0001 | 0x0002 | 0x4000, 0x49);
+            _island.InitializeInputRecovery(_inputHotkeyAvailable, _tray?.IsRegistered == true);
             ScheduleClock();
             try { await _media.InitializeAsync(); }
             catch (Exception ex) { Log(ex); }
@@ -168,10 +172,16 @@ public partial class App : System.Windows.Application
     {
         _tray = new TrayService(_island!, ToggleVisible, () =>
         {
-            _island!.RestoreFromTray(); _island.ToggleExpanded();
+            _island!.RestoreForInteraction(); _island.ToggleExpanded();
         }, () => Shutdown(), _island!.CreatePositionMenu, _island!.CreateAppearanceMenu, _island!.CreateComponentsMenu,
-            _island!.CreateAutostartMenu, _island!.RefreshAutostartMenus, _island!.RestoreFromTray);
+            _island!.CreateAutostartMenu, _island!.RefreshAutostartMenus, _island!.RestoreForInteraction,
+            _island!.CreateInputMenuItem);
+        _tray.RegistrationChanged += OnTrayRegistrationChanged;
+        _island.InputModeChanged += OnInputModeChanged;
     }
+
+    private void OnTrayRegistrationChanged(bool registered) => _island?.UpdateInputRecovery(_inputHotkeyAvailable, registered);
+    private void OnInputModeChanged(bool clickThrough) { if (clickThrough) _tray?.CloseMenu(); }
 
     private void ToggleVisible()
     {
@@ -184,6 +194,11 @@ public partial class App : System.Windows.Application
         if (msg == 0x0312 && wParam.ToInt32() == HotkeyId)
         {
             ToggleVisible();
+            handled = true;
+        }
+        if (msg == 0x0312 && wParam.ToInt32() == InputHotkeyId)
+        {
+            _island?.ToggleClickThrough();
             handled = true;
         }
         return IntPtr.Zero;
@@ -304,9 +319,12 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         _clock?.Stop();
+        if (_tray is not null) _tray.RegistrationChanged -= OnTrayRegistrationChanged;
+        if (_island is not null) _island.InputModeChanged -= OnInputModeChanged;
         if (_windowSource != null)
         {
             UnregisterHotKey(_windowSource.Handle, HotkeyId);
+            UnregisterHotKey(_windowSource.Handle, InputHotkeyId);
             if (!_windowSource.IsDisposed) _windowSource.RemoveHook(WindowMessage);
         }
         _tray?.Dispose();

@@ -7,7 +7,7 @@ namespace Luma.Island.Services;
 
 public enum IslandAppearance { Matte, Glass }
 
-public sealed record AppearanceSettings(IslandAppearance Mode = IslandAppearance.Glass, double GlassOpacity = .40, bool Compact = false)
+public sealed record AppearanceSettings(IslandAppearance Mode = IslandAppearance.Glass, double GlassOpacity = .40, bool Compact = false, bool ClickThrough = false)
 {
     public static AppearanceSettings Default { get; } = new();
 }

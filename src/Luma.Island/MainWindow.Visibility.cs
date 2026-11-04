@@ -71,7 +71,7 @@ public partial class MainWindow
     {
         if (RestoreInstanceMessage != 0 && unchecked((uint)message) == RestoreInstanceMessage)
         {
-            RestoreFromTray();
+            RestoreForInteraction();
             handled = true;
         }
         return IntPtr.Zero;

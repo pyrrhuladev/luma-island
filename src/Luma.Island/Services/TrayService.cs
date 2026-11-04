@@ -25,10 +25,12 @@ public sealed class TrayService : IDisposable
     private bool _hotkeyAvailable = true;
     private bool _disposed;
     public bool IsRegistered { get; private set; }
+    public event Action<bool>? RegistrationChanged;
 
     public TrayService(Window window, Action toggleVisible, Action toggleExpanded, Action exit,
         Func<MenuItem>? positionMenuFactory = null, Func<MenuItem>? appearanceMenuFactory = null, Func<MenuItem>? componentsMenuFactory = null,
-        Func<MenuItem>? autostartMenuFactory = null, Action? menuOpening = null, Action? showVisible = null)
+        Func<MenuItem>? autostartMenuFactory = null, Action? menuOpening = null, Action? showVisible = null,
+        Func<MenuItem>? inputMenuFactory = null)
     {
         window.Dispatcher.VerifyAccess();
         _source = HwndSource.FromHwnd(new WindowInteropHelper(window).Handle)
@@ -45,6 +47,7 @@ public sealed class TrayService : IDisposable
         _visibilityItem = AddItem(string.Empty, toggleVisible);
         _visibilityItem.InputGestureText = "Ctrl+Alt+Space";
         AddItem("Развернуть / свернуть", toggleExpanded);
+        if (inputMenuFactory is not null) _menu.Items.Add(inputMenuFactory());
         if (positionMenuFactory is not null) _menu.Items.Add(positionMenuFactory());
         if (appearanceMenuFactory is not null) _menu.Items.Add(appearanceMenuFactory());
         if (componentsMenuFactory is not null) _menu.Items.Add(componentsMenuFactory());
@@ -69,11 +72,18 @@ public sealed class TrayService : IDisposable
     private void AddIcon()
     {
         RefreshIcon(false);
-        IsRegistered = ShellNotifyIcon(0, ref _data);
+        SetRegistration(ShellNotifyIcon(0, ref _data));
         _usingVersion4 = false;
         if (!IsRegistered) return; // NIM_ADD; Explorer may still be starting.
         _data.TimeoutOrVersion = 4;
         _usingVersion4 = ShellNotifyIcon(4, ref _data); // NIM_SETVERSION, repeated after Explorer restarts.
+    }
+
+    private void SetRegistration(bool registered)
+    {
+        if (IsRegistered == registered) return;
+        IsRegistered = registered;
+        RegistrationChanged?.Invoke(registered);
     }
 
     private MenuItem AddItem(string label, Action action)
@@ -87,7 +97,11 @@ public sealed class TrayService : IDisposable
     private IntPtr WindowMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         if (_disposed) return IntPtr.Zero;
-        if (_taskbarCreated != 0 && unchecked((uint)msg) == _taskbarCreated) AddIcon();
+        if (_taskbarCreated != 0 && unchecked((uint)msg) == _taskbarCreated)
+        {
+            SetRegistration(false); // The preceding icon belonged to the old Explorer process.
+            AddIcon();
+        }
         if (msg is 0x02E0 or 0x007E or 0x001A) RefreshIcon(true); // DPI, display and taskbar/settings changes.
         if (msg != CallbackMessage) return IntPtr.Zero;
         int notification = unchecked((int)lParam.ToInt64()) & 0xFFFF;
@@ -129,6 +143,12 @@ public sealed class TrayService : IDisposable
         RefreshVisibilityItem();
     }
 
+    public void CloseMenu()
+    {
+        _source.Dispatcher.VerifyAccess();
+        if (!_disposed) _menu.IsOpen = false;
+    }
+
     private void OnMenuClosed(object sender, RoutedEventArgs args)
     {
         if (!_disposed) ShellNotifyIcon(3, ref _data); // NIM_SETFOCUS
@@ -143,7 +163,7 @@ public sealed class TrayService : IDisposable
         AppIcon previous = _icon;
         _icon = next;
         _data.Icon = next.DangerousGetHandle();
-        if (notifyShell && IsRegistered) ShellNotifyIcon(1, ref _data); // NIM_MODIFY copies the new icon.
+        if (notifyShell && IsRegistered && !ShellNotifyIcon(1, ref _data)) SetRegistration(false); // NIM_MODIFY copies the new icon.
         previous.Dispose();
     }
 
@@ -157,7 +177,7 @@ public sealed class TrayService : IDisposable
         _menu.Opened -= OnMenuOpened;
         _window.IsVisibleChanged -= OnOwnerVisibilityChanged;
         ShellNotifyIcon(2, ref _data); // NIM_DELETE
-        IsRegistered = false;
+        SetRegistration(false);
         if (!_source.IsDisposed) _source.RemoveHook(WindowMessage);
         _icon.Dispose();
         _data.Icon = IntPtr.Zero;
