@@ -117,7 +117,7 @@ public partial class MainWindow
     {
         string cpuLabel = Components.Cpu ? Percent("CPU", _lastPerformance.CpuPercent) : "CPU";
         string memoryLabel = Components.Memory ? Percent("RAM", _lastPerformance.MemoryPercent) : "RAM";
-        string cpuTip = Components.Cpu ? "Общая загрузка процессора" : string.Empty;
+        string cpuTip = Components.Cpu ? CpuUsageDescription(_lastPerformance.CpuUsageSource) : string.Empty;
         string memoryTip = Components.Memory && _lastPerformance.TotalMemoryBytes > 0
             ? $"Память: {_lastPerformance.UsedMemoryBytes / 1073741824d:0.0} / {_lastPerformance.TotalMemoryBytes / 1073741824d:0.0} ГБ" : string.Empty;
         if (Components.CpuTemperature)
@@ -146,6 +146,8 @@ public partial class MainWindow
         "ok" => "Данные получены от модуля датчиков Luma.",
         "driver_missing" => "Не найден драйвер PawnIO. Откройте настройку датчиков в меню компонентов.",
         "not_installed" => "Модуль Luma не установлен или не запущен. Откройте настройку датчиков в меню компонентов.",
+        "service_stopped" => "Служба датчиков остановлена. Обновите модуль в меню «Настроить датчики CPU / RAM…».",
+        "service_starting" => "Служба датчиков запускается. Показания появятся после подключения.",
         "access_denied" => "Нет доступа к модулю датчиков для этого пользователя Windows.",
         "timeout" => "Модуль датчиков не ответил вовремя.",
         "protocol_error" => "Версии модуля и Luma несовместимы. Обновите модуль в настройке датчиков.",
@@ -154,6 +156,10 @@ public partial class MainWindow
         "disabled" => "Опрос выключен.",
         _ => "Ожидание датчиков. Настройка — в меню компонентов."
     };
+
+    private static string CpuUsageDescription(string? source) => source?.StartsWith(CpuUsageReader.BusySource, StringComparison.Ordinal) == true
+        ? "Резервный расчёт: доля занятого времени CPU без учёта Turbo Boost. Счётчик Processor Utility недоступен."
+        : "Средняя нагрузка CPU по Windows Processor Utility с учётом частоты и Turbo Boost. Значение может превышать 100%.";
 
     private void RefreshGpuMetric()
     {

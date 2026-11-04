@@ -75,8 +75,26 @@ internal static class Program
         window.Closed += (_, _) => closed = true;
         try
         {
+            uint sourceStyle = 0;
+            Rect sourceBounds = Rect.Empty;
+            window.SourceInitialized += (_, _) =>
+            {
+                sourceStyle = ExtendedStyle(new WindowInteropHelper(window).Handle);
+                sourceBounds = DisplayService.GetWindowBounds(window);
+            };
+            IntPtr hwnd = new WindowInteropHelper(window).EnsureHandle();
+            uint hiddenStyle = ExtendedStyle(hwnd);
+            Check(!window.IsVisible && (hiddenStyle & 0x80) != 0 && (hiddenStyle & 0x40000) == 0,
+                "Tool-window style excludes the capsule from Alt+Tab before its first Show");
+            Check(hiddenStyle == ((sourceStyle | 0x80u) & ~0x40000u),
+                "Only TOOLWINDOW and APPWINDOW bits change during native source initialization");
+            SameBounds(sourceBounds, DisplayService.GetWindowBounds(window), "Applying the initial style preserves hidden native window bounds");
+            var expandButton = (UIElement)window.FindName("CompactExpandButton");
+            Check((hiddenStyle & 0x08000000) == 0 && window.IsEnabled && expandButton.Focusable && expandButton.IsHitTestVisible,
+                "The capsule retains keyboard and pointer input without WS_EX_NOACTIVATE");
             window.Show();
             await Settle();
+            CheckToolWindow(window, "after first Show");
             var surface = (Border)window.FindName("IslandSurface");
             MenuItem capsule = surface.ContextMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Скрыть в трей"));
             Check(capsule is not null, "The production Loaded hook installs the capsule visibility command");
@@ -91,7 +109,6 @@ internal static class Program
                 "Expansion remains a separate context command");
             Check(window.IsVisible && window.Opacity == 0 && !window.ShowActivated && !window.ShowInTaskbar,
                 "The native test window stays transparent, nonactivating and absent from taskbar");
-            IntPtr hwnd = new WindowInteropHelper(window).Handle;
             tray = new TrayService(window, window.ToggleTrayVisibility, () => { window.RestoreFromTray(); window.ToggleExpanded(); },
                 () => { }, showVisible: window.RestoreFromTray);
             ShellRegistered = tray.IsRegistered;
@@ -121,6 +138,7 @@ internal static class Program
             Click(trayItem);
             await Settle();
             Check(window.IsVisible && new WindowInteropHelper(window).Handle == hwnd, "Tray command restores the same window");
+            CheckToolWindow(window, "after tray restoration");
             SameBounds(original, DisplayService.GetWindowBounds(window), "Restoration preserves the saved bottom-right position");
 
             foreach (bool compact in new[] { false, true })
@@ -138,6 +156,7 @@ internal static class Program
                         Check(window.IsVisible, $"Toggle restores density={compact} preset={preset} cycle={i}");
                     }
                     SameBounds(before, DisplayService.GetWindowBounds(window), $"Visibility cycles keep density={compact} preset={preset} geometry");
+                    CheckToolWindow(window, $"after visibility cycles compact={compact} preset={preset}");
                 }
             }
 
@@ -148,10 +167,12 @@ internal static class Program
             window.RestoreFromTray();
             Check(window.IsVisible && Math.Abs(window.Width - 408) < .01 && Math.Abs(window.Height - window.ExpandedWindowHeight) < .01,
                 "Restoring preserves the expanded state");
+            CheckToolWindow(window, "after expansion and restoration");
             window.ToggleExpanded();
             window.HideToTray();
             Check(Math.Abs(window.Height - window.CollapsedWindowHeight) < .01,
                 "Hiding during collapse completes the animation before hiding");
+            CheckToolWindow(window, "while hidden after collapse");
 
             var version4 = typeof(TrayService).GetField("_usingVersion4", BindingFlags.Instance | BindingFlags.NonPublic)!;
             version4.SetValue(tray, true);
@@ -174,6 +195,7 @@ internal static class Program
             Check(window.IsVisible, "The existing-instance IPC callback restores its own hidden HWND");
             SendMessage(hwnd, restoreMessage, IntPtr.Zero, IntPtr.Zero);
             Check(window.IsVisible, "Repeated instance-restoration requests keep one visible window");
+            CheckToolWindow(window, "after instance-restoration requests");
 
             window.HideToTray();
             window.HideToTray();
@@ -190,12 +212,56 @@ internal static class Program
             window.HideToTray();
             window.ToggleTrayVisibility();
             Check(!window.IsVisible, "Visibility APIs do not recreate a closed window");
+            CheckWindowStyleVariants(media, system, placement, appearance, components);
         }
         finally
         {
             tray?.Dispose();
             if (!closed) window.Close();
         }
+    }
+
+    private static void CheckWindowStyleVariants(MediaService media, SystemService system, PlacementStore placement,
+        AppearanceStore appearance, ComponentStore components)
+    {
+        var debug = new MainWindow(media, system, placement, appearance, components, new AutostartService(readOnly: true))
+            { ShowInTaskbar = true, ShowActivated = false, Topmost = false, Opacity = 0 };
+        try
+        {
+            uint source = 0;
+            debug.SourceInitialized += (_, _) => source = ExtendedStyle(new WindowInteropHelper(debug).Handle);
+            IntPtr handle = new WindowInteropHelper(debug).EnsureHandle();
+            Check(ExtendedStyle(handle) == source && (source & 0x80) == 0 && (source & 0x40000) != 0 && !debug.IsVisible,
+                "An explicit taskbar/debug window keeps its original APPWINDOW style and remains unshown");
+        }
+        finally { debug.Close(); }
+
+        var topmost = new MainWindow(media, system, placement, appearance, components, new AutostartService(readOnly: true))
+            { ShowActivated = false, ShowInTaskbar = false, Topmost = true, Opacity = 0 };
+        try
+        {
+            new WindowInteropHelper(topmost).EnsureHandle();
+            topmost.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, topmost));
+            topmost.Placement.BeginDrag();
+            DisplayService.MoveWindow(topmost, -30000, -30000);
+            topmost.Show();
+            uint style = ExtendedStyle(new WindowInteropHelper(topmost).Handle);
+            Check(topmost.Topmost && (style & 0x8) != 0 && (style & 0x80) != 0 && (style & 0x08000000) == 0 &&
+                DisplayService.GetWindowBounds(topmost).X < -10000,
+                "The real overlay's topmost flag survives TOOLWINDOW styling without activating or moving its offscreen fixture");
+            topmost.HideToTray(); topmost.RestoreFromTray();
+            Check(topmost.Topmost && (ExtendedStyle(new WindowInteropHelper(topmost).Handle) & 0x8) != 0,
+                "Hide and restore preserve topmost behavior");
+        }
+        finally { topmost.Close(); }
+    }
+
+    private static uint ExtendedStyle(IntPtr window) => unchecked((uint)GetWindowLongPtr(window, -20).ToInt64());
+    private static void CheckToolWindow(MainWindow window, string stage)
+    {
+        uint style = ExtendedStyle(new WindowInteropHelper(window).Handle);
+        Check((style & 0x80) != 0 && (style & 0x40000) == 0 && (style & 0x08000000) == 0 && (style & 0x8) == 0 &&
+            window.IsEnabled && !window.Topmost, "Tool-window exclusion and enabled nonactivating input persist " + stage);
     }
 
     private static void Notify(IntPtr hwnd, int notification) => SendMessage(hwnd, 0x8000 + 42, IntPtr.Zero, new IntPtr((42 << 16) | notification));
@@ -230,4 +296,5 @@ internal static class Program
     }
     [DllImport("user32.dll", EntryPoint = "RegisterWindowMessageW", CharSet = CharSet.Unicode)] private static extern uint RegisterWindowMessage(string name);
     [DllImport("user32.dll", EntryPoint = "SendMessageW")] private static extern IntPtr SendMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
 }

@@ -24,9 +24,10 @@ public partial class MainWindow
         double now = ChartTime();
         if (Components.Cpu)
         {
-            _cpuHistory.Add(now, PercentValue(snapshot.CpuPercent));
-            CpuChartValue.Text = ChartPercent(snapshot.CpuPercent);
-            DrawChart(_cpuHistory, CpuChartCanvas, CpuChartGrid, CpuChartLine, 100, now);
+            _cpuHistory.Add(now, CpuUtilityValue(snapshot.CpuPercent));
+            CpuChartValue.Text = CpuUtilityValue(snapshot.CpuPercent) is double cpu ? cpu.ToString("0", _culture) + "%" : "—";
+            CpuChartCard.ToolTip = ExpandedCpu.ToolTip;
+            DrawCpuChart(now);
         }
         if (Components.Gpu)
         {
@@ -118,7 +119,7 @@ public partial class MainWindow
     private void DrawAllCharts()
     {
         double now = ChartTime();
-        if (Components.Cpu) DrawChart(_cpuHistory, CpuChartCanvas, CpuChartGrid, CpuChartLine, 100, now);
+        if (Components.Cpu) DrawCpuChart(now);
         if (Components.Gpu) DrawChart(_gpuHistory, GpuChartCanvas, GpuChartGrid, GpuChartLine, 100, now);
         if (Components.Memory) DrawChart(_memoryHistory, MemoryChartCanvas, MemoryChartGrid, MemoryChartLine, 100, now);
         if (Components.Fps) DrawFpsChart(now);
@@ -129,6 +130,13 @@ public partial class MainWindow
         double maximum = MetricHistory.NiceFpsMaximum(_fpsHistory.Maximum(now));
         FpsChartScale.Text = $"0–{maximum:0} FPS";
         DrawChart(_fpsHistory, FpsChartCanvas, FpsChartGrid, FpsChartLine, maximum, now);
+    }
+
+    private void DrawCpuChart(double now)
+    {
+        double maximum = MetricHistory.NiceUtilityMaximum(_cpuHistory.Maximum(now));
+        CpuChartScale.Text = $"0–{maximum:0}%";
+        DrawChart(_cpuHistory, CpuChartCanvas, CpuChartGrid, CpuChartLine, maximum, now);
     }
 
     private static void DrawChart(MetricHistory history, Canvas canvas, ShapePath grid, ShapePath line, double maximum, double now)
@@ -177,5 +185,6 @@ public partial class MainWindow
 
     private static double ChartTime() => Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency;
     private static double? PercentValue(double? value) => value is >= 0 && double.IsFinite(value.Value) ? Math.Clamp(value.Value, 0, 100) : null;
+    private static double? CpuUtilityValue(double? value) => value is >= 0 && double.IsFinite(value.Value) ? value : null;
     private string ChartPercent(double? value) => PercentValue(value) is double percent ? percent.ToString("0", _culture) + "%" : "—";
 }

@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -166,6 +168,27 @@ internal static class Program
             window.ApplyPerformance(Snapshot(151, 125));
             Check(Text(window, "CompactCpu").Text.Contains('—') && !Text(window, "CompactMemory").Text.Contains('—'),
                 "An invalid CPU reading does not hide a valid RAM reading");
+
+            window.SetComponents(Empty with { Cpu = true, Charts = true });
+            window.ClearMetricHistory();
+            window.ApplyPerformance(Snapshot(68, 41) with { CpuPercent = 145, CpuUsageSource = CpuUsageReader.UtilitySource });
+            var cpuHistory = (MetricHistory)typeof(MainWindow).GetField("_cpuHistory", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
+            var samples = (IEnumerable<MetricHistory.Sample>)typeof(MetricHistory).GetField("_samples", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(cpuHistory)!;
+            string scaleLabel = Text(window, "CpuChartScale").Text;
+            Check(Normalize(Text(window, "CompactCpu").Text) == "CPU145%" && Normalize(Text(window, "ExpandedCpu").Text) == "CPU145%" &&
+                Text(window, "CpuChartValue").Text == "145%" && double.TryParse(scaleLabel.Split('–').Last().TrimEnd('%'), NumberStyles.Number,
+                    CultureInfo.InvariantCulture, out double maximum) && maximum >= 145,
+                "Boost-aware CPU utility above 100 remains visible in both labels and the dynamically scaled chart");
+            Check(samples.Last().Value == 145 && cpuHistory.Maximum(Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency) == 145,
+                "The actual CPU history retains 145 instead of clamping it to 100");
+            Check(Text(window, "CompactCpu").ToolTip is string utilityTip && utilityTip.Contains("Processor Utility", StringComparison.Ordinal) &&
+                utilityTip.Contains("Turbo Boost", StringComparison.Ordinal), "CPU utility tooltip identifies its frequency-aware Windows source");
+            window.ApplyPerformance(Snapshot(68, 41) with { CpuPercent = double.NaN, CpuUsageSource = CpuUsageReader.UtilitySource });
+            Check(Text(window, "CompactCpu").Text.Contains('—') && Text(window, "CpuChartValue").Text == "—" && samples.Last().Value is null,
+                "An invalid next CPU sample clears the displayed reading and records an explicit history gap");
+            window.ApplyPerformance(Snapshot(68, 41) with { CpuPercent = 29, CpuUsageSource = CpuUsageReader.BusySource });
+            Check(Text(window, "ExpandedCpu").ToolTip is string fallbackTip && fallbackTip.Contains("Резерв", StringComparison.OrdinalIgnoreCase) &&
+                fallbackTip.Contains("без учёта Turbo Boost", StringComparison.Ordinal), "The busy-time fallback tooltip explains its lower value and missing frequency weighting");
             var setup = new SensorSetupWindow();
             Check(!setup.IsVisible && new WindowInteropHelper(setup).Handle == IntPtr.Zero,
                 "Constructing sensor setup neither shows a window nor creates a native HWND");

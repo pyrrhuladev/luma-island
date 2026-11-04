@@ -1,6 +1,5 @@
 using System;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
@@ -40,34 +39,29 @@ internal static class SensorPipeServer
         }
         finally { LocalFree(descriptor); }
     }
-    internal static async Task RunAsync(string ownerSid, CancellationToken stop, Action? ready = null)
+    internal static async Task RunAsync(string ownerSid, CancellationToken stop, Action? ready = null,
+        string? testName = null, Func<SensorSession>? sessionFactory = null, TimeSpan? idleTimeout = null, SensorReadGate? readGate = null)
     {
         // Keep the same first-instance handle for the service lifetime, including between clients.
-        using NamedPipeServerStream pipe = CreatePipe(ownerSid);
+        using NamedPipeServerStream pipe = CreatePipe(ownerSid, testName);
         ready?.Invoke();
-        var cadence = Stopwatch.StartNew();
-        long previousRead = -2000;
+        var cadence = readGate ?? new SensorReadGate();
         while (!stop.IsCancellationRequested)
         {
             // Idle waits in the kernel. No LHM object or polling task is created before a valid request.
             await pipe.WaitForConnectionAsync(stop).ConfigureAwait(false);
-            using var session = new SensorSession();
+            using var session = sessionFactory?.Invoke() ?? new SensorSession();
             try
             {
                 while (pipe.IsConnected && !stop.IsCancellationRequested)
                 {
                     using var deadline = CancellationTokenSource.CreateLinkedTokenSource(stop);
-                    deadline.CancelAfter(TimeSpan.FromSeconds(6));
+                    deadline.CancelAfter(idleTimeout ?? TimeSpan.FromSeconds(6));
                     SensorRequest request = await SensorProtocol.ReadAsync<SensorRequest>(pipe, deadline.Token).ConfigureAwait(false);
                     if (request.Version != SensorProtocol.Version) throw new InvalidDataException("Unsupported sensor protocol.");
-                    // A permitted client cannot turn this service into a high-frequency SMBus poller.
-                    if (request.Cpu || request.Memory)
-                    {
-                        long wait = 2000 - (cadence.ElapsedMilliseconds - previousRead);
-                        if (wait > 0) await Task.Delay((int)wait, deadline.Token).ConfigureAwait(false);
-                        previousRead = cadence.ElapsedMilliseconds;
-                    }
-                    SensorResponse response = session.Read(request);
+                    // Rate-limit hardware, not the IPC reply: Configure may trigger an immediate
+                    // request while the normal worker and this service both have a 2 s cadence.
+                    SensorResponse response = session.Read(request, cadence);
                     await SensorProtocol.WriteAsync(pipe, response, deadline.Token).ConfigureAwait(false);
                 }
             }

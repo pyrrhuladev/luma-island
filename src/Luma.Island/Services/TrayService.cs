@@ -20,7 +20,7 @@ public sealed class TrayService : IDisposable
     private readonly Action? _menuOpening;
     private readonly uint _taskbarCreated = RegisterWindowMessage("TaskbarCreated");
     private NotifyIconData _data;
-    private bool _ownsIcon;
+    private AppIcon _icon;
     private bool _usingVersion4;
     private bool _hotkeyAvailable = true;
     private bool _disposed;
@@ -55,11 +55,11 @@ public sealed class TrayService : IDisposable
         _menu.Opened += OnMenuOpened;
         _window.IsVisibleChanged += OnOwnerVisibilityChanged;
         RefreshVisibilityItem();
-        var icon = CreateTrayIcon();
+        _icon = AppIcon.LoadTrayForWindow(_source.Handle);
         _data = new NotifyIconData
         {
             Size = (uint)Marshal.SizeOf<NotifyIconData>(), Window = _source.Handle,
-            Id = 42, Flags = 1 | 2 | 4 | 0x80, CallbackMessage = CallbackMessage, Icon = icon,
+            Id = 42, Flags = 1 | 2 | 4 | 0x80, CallbackMessage = CallbackMessage, Icon = _icon.DangerousGetHandle(),
             Tip = "Luma Island · Ctrl+Alt+Space", Info = string.Empty, InfoTitle = string.Empty
         };
         _source.AddHook(WindowMessage);
@@ -68,6 +68,7 @@ public sealed class TrayService : IDisposable
 
     private void AddIcon()
     {
+        RefreshIcon(false);
         IsRegistered = ShellNotifyIcon(0, ref _data);
         _usingVersion4 = false;
         if (!IsRegistered) return; // NIM_ADD; Explorer may still be starting.
@@ -87,6 +88,7 @@ public sealed class TrayService : IDisposable
     {
         if (_disposed) return IntPtr.Zero;
         if (_taskbarCreated != 0 && unchecked((uint)msg) == _taskbarCreated) AddIcon();
+        if (msg is 0x02E0 or 0x007E or 0x001A) RefreshIcon(true); // DPI, display and taskbar/settings changes.
         if (msg != CallbackMessage) return IntPtr.Zero;
         int notification = unchecked((int)lParam.ToInt64()) & 0xFFFF;
         // Version 4 delivers NIN_SELECT for a mouse click and NIN_KEYSELECT
@@ -133,27 +135,16 @@ public sealed class TrayService : IDisposable
         PostMessage(_source.Handle, 0, IntPtr.Zero, IntPtr.Zero);
     }
 
-    private IntPtr CreateTrayIcon()
+    private void RefreshIcon(bool notifyShell)
     {
-        var mask = new byte[128];
-        var pixels = new byte[32 * 32 * 4];
-        for (int y = 0; y < 32; y++)
-        for (int x = 0; x < 32; x++)
-        {
-            double dx = x < 10 ? x - 10 : x > 22 ? x - 22 : 0;
-            bool inside = dx * dx + (y - 16) * (y - 16) <= 49;
-            if (!inside) { mask[y * 4 + x / 8] |= (byte)(0x80 >> (x % 8)); continue; }
-            bool dot = ((x - 11) * (x - 11) + (y - 16) * (y - 16) <= 3)
-                || ((x - 21) * (x - 21) + (y - 16) * (y - 16) <= 3);
-            int offset = (y * 32 + x) * 4;
-            pixels[offset] = dot ? (byte)24 : (byte)207;
-            pixels[offset + 1] = dot ? (byte)25 : (byte)232;
-            pixels[offset + 2] = dot ? (byte)21 : (byte)166;
-            pixels[offset + 3] = 255;
-        }
-        IntPtr icon = CreateIcon(GetModuleHandle(null), 32, 32, 1, 32, mask, pixels);
-        _ownsIcon = icon != IntPtr.Zero;
-        return _ownsIcon ? icon : LoadIcon(IntPtr.Zero, new IntPtr(32512));
+        int pixels = AppIcon.TrayPixelSize(_source.Handle);
+        if (_icon.PixelSize == pixels && !_icon.IsClosed) return;
+        AppIcon next = AppIcon.LoadTray(pixels);
+        AppIcon previous = _icon;
+        _icon = next;
+        _data.Icon = next.DangerousGetHandle();
+        if (notifyShell && IsRegistered) ShellNotifyIcon(1, ref _data); // NIM_MODIFY copies the new icon.
+        previous.Dispose();
     }
 
     public void Dispose()
@@ -168,7 +159,7 @@ public sealed class TrayService : IDisposable
         ShellNotifyIcon(2, ref _data); // NIM_DELETE
         IsRegistered = false;
         if (!_source.IsDisposed) _source.RemoveHook(WindowMessage);
-        if (_ownsIcon && _data.Icon != IntPtr.Zero) DestroyIcon(_data.Icon);
+        _icon.Dispose();
         _data.Icon = IntPtr.Zero;
     }
 
@@ -192,10 +183,6 @@ public sealed class TrayService : IDisposable
     [DllImport("shell32.dll", EntryPoint = "Shell_NotifyIconW", CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ShellNotifyIcon(uint command, ref NotifyIconData data);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern uint RegisterWindowMessage(string message);
-    [DllImport("user32.dll")] private static extern IntPtr CreateIcon(IntPtr instance, int width, int height, byte planes, byte bitsPixel, byte[] andMask, byte[] xorMask);
-    [DllImport("user32.dll", EntryPoint = "LoadIconW")] private static extern IntPtr LoadIcon(IntPtr instance, IntPtr name);
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool DestroyIcon(IntPtr icon);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetForegroundWindow(IntPtr window);
     [DllImport("user32.dll", EntryPoint = "PostMessageW")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandle(string? name);
 }

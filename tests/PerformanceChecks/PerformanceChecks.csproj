@@ -11,5 +11,6 @@
     <Compile Include="../../src/Luma.Island/Services/GpuTemperatureReader.cs" Link="GpuTemperatureReader.cs" />
     <Compile Include="../../src/Luma.Island/Services/SensorClient.cs" Link="SensorClient.cs" />
     <Compile Include="../../src/Luma.Island/Services/SensorProtocol.cs" Link="SensorProtocol.cs" />
+    <Compile Include="../../src/Luma.Island/Services/CpuUsageReader.cs" Link="CpuUsageReader.cs" />
   </ItemGroup>
 </Project>

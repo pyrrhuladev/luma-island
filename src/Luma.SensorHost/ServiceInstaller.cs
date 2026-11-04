@@ -16,7 +16,7 @@ namespace Luma.SensorHost;
 /// <summary>Only called by explicit --install/--remove in an elevated process. Never installs a driver.</summary>
 internal static class ServiceInstaller
 {
-    internal const string Version = "0.8.0";
+    internal static string Version => typeof(ServiceInstaller).Assembly.GetName().Version!.ToString(3);
     internal static string InstallRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LumaIsland", "Sensors");
     internal static string SetupLogPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "LumaIsland", "Sensors", "setup.log");
     private const string ProtectedSddl = "O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FRFX;;;BU)";

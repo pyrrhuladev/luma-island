@@ -8,11 +8,16 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>Luma.Island</AssemblyName>
     <RootNamespace>Luma.Island</RootNamespace>
-    <Version>0.8.0</Version>
+    <Version>0.8.1</Version>
+    <ApplicationIcon>Assets\Luma.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PublishSingleFile>false</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <DebugType>embedded</DebugType>
   </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets\Luma.ico" />
+    <Resource Include="Assets\Luma.Tray.ico" />
+  </ItemGroup>
 </Project>

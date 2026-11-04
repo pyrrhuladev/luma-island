@@ -5,6 +5,7 @@ using System.Reflection;
 using LibreHardwareMonitor.Hardware;
 using Luma.Island.Services;
 using Microsoft.Win32;
+using RAMSPDToolkit.I2CSMBus;
 using RAMSPDToolkit.Windows.Driver;
 
 namespace Luma.SensorHost;
@@ -48,14 +49,28 @@ internal sealed class SensorSession : IDisposable
 {
     private readonly Func<bool, bool, ITemperatureSource> _factory;
     private ITemperatureSource? _source;
+    private SensorResponse? _cached;
     private bool _cpu, _memory, _disposed;
     internal SensorSession(Func<bool, bool, ITemperatureSource>? factory = null) => _factory = factory ?? ((cpu, memory) => new LhmTemperatureSource(cpu, memory));
 
-    internal SensorResponse Read(SensorRequest request)
+    internal SensorResponse Read(SensorRequest request, SensorReadGate? cadence = null)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(SensorSession));
         if (request.Version != SensorProtocol.Version) throw new System.IO.InvalidDataException("Unsupported sensor protocol.");
-        if (!request.Cpu && !request.Memory) { Close(); return SensorProtocol.Empty(false, false, "disabled"); }
+        if (!request.Cpu && !request.Memory) { Close(); _cached = null; return SensorProtocol.Empty(false, false, "disabled"); }
+        if (cadence is not null && !cadence.TryAcquire())
+        {
+            if (_cached is null) return SensorProtocol.Empty(request.Cpu, request.Memory, "unavailable");
+            // An immediate Configure can precede the next 2 s hardware slot. Reply without waiting
+            // beyond the client's deadline, exposing only requested metrics from this connection.
+            return _cached with
+            {
+                CpuCelsius = request.Cpu ? _cached.CpuCelsius : null,
+                MemoryCelsius = request.Memory ? _cached.MemoryCelsius : null,
+                CpuStatus = request.Cpu ? _cached.CpuStatus == "disabled" ? "unavailable" : _cached.CpuStatus : "disabled",
+                MemoryStatus = request.Memory ? _cached.MemoryStatus == "disabled" ? "unavailable" : _cached.MemoryStatus : "disabled"
+            };
+        }
         try
         {
             if (_source is null || _cpu != request.Cpu || _memory != request.Memory)
@@ -64,15 +79,15 @@ internal sealed class SensorSession : IDisposable
                 _source = _factory(_cpu, _memory);
             }
             var selected = TemperatureMapping.Select(_source.Read());
-            return new(SensorProtocol.Version, DateTimeOffset.UtcNow, request.Cpu ? selected.Cpu : null,
+            return _cached = new(SensorProtocol.Version, DateTimeOffset.UtcNow, request.Cpu ? selected.Cpu : null,
                 request.Memory ? selected.Memory : null, request.Cpu ? selected.Cpu.HasValue ? "ok" : "unavailable" : "disabled",
                 request.Memory ? selected.Memory.HasValue ? "ok" : "unavailable" : "disabled");
         }
-        catch (DriverMissingException) { Close(); return SensorProtocol.Empty(request.Cpu, request.Memory, "driver_missing"); }
-        catch (Exception) { Close(); return SensorProtocol.Empty(request.Cpu, request.Memory, "provider_error"); }
+        catch (DriverMissingException) { Close(); return _cached = SensorProtocol.Empty(request.Cpu, request.Memory, "driver_missing"); }
+        catch (Exception) { Close(); return _cached = SensorProtocol.Empty(request.Cpu, request.Memory, "provider_error"); }
     }
     private void Close() { var source = _source; _source = null; source?.Dispose(); }
-    public void Dispose() { if (!_disposed) { _disposed = true; Close(); } }
+    public void Dispose() { if (!_disposed) { _disposed = true; _cached = null; Close(); } }
 }
 
 internal sealed class DriverMissingException : Exception;
@@ -81,6 +96,7 @@ internal sealed class LhmTemperatureSource : ITemperatureSource
 {
     private readonly Computer _computer;
     private readonly bool _cpu, _memory;
+    private readonly GuardedSpdDriver? _memoryDriver;
     private bool _disposed;
     internal LhmTemperatureSource(bool cpu, bool memory)
     {
@@ -90,10 +106,20 @@ internal sealed class LhmTemperatureSource : ITemperatureSource
         using (RegistryKey? installed = machine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO"))
             if (!System.Version.TryParse(installed?.GetValue("DisplayVersion") as string, out _)) throw new DriverMissingException();
         _cpu = cpu; _memory = memory;
+        if (memory)
+        {
+            _memoryDriver = GuardedSpdDriver.CreateLhm();
+            DriverManager.Driver = _memoryDriver;
+            SMBusManager.UseWMI = false;
+        }
         // Every unlisted Computer group remains disabled. No GPU, disk, EC, fan, network or motherboard discovery.
         _computer = new Computer { IsCpuEnabled = cpu, IsMemoryEnabled = memory };
         try { _computer.Open(); }
-        catch { _computer.Close(); ReleaseMemoryDriver(); throw; }
+        catch
+        {
+            try { _computer.Close(); } finally { ReleaseMemoryDriver(); }
+            throw;
+        }
     }
     public IReadOnlyList<TemperatureReading> Read()
     {
@@ -138,9 +164,11 @@ internal sealed class LhmTemperatureSource : ITemperatureSource
     private void ReleaseMemoryDriver()
     {
         if (!_memory) return;
-        // Computer.Close does not release RAMSPDToolkit's global PawnIO handles in LHM 0.9.6.
-        DriverManager.UnloadDriver();
-        DriverManager.Driver = null;
+        // Close proxy gates before the underlying modules. RAMSPDToolkit SPD accessors have a
+        // finalizer (no IDisposable) which may run much later and try to reset the page through
+        // the old module. Calling the raw LHM Unload here makes that finalizer crash the process.
+        try { _memoryDriver?.Unload(); }
+        finally { if (ReferenceEquals(DriverManager.Driver, _memoryDriver)) DriverManager.Driver = null; }
     }
     public void Dispose()
     {

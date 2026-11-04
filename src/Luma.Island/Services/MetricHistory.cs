@@ -60,6 +60,9 @@ public sealed class MetricHistory
 
     public void Clear() => _samples.Clear();
 
+    public static double NiceUtilityMaximum(double maximum) => !double.IsFinite(maximum) || maximum <= 100
+        ? 100 : Math.Ceiling(maximum / 50) * 50;
+
     public static double NiceFpsMaximum(double maximum)
     {
         if (!double.IsFinite(maximum) || maximum <= 0) return 60;

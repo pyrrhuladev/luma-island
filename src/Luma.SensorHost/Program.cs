@@ -13,7 +13,7 @@ internal static class Program
             else if (args.Length == 1 && args[0] == "--remove")
             { ServiceInstaller.Remove(); ServiceInstaller.TryWriteSetupLog("Remove succeeded. Independently installed drivers were left unchanged."); }
             else if (args.Length == 3 && args[0] == "--service" && args[1] == "--owner-sid") return NativeService.Run(args[2]);
-            else if (args.Length == 1 && args[0] == "--version") Console.WriteLine("Luma Island SensorHost 0.8.0; LHM 0.9.6; protocol 1");
+            else if (args.Length == 1 && args[0] == "--version") Console.WriteLine("Luma Island SensorHost " + typeof(Program).Assembly.GetName().Version!.ToString(3) + "; LHM 0.9.6; protocol 1");
             else
             {
                 Console.WriteLine("Optional sensor service. Explicit administrator setup: --install --owner-sid <Windows-user-SID>; remove: --remove. PawnIO must be installed separately from its official installer.");

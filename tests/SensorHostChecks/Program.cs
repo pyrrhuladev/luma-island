@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
@@ -21,9 +22,12 @@ internal static class Program
     {
         try
         {
-            Mapping(); Lifecycle(); Responses(); InstallPaths();
+            Mapping(); Lifecycle(); Responses(); InstallPaths(); Cadence();
+            await SpdLifetimeChecks.Run(Check);
             await Frames();
             await NativePipe();
+            await NativeServerLifecycle();
+            await SensorClientConnectionChecks.Run(Check);
             Console.WriteLine($"PASS: {_checks} sensor-host checks. Fake sensors and a private test pipe only; no service, driver, or hardware access.");
             return 0;
         }
@@ -112,8 +116,40 @@ internal static class Program
         Check(!SensorClient.IsValidResponse(response, false, true, now), "Unrequested numeric value rejected");
         Check(SensorClient.IsValidResponse(response with { CpuCelsius = null, CpuStatus = "driver_missing" }, true, true, now), "Unavailable metric stays null with an explicit reason");
     }
+    private static void Cadence()
+    {
+        long now = 0;
+        var gate = new SensorReadGate(() => now);
+        var sources = new List<FakeSource>();
+        Func<bool, bool, ITemperatureSource> factory = (_, _) => { var source = new FakeSource(); sources.Add(source); return source; };
+        using var session = new SensorSession(factory);
+        SensorResponse original = session.Read(new(1, true, false), gate);
+        now = 1;
+        SensorResponse cached = session.Read(new(1, true, false), gate);
+        Check(cached == original && sources.Count == 1 && sources[0].Reads == 1, "Rapid request returns the original timestamped snapshot without extra hardware reads");
+        var added = session.Read(new(1, true, true), gate);
+        Check(added.CpuCelsius == 52 && added.MemoryCelsius is null && added.MemoryStatus == "unavailable", "Adding an unsampled metric never invents data while its hardware slot is pending");
+        now = 1999;
+        session.Read(new(1, true, true), gate);
+        Check(sources.Count == 1 && sources[0].Reads == 1, "Requests before two seconds do not reopen or resample the source");
+        now = 2000;
+        Check(session.Read(new(1, true, true), gate).MemoryCelsius == 43 && sources.Count == 2 && sources[0].Disposals == 1,
+            "Configuration is applied at the next hardware slot, closing the old source once");
+        var off = session.Read(new(1, false, false), gate);
+        Check(off.CpuStatus == "disabled" && sources[1].Disposals == 1, "All-off disposes immediately even inside the hardware interval");
+        now = 2001;
+        var earlyOn = session.Read(new(1, true, true), gate);
+        Check(earlyOn.CpuCelsius is null && earlyOn.MemoryCelsius is null && sources.Count == 2, "Re-enable does not reuse a snapshot from the disposed source");
+        using var reconnected = new SensorSession(factory);
+        Check(reconnected.Read(new(1, true, true), gate).CpuCelsius is null && sources.Count == 2,
+            "Reconnect cannot bypass the service-wide hardware cadence or receive another connection's cached data");
+        now = 4000;
+        Check(reconnected.Read(new(1, true, true), gate).CpuCelsius == 52 && sources.Count == 3, "Fresh data resumes at the permitted slot after reconnect");
+    }
     private static void InstallPaths()
     {
+        Check(ServiceInstaller.Version == typeof(SensorProtocol).Assembly.GetName().Version!.ToString(3),
+            "Protected service install directory version follows the actual host assembly instead of a manually synchronized literal");
         string root = Path.Combine(Path.GetTempPath(), "LumaSensors-test-root");
         Check(ServiceInstaller.IsWithin(Path.Combine(root, "0.8.0", "a.dll"), root), "Owned child is within installation root");
         Check(!ServiceInstaller.IsWithin(root + "-evil/a.dll", root), "Sibling prefix is not an owned path");
@@ -183,6 +219,63 @@ internal static class Program
         await SensorProtocol.WriteAsync(second, new SensorRequest(1, false, true), timeout.Token);
         Check(await SensorProtocol.ReadAsync<SensorRequest>(server, timeout.Token) == new SensorRequest(1, false, true), "Re-enabled client receives a clean request stream");
         second.Dispose(); server.Disconnect();
+    }
+    private static async Task NativeServerLifecycle()
+    {
+        using WindowsIdentity identity = WindowsIdentity.GetCurrent();
+        string name = "LumaIsland.SensorHost.Lifecycle." + Guid.NewGuid().ToString("N");
+        using var stop = new CancellationTokenSource();
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sources = new ConcurrentQueue<FakeSource>();
+        long clock = 0;
+        var gate = new SensorReadGate(() => Interlocked.Read(ref clock));
+        Task server = SensorPipeServer.RunAsync(identity.User!.Value, stop.Token, () => ready.SetResult(), name,
+            () => new SensorSession((_, _) => { var source = new FakeSource(); sources.Enqueue(source); return source; }),
+            TimeSpan.FromMilliseconds(300), gate);
+        try
+        {
+            await ready.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            using NamedPipeClientStream first = await OpenPrivatePipe(name);
+            using var deadline = new CancellationTokenSource(TimeSpan.FromMilliseconds(750));
+            await SensorProtocol.WriteAsync(first, new SensorRequest(1, true, false), deadline.Token);
+            var initial = await SensorProtocol.ReadAsync<SensorResponse>(first, deadline.Token);
+            await SensorProtocol.WriteAsync(first, new SensorRequest(1, true, true), deadline.Token);
+            var immediate = await SensorProtocol.ReadAsync<SensorResponse>(first, deadline.Token);
+            Check(initial.CpuCelsius == 52 && immediate.CpuCelsius == 52 && immediate.MemoryCelsius is null && sources.Single().Reads == 1,
+                "Actual server answers immediate Configure within the 750 ms client deadline without a second read");
+            for (int attempt = 0; attempt < 100 && sources.Single().Disposals == 0; attempt++) await Task.Delay(10);
+            Check(sources.Single().Disposals == 1 && !server.IsCompleted, "Idle accepted connection disposes its source while keeping the server healthy");
+            first.Dispose();
+            using NamedPipeClientStream second = await OpenPrivatePipe(name);
+            using var secondDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            await SensorProtocol.WriteAsync(second, new SensorRequest(1, true, true), secondDeadline.Token);
+            var waiting = await SensorProtocol.ReadAsync<SensorResponse>(second, secondDeadline.Token);
+            Check(waiting.CpuCelsius is null && sources.Count == 1, "Idle reconnect stays safe and cannot bypass hardware cadence");
+            Interlocked.Exchange(ref clock, 2000);
+            await SensorProtocol.WriteAsync(second, new SensorRequest(1, true, true), secondDeadline.Token);
+            Check((await SensorProtocol.ReadAsync<SensorResponse>(second, secondDeadline.Token)).MemoryCelsius == 43 && sources.Count == 2,
+                "Native server resumes fresh readings after idle reconnect without service restart");
+            await SensorProtocol.WriteAsync(second, new SensorRequest(1, false, false), secondDeadline.Token);
+            await SensorProtocol.ReadAsync<SensorResponse>(second, secondDeadline.Token);
+            Check(sources.Last().Disposals == 1, "Native all-off request closes the last source before its reply");
+        }
+        finally
+        {
+            stop.Cancel();
+            try { await server.WaitAsync(TimeSpan.FromSeconds(2)); }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+        }
+    }
+    private static async Task<NamedPipeClientStream> OpenPrivatePipe(string name)
+    {
+        for (int attempt = 0; attempt < 100; attempt++)
+        {
+            SafePipeHandle handle = CreateFileW(@"\\.\pipe\" + name, 0x12019B, 0, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
+            if (!handle.IsInvalid) return new NamedPipeClientStream(PipeDirection.InOut, true, true, handle);
+            handle.Dispose();
+            await Task.Delay(10);
+        }
+        throw new Exception("Private test pipe did not accept a client.");
     }
     private static void Check(bool value, string label) { if (!value) throw new Exception(label); _checks++; }
     private static void Expect<T>(Action action, string label) where T : Exception

@@ -34,6 +34,9 @@ internal static class Program
             Check(MetricHistory.NiceFpsMaximum(340) == 500, "High FPS receives a readable ceiling");
             Check(MetricHistory.NiceFpsMaximum(60) == 100, "FPS ceiling retains headroom");
             Check(MetricHistory.NiceFpsMaximum(double.NaN) == 60, "Missing FPS has a safe scale");
+            Check(MetricHistory.NiceUtilityMaximum(99) == 100, "Normal CPU utility retains a percentage scale");
+            Check(MetricHistory.NiceUtilityMaximum(145) >= 145, "Boosted CPU utility is not clipped at one hundred percent");
+            Check(MetricHistory.NiceUtilityMaximum(double.NaN) == 100, "Missing CPU utility has a safe scale");
             history.Clear();
             Check(history.Count == 0 && history.Segments(6).Count == 0, "Clear discards all stored history");
             Console.WriteLine($"PASS: {_checks} history checks.");

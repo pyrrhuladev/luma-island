@@ -1,7 +1,7 @@
 <Window x:Class="Luma.Island.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Luma Island" Width="408" Height="80"
+        Title="Luma Island" Icon="/Luma.Island;component/Assets/Luma.ico" Width="408" Height="80"
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True"
         Background="Transparent" Topmost="True" ShowInTaskbar="False"
         ShowActivated="False" WindowStartupLocation="Manual"
@@ -337,7 +337,7 @@
                                     <Path x:Name="CpuChartGrid" Stroke="{DynamicResource Subtle}" Opacity="0.18" StrokeThickness="0.6"/>
                                     <Path x:Name="CpuChartLine" Stroke="{StaticResource Mint}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
                                 </Canvas>
-                                <TextBlock Grid.Row="2" Text="0–100%" FontSize="10" Foreground="{DynamicResource Subtle}"/>
+                                <TextBlock x:Name="CpuChartScale" Grid.Row="2" Text="0–100%" FontSize="10" Foreground="{DynamicResource Subtle}"/>
                                 <TextBlock Grid.Row="2" Text="до 2 мин" FontSize="10" HorizontalAlignment="Right" Foreground="{DynamicResource Subtle}"/>
                             </Grid>
                         </Border>

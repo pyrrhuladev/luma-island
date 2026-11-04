@@ -13,7 +13,7 @@ namespace Luma.Island.Services;
 public sealed record PerformanceSnapshot(double? CpuPercent, double? GpuPercent, double? MemoryPercent, ulong UsedMemoryBytes, ulong TotalMemoryBytes,
     double? GpuTemperatureCelsius = null, string? GpuTemperatureStatus = null,
     double? CpuTemperatureCelsius = null, string? CpuTemperatureStatus = null,
-    double? MemoryTemperatureCelsius = null, string? MemoryTemperatureStatus = null)
+    double? MemoryTemperatureCelsius = null, string? MemoryTemperatureStatus = null, string? CpuUsageSource = null)
 {
     public static PerformanceSnapshot Empty { get; } = new(null, null, null, 0, 0);
 }
@@ -28,8 +28,9 @@ public sealed class PerformanceService : IDisposable
     private Configuration _configuration = new(0, 0);
     private int _version, _nativeVersion = -1;
     private volatile bool _disposed;
-    private bool _hasCpuSample, _hasGpuSample, _gpuUnavailable;
-    private ulong _idle, _kernel, _user;
+    private bool _hasGpuSample, _gpuUnavailable;
+    private CpuUsageReader? _cpuUsageReader;
+    private string? _cpuUsageSource;
     private long _lastSampleTimestamp;
     private IntPtr _query, _gpuCounter;
     private GpuTemperatureReader? _temperatureReader;
@@ -56,7 +57,7 @@ public sealed class PerformanceService : IDisposable
         Volatile.Write(ref _configuration, configuration);
         _timer.Change(flags == 0 ? Timeout.Infinite : 0, flags == 0 ? Timeout.Infinite : 2000);
         Publish(PerformanceSnapshot.Empty);
-        if (!gpu || !gpuTemperature || !(cpuTemperature || memoryTemperature))
+        if (!cpu || !gpu || !gpuTemperature || !(cpuTemperature || memoryTemperature))
         {
             // Serialize cleanup with an already-running PDH call, without blocking UI.
             _ = Task.Run(() =>
@@ -68,7 +69,7 @@ public sealed class PerformanceService : IDisposable
                         if (!gpu) CloseGpu();
                         if (!gpuTemperature) CloseTemperature();
                         if (!(cpuTemperature || memoryTemperature)) CloseCpuMemoryTemperature();
-                        if (flags == 0) _hasCpuSample = false;
+                        if (!cpu) CloseCpu();
                     }
                 }
             });
@@ -86,7 +87,7 @@ public sealed class PerformanceService : IDisposable
             if (_nativeVersion != configuration.Version)
             {
                 CloseGpu();
-                _hasCpuSample = false;
+                _cpuUsageReader?.Reset();
                 _gpuUnavailable = false;
                 _nativeVersion = configuration.Version;
                 _lastSampleTimestamp = 0;
@@ -96,7 +97,8 @@ public sealed class PerformanceService : IDisposable
             {
                 // After sleep or a blocked provider, establish fresh baselines
                 // instead of presenting a long historical interval as current load.
-                _hasCpuSample = _hasGpuSample = false;
+                _cpuUsageReader?.Reset();
+                _hasGpuSample = false;
             }
             _lastSampleTimestamp = now;
             double? cpu = (configuration.Flags & 1) != 0 ? ReadCpu() : null;
@@ -122,7 +124,8 @@ public sealed class PerformanceService : IDisposable
                 hardware = _cpuMemoryTemperatureReader.Read((configuration.Flags & 16) != 0, (configuration.Flags & 32) != 0);
             }
             snapshot = new PerformanceSnapshot(cpu, gpu, memory.Percent, memory.Used, memory.Total, temperature, temperatureStatus,
-                hardware?.CpuCelsius, hardware?.CpuStatus, hardware?.MemoryCelsius, hardware?.MemoryStatus);
+                hardware?.CpuCelsius, hardware?.CpuStatus, hardware?.MemoryCelsius, hardware?.MemoryStatus,
+                (configuration.Flags & 1) != 0 ? _cpuUsageSource : null);
         }
         catch (Exception ex)
         {
@@ -149,11 +152,10 @@ public sealed class PerformanceService : IDisposable
 
     private double? ReadCpu()
     {
-        if (!GetSystemTimes(out ulong idle, out ulong kernel, out ulong user)) { _hasCpuSample = false; return null; }
-        double? percent = _hasCpuSample ? CalculateCpu(_idle, _kernel, _user, idle, kernel, user) : null;
-        (_idle, _kernel, _user) = (idle, kernel, user);
-        _hasCpuSample = true;
-        return percent;
+        _cpuUsageReader ??= new CpuUsageReader();
+        var reading = _cpuUsageReader.Read();
+        _cpuUsageSource = reading.Source;
+        return reading.Percent;
     }
 
     private double? ReadGpu()
@@ -249,6 +251,13 @@ public sealed class PerformanceService : IDisposable
         _temperatureReader = null;
     }
 
+    private void CloseCpu()
+    {
+        _cpuUsageReader?.Dispose();
+        _cpuUsageReader = null;
+        _cpuUsageSource = null;
+    }
+
     private void CloseCpuMemoryTemperature()
     {
         _cpuMemoryTemperatureReader?.Dispose();
@@ -262,7 +271,7 @@ public sealed class PerformanceService : IDisposable
         _disposed = true;
         _timer.Dispose();
         Volatile.Write(ref _configuration, new Configuration(++_version, 0));
-        lock (_nativeGate) { CloseGpu(); CloseTemperature(); CloseCpuMemoryTemperature(); }
+        lock (_nativeGate) { CloseGpu(); CloseTemperature(); CloseCpuMemoryTemperature(); CloseCpu(); }
         Changed = null;
     }
 
@@ -285,7 +294,6 @@ public sealed class PerformanceService : IDisposable
         public IntPtr Name;
         public FormattedCounterValue Value;
     }
-    [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetSystemTimes(out ulong idle, out ulong kernel, out ulong user);
     [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GlobalMemoryStatusEx(ref MemoryStatus status);
     [DllImport("pdh.dll", EntryPoint = "PdhOpenQueryW", CharSet = CharSet.Unicode)] private static extern uint PdhOpenQuery(string? source, UIntPtr userData, out IntPtr query);
     [DllImport("pdh.dll", EntryPoint = "PdhAddEnglishCounterW", CharSet = CharSet.Unicode)] private static extern uint PdhAddEnglishCounter(IntPtr query, string path, UIntPtr userData, out IntPtr counter);

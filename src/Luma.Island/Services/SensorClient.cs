@@ -13,8 +13,11 @@ namespace Luma.Island.Services;
 public sealed class SensorClient : IDisposable
 {
     private readonly object _gate = new();
+    private readonly Func<CancellationToken, Task<NamedPipeClientStream>> _connect;
     private NamedPipeClientStream? _pipe;
     private int _disposed;
+    public SensorClient() : this(OpenVerifiedPipeAsync) { }
+    internal SensorClient(Func<CancellationToken, Task<NamedPipeClientStream>> connect) => _connect = connect ?? throw new ArgumentNullException(nameof(connect));
 
     public SensorResponse Read(bool cpu, bool memory)
     {
@@ -23,12 +26,13 @@ public sealed class SensorClient : IDisposable
             if (!cpu && !memory || Volatile.Read(ref _disposed) != 0)
             { Close(); return SensorProtocol.Empty(false, false, "disabled"); }
             bool cold = _pipe is null;
-            using var timeout = new CancellationTokenSource(cold ? 3000 : 750);
+            // One budget includes busy-instance cleanup, connection and the first native sample.
+            using var timeout = new CancellationTokenSource(cold ? 5000 : 750);
             try
             {
                 if (_pipe is null)
                 {
-                    NamedPipeClientStream pipe = OpenVerifiedPipe();
+                    NamedPipeClientStream pipe = _connect(timeout.Token).GetAwaiter().GetResult();
                     Interlocked.Exchange(ref _pipe, pipe)?.Dispose();
                     if (Volatile.Read(ref _disposed) != 0) { Close(); return SensorProtocol.Empty(false, false, "disabled"); }
                 }
@@ -59,20 +63,37 @@ public sealed class SensorClient : IDisposable
         if (status == "ok") return SensorProtocol.IsValidCelsius(value, memory);
         return value is null && status is "unavailable" or "driver_missing" or "provider_error";
     }
-    private static NamedPipeClientStream OpenVerifiedPipe()
+    private static Task<NamedPipeClientStream> OpenVerifiedPipeAsync(CancellationToken token)
     {
         uint servicePid = GetServicePid();
         if (servicePid == 0) throw new SensorConnectionException("unavailable");
+        return OpenPipeAsync(SensorProtocol.PipeName, servicePid, token);
+    }
+    internal static async Task<NamedPipeClientStream> OpenPipeAsync(string pipeName, uint expectedPid, CancellationToken token)
+    {
         // Specific read/write rights omit FILE_CREATE_PIPE_INSTANCE, unlike GENERIC_WRITE.
-        SafePipeHandle handle = CreateFileW(@"\\.\pipe\" + SensorProtocol.PipeName, 0x12019B, 0, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
-        if (handle.IsInvalid) { int error = Marshal.GetLastWin32Error(); handle.Dispose(); throw new SensorConnectionException(error == 5 ? "access_denied" : "unavailable"); }
-        try
+        while (true)
         {
-            if (!GetNamedPipeServerProcessId(handle, out uint pipePid) || pipePid != servicePid)
-                throw new SensorConnectionException("access_denied");
-            return new NamedPipeClientStream(PipeDirection.InOut, true, true, handle);
+            token.ThrowIfCancellationRequested();
+            SafePipeHandle handle = CreateFileW(@"\\.\pipe\" + pipeName, 0x12019B, 0, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
+            if (handle.IsInvalid)
+            {
+                int error = Marshal.GetLastWin32Error(); handle.Dispose();
+                if (error != 231) throw new SensorConnectionException(error == 5 ? "access_denied" : "unavailable");
+                // The single server instance can still be disposing the preceding LHM session.
+                // Cancellable asynchronous waits keep retries within the SAME operation deadline.
+                await Task.Delay(25, token).ConfigureAwait(false);
+                continue;
+            }
+            try
+            {
+                if (!GetNamedPipeServerProcessId(handle, out uint pipePid) || pipePid != expectedPid)
+                    throw new SensorConnectionException("access_denied");
+                token.ThrowIfCancellationRequested();
+                return new NamedPipeClientStream(PipeDirection.InOut, true, true, handle);
+            }
+            catch { handle.Dispose(); throw; }
         }
-        catch { handle.Dispose(); throw; }
     }
     private static uint GetServicePid()
     {
@@ -86,7 +107,12 @@ public sealed class SensorClient : IDisposable
             {
                 if (!QueryServiceStatusEx(service, 0, out ServiceStatusProcess status, Marshal.SizeOf<ServiceStatusProcess>(), out _))
                     throw new Win32Exception(Marshal.GetLastWin32Error());
-                return status.State == 4 ? status.ProcessId : 0;
+                return status.State switch
+                {
+                    4 => status.ProcessId,
+                    2 or 3 or 5 or 6 => throw new SensorConnectionException("service_starting"),
+                    _ => throw new SensorConnectionException("service_stopped")
+                };
             }
             finally { CloseServiceHandle(service); }
         }
