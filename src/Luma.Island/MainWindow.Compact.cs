@@ -46,6 +46,8 @@ public partial class MainWindow
         CompactPerformance.Margin = compact ? new Thickness(0, 4, 0, 4) : new Thickness(0, 6, 0, 6);
         CompactCpu.FontSize = CompactGpu.FontSize = CompactMemory.FontSize = compact ? 11 : 12;
         CompactFps.FontSize = compact ? 28 : 34;
+        CompactOnePercentLow.FontSize = Components.Fps ? compact ? 16 : 18 : compact ? 20 : 24;
+        CompactLowPanel.Margin = new Thickness(Components.Fps ? 12 : 0, 0, 0, 0);
         CompactCpu.LineHeight = CompactGpu.LineHeight = CompactMemory.LineHeight = compact ? 14 : 16;
         UpdateSurfaceRounding();
     }

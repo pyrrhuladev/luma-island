@@ -208,6 +208,8 @@ public partial class GameProfilesWindow : Window
         if (settings.Gpu) labels.Add("GPU");
         if (settings.Memory) labels.Add("RAM");
         if (settings.Fps) labels.Add("FPS");
+        if (settings.OnePercentLow) labels.Add("1% Low");
+        if (settings.FrameTime) labels.Add("время кадра");
         if (settings.CpuTemperature) labels.Add("температура CPU");
         if (settings.GpuTemperature) labels.Add("температура GPU");
         if (settings.MemoryTemperature) labels.Add("температура RAM");

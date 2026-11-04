@@ -19,6 +19,7 @@ Check(ComponentSettings.Default == new ComponentSettings(true, true, true, true,
 Check(!ComponentSettings.Default.Charts, "charts disabled in defaults and legacy nine-argument constructor");
 Check(!store.Load().GpuTemperature, "missing settings leave GPU temperature disabled");
 Check(!store.Load().CpuTemperature && !store.Load().MemoryTemperature, "CPU and RAM temperatures are opt-in");
+Check(!store.Load().OnePercentLow && !store.Load().FrameTime, "1% Low and frame time are disabled in missing/legacy settings");
 Check(!new ComponentSettings(true, true, true, true, true, false, false, false, false, true).GpuTemperature,
     "legacy ten-argument constructor leaves GPU temperature disabled");
 
@@ -62,6 +63,16 @@ foreach (var temperatures in new[] { (true, false), (false, true), (true, true) 
     Check(store.Save(settings) && new ComponentStore(path).Load() == settings,
         "CPU and RAM temperatures save independently without turning on load or other components");
 }
+foreach (var metrics in new[] { (true, false), (false, true), (true, true), (false, false) })
+{
+    var settings = allOff with { OnePercentLow = metrics.Item1, FrameTime = metrics.Item2 };
+    Check(store.Save(settings) && new ComponentStore(path).Load() == settings,
+        "1% Low and frame time save independently without enabling average FPS or charts: " + metrics);
+    using var json = JsonDocument.Parse(File.ReadAllText(path));
+    Check(json.RootElement.GetProperty("onePercentLow").GetBoolean() == metrics.Item1 &&
+        json.RootElement.GetProperty("frameTime").GetBoolean() == metrics.Item2,
+        "Independent frame metrics use persisted camelCase boolean properties");
+}
 File.WriteAllText(path, "{\"music\":false,\"futureComponent\":{\"enabled\":true}}");
 Check(store.Load() == (ComponentSettings.Default with { Music = false }), "unknown fields ignored");
 File.WriteAllText(path, "{\"MuSiC\":false,\"BATTERY\":false}");
@@ -71,7 +82,8 @@ foreach (var content in new[]
 {
     "{}", "null", "{oops", "[]", "{\"music\":\"false\"}", "{\"volume\":42}", "{\"cpu\":null}",
     "{\"gpuTemperature\":\"true\"}", "{\"gpuTemperature\":1}", "{\"gpuTemperature\":null}",
-    "{\"cpuTemperature\":\"true\"}", "{\"memoryTemperature\":null}"
+    "{\"cpuTemperature\":\"true\"}", "{\"memoryTemperature\":null}",
+    "{\"onePercentLow\":\"true\"}", "{\"frameTime\":1}", "{\"frameTime\":null}"
 })
 {
     File.WriteAllText(path, content);

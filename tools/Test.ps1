@@ -15,7 +15,7 @@ $version = [string]$metadata.Project.PropertyGroup.Version
 $publishedDirectory = Join-Path $projectRoot ('artifacts\Luma-Island-' + $version)
 $resultsDirectory = Join-Path $projectRoot 'work\checks'
 New-Item -ItemType Directory -Path $resultsDirectory -Force | Out-Null
-$checks = @('PlacementChecks', 'AppearanceChecks', 'ComponentChecks', 'PerformanceChecks', 'CpuUsageChecks', 'HistoryChecks', 'ArtworkChecks', 'MediaArtworkChecks', 'AutostartChecks', 'AutostartUiChecks', 'GpuTemperatureChecks', 'GpuTemperatureUiChecks', 'CompactUiChecks', 'ScaleUiChecks', 'CollapsedMediaUiChecks', 'VisibilityUiChecks', 'ClickThroughUiChecks', 'CpuMemoryTemperatureUiChecks', 'SensorHostChecks', 'AppIconChecks', 'GameProfileChecks', 'GameProfileRoutingChecks', 'GameProfilesUiChecks')
+$checks = @('PlacementChecks', 'AppearanceChecks', 'ComponentChecks', 'PerformanceChecks', 'CpuUsageChecks', 'HistoryChecks', 'ArtworkChecks', 'MediaArtworkChecks', 'AutostartChecks', 'AutostartUiChecks', 'GpuTemperatureChecks', 'GpuTemperatureUiChecks', 'CompactUiChecks', 'ScaleUiChecks', 'CollapsedMediaUiChecks', 'VisibilityUiChecks', 'ClickThroughUiChecks', 'CpuMemoryTemperatureUiChecks', 'SensorHostChecks', 'AppIconChecks', 'GameProfileChecks', 'GameProfileRoutingChecks', 'GameProfilesUiChecks', 'FrameTimeChecks', 'FrameViewChecks', 'FrameTimingServiceChecks', 'FrameMetricsUiChecks')
 foreach ($check in $checks) {
     $project = Join-Path $projectRoot ('tests\' + $check)
     $arguments = @('run', '--project', $project, '-c', 'Release')

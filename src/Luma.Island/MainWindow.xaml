@@ -175,11 +175,20 @@
                                 <ColumnDefinition x:Name="CompactBatteryColumn" Width="Auto"/>
                                 <ColumnDefinition x:Name="CompactArrowColumn" Width="16"/>
                             </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <StackPanel x:Name="CompactFpsPanel" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
                                 <TextBlock x:Name="CompactFps" Text="—" FontSize="34" FontWeight="SemiBold" Typography.NumeralAlignment="Tabular"
                                            Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center"/>
                                 <TextBlock x:Name="CompactFpsUnit" Text="FPS" FontSize="11" Foreground="{DynamicResource Muted}"
                                            Margin="6,0,0,6" VerticalAlignment="Bottom"/>
+                            </StackPanel>
+                            <StackPanel x:Name="CompactLowPanel" VerticalAlignment="Center" Margin="12,0,0,0" Visibility="Collapsed">
+                                <TextBlock Text="1% Low" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                                <TextBlock x:Name="CompactOnePercentLow" Text="—" FontSize="18" FontWeight="SemiBold"
+                                           Typography.NumeralAlignment="Tabular" Foreground="{DynamicResource TextPrimary}"/>
+                            </StackPanel>
+                            <TextBlock x:Name="CompactFrameTime" Text="Кадр —" FontSize="14" Visibility="Collapsed"
+                                       Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center"/>
                             </StackPanel>
                             <TextBlock x:Name="CompactClock" Grid.Column="1" Text="--:--" FontSize="13" Margin="6,0,8,0"
                                        Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
@@ -252,6 +261,7 @@
                         <RowDefinition x:Name="VolumeRow" Height="34"/>
                         <RowDefinition x:Name="PerformanceRow" Height="0"/>
                         <RowDefinition x:Name="ChartsRow" Height="0"/>
+                        <RowDefinition x:Name="FrameTimeRow" Height="0"/>
                         <RowDefinition x:Name="FooterRow" Height="26"/>
                     </Grid.RowDefinitions>
                     <Grid>
@@ -262,7 +272,8 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Background="Transparent"
                                     MouseLeftButtonDown="OnDragHeader">
-                            <TextBlock Text="Управление" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                            <TextBlock x:Name="ExpandedSectionLabel" Text="Управление" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                            <TextBlock x:Name="ExpandedOnePercentLow" Text="1% Low —" FontSize="12" Visibility="Collapsed" Foreground="{StaticResource Mint}"/>
                         </StackPanel>
                         <TextBlock x:Name="ExpandedClock" Grid.Column="1" Text="--:--" FontSize="12"
                                    VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}" Margin="0,0,7,0"/>
@@ -390,7 +401,21 @@
                             </Grid>
                         </Border>
                     </Grid>
-                    <Grid Grid.Row="6" Margin="1,7,1,0">
+                    <Border x:Name="FrameTimeCard" Grid.Row="6" Margin="0,4,0,4" CornerRadius="12" Background="#18000000" Padding="10,7" Visibility="Collapsed"
+                            IsVisibleChanged="OnFrameTimeVisibleChanged">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="19"/><RowDefinition Height="*"/><RowDefinition Height="13"/></Grid.RowDefinitions>
+                            <TextBlock Text="Время кадра" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                            <TextBlock x:Name="FrameTimeValue" Text="—" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right" Foreground="{DynamicResource TextPrimary}"/>
+                            <Canvas x:Name="FrameTimeCanvas" Grid.Row="1" ClipToBounds="True" SizeChanged="OnFrameTimeSizeChanged">
+                                <Path x:Name="FrameTimeGrid" Stroke="{DynamicResource Subtle}" Opacity="0.18" StrokeThickness="0.6"/>
+                                <Path x:Name="FrameTimeLine" Stroke="{StaticResource Mint}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                            </Canvas>
+                            <TextBlock x:Name="FrameTimeScale" Grid.Row="2" Text="0–16 мс" FontSize="10" Foreground="{DynamicResource Subtle}"/>
+                            <TextBlock x:Name="FrameTimePeak" Grid.Row="2" Text="до 10 с" FontSize="10" HorizontalAlignment="Right" Foreground="{DynamicResource Subtle}"/>
+                        </Grid>
+                    </Border>
+                    <Grid Grid.Row="7" Margin="1,7,1,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>

@@ -13,19 +13,20 @@ public partial class MainWindow
     public ComponentSettings Components { get; private set; } = ComponentSettings.Default;
     public event Action<ComponentSettings>? ComponentsChanged;
     public bool HasPerformance => Components.Cpu || Components.Gpu || Components.Memory || Components.Fps
-        || Components.GpuTemperature || Components.CpuTemperature || Components.MemoryTemperature;
+        || Components.GpuTemperature || Components.CpuTemperature || Components.MemoryTemperature || Components.OnePercentLow || Components.FrameTime;
+    private bool HasInlinePerformance => HasHardwareMetrics || Components.Fps;
     private bool HasHardwareMetrics => Components.Cpu || Components.Gpu || Components.Memory
         || Components.GpuTemperature || Components.CpuTemperature || Components.MemoryTemperature;
     private double TemperatureRowHeight => (Components.Gpu && Components.GpuTemperature)
         || (Components.Cpu && Components.CpuTemperature) || (Components.Memory && Components.MemoryTemperature) ? 16 : 0;
-    private double HudHeaderHeight => Components.Fps ? Appearance.Compact ? 42 : 50
-        : Components.Time || _batteryVisible || (!Components.Music && !HasHardwareMetrics) ? Appearance.Compact ? 20 : 24 : 0;
+    private double HudHeaderHeight => Components.Fps || Components.OnePercentLow ? Appearance.Compact ? 42 : 50
+        : Components.Time || _batteryVisible || Components.FrameTime || (!Components.Music && !HasHardwareMetrics) ? Appearance.Compact ? 20 : 24 : 0;
     private double HudMetricsHeight => HasHardwareMetrics ? (Appearance.Compact ? 28 : 40) + TemperatureRowHeight : 0;
     private double HudMusicHeight => Components.Music ? Appearance.Compact ? 34 : 44 : 0;
     private double BaseCollapsedWindowHeight => 24 + (Appearance.Compact ? 10 : 12) + HudHeaderHeight + HudMetricsHeight + HudMusicHeight;
     public double CollapsedWindowHeight => ScaledHudDimension(BaseCollapsedWindowHeight);
     private double BaseExpandedWindowHeight => 25 + 29 + (Components.Music ? 130 : 0) + (Components.Volume ? 34 : 0)
-        + (HasPerformance ? 32 + TemperatureRowHeight : 0) + ChartsHeight + (Components.Date || _batteryVisible ? 26 : 0) + 24;
+        + (HasInlinePerformance ? 32 + TemperatureRowHeight : 0) + ChartsHeight + (Components.FrameTime ? 96 : 0) + (Components.Date || _batteryVisible ? 26 : 0) + 24;
     public double ExpandedWindowHeight => ScaledHudDimension(BaseExpandedWindowHeight);
 
     private void InitializeComponents(ComponentStore store)
@@ -70,9 +71,9 @@ public partial class MainWindow
         MusicControlsRow.Height = new GridLength(Components.Music ? 52 : 0);
         VolumeRow.Height = new GridLength(Components.Volume ? 34 : 0);
         CompactPerformance.Visibility = Show(HasHardwareMetrics);
-        ExpandedPerformance.Visibility = Show(HasPerformance);
+        ExpandedPerformance.Visibility = Show(HasInlinePerformance);
         CompactPerformance.Height = (Appearance.Compact ? 20 : 28) + TemperatureRowHeight;
-        PerformanceRow.Height = new GridLength(HasPerformance ? 32 + TemperatureRowHeight : 0);
+        PerformanceRow.Height = new GridLength(HasInlinePerformance ? 32 + TemperatureRowHeight : 0);
         ChartsRow.Height = new GridLength(ChartsHeight);
         CompactPerformance.Columns = Math.Max(1, (Components.Cpu || Components.CpuTemperature ? 1 : 0) + (Components.Gpu || Components.GpuTemperature ? 1 : 0)
             + (Components.Memory || Components.MemoryTemperature ? 1 : 0));
@@ -81,6 +82,12 @@ public partial class MainWindow
         CompactMemory.Visibility = ExpandedMemory.Visibility = Show(Components.Memory || Components.MemoryTemperature);
         CompactFps.Visibility = ExpandedFps.Visibility = Show(Components.Fps);
         CompactFpsPanel.Visibility = Show(Components.Fps);
+        CompactLowPanel.Visibility = ExpandedOnePercentLow.Visibility = Show(Components.OnePercentLow);
+        ExpandedSectionLabel.Visibility = Show(!Components.OnePercentLow);
+        CompactFrameTime.Visibility = Show(Components.FrameTime && !Components.Fps && !Components.OnePercentLow);
+        FrameTimeCard.Visibility = Show(Components.FrameTime);
+        FrameTimeRow.Height = new GridLength(Components.FrameTime ? 96 : 0);
+        RefreshFrameMetricVisibility();
         FooterRow.Height = new GridLength(Components.Date || _batteryVisible ? 26 : 0);
         RefreshGpuMetric();
         RefreshCpuMemoryMetrics();
@@ -200,6 +207,7 @@ public partial class MainWindow
         if (!Dispatcher.CheckAccess()) { _ = Dispatcher.BeginInvoke(new Action(() => ApplyFps(snapshot))); return; }
         if (_closed) return;
         RecordFpsHistory(snapshot);
+        ApplyFrameMetrics(snapshot);
         bool valid = snapshot.Fps is >= 0 && double.IsFinite(snapshot.Fps.Value);
         CompactFps.Text = valid ? snapshot.Fps!.Value.ToString("0", _culture) : "—";
         ExpandedFps.Text = valid ? $"{snapshot.Fps!.Value:0} FPS" : "FPS —";
@@ -241,6 +249,10 @@ public partial class MainWindow
                 "Датчик DIMM / SPD hub: максимум среди доступных модулей. Доступность зависит от памяти и платы.";
             Add("FPS активной игры", s => s.Fps, (s, v) => s with { Fps = v }).ToolTip =
                 "Источник: установленный NVIDIA FrameView. Включение запускает его счётчик; без данных отображается прочерк.";
+            Add("1% Low", s => s.OnePercentLow, (s, v) => s with { OnePercentLow = v }).ToolTip =
+                "FPS наиболее медленных кадров: метрика 1% Low установленного NVIDIA FrameView. Можно включить отдельно от обычного FPS.";
+            Add("График времени кадра", s => s.FrameTime, (s, v) => s with { FrameTime = v }).ToolTip =
+                "Последние 10 секунд реальных интервалов Present игры в миллисекундах. График доступен в раскрытой панели независимо от остальных графиков.";
             menu.Items.Add(new Separator());
             var setup = new MenuItem { Header = "Настроить датчики CPU / RAM…" };
             setup.Click += (_, _) => new SensorSetupWindow { Owner = this }.ShowDialog();

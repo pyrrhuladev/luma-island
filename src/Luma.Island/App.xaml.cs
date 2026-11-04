@@ -168,7 +168,7 @@ public partial class App : System.Windows.Application
         bool visible = _island?.IsVisible == true;
         _performance?.Configure(visible && settings.Cpu, visible && settings.Gpu, visible && settings.Memory, visible && settings.GpuTemperature,
             visible && settings.CpuTemperature, visible && settings.MemoryTemperature);
-        _fps?.Configure(visible && settings.Fps);
+        _fps?.Configure(visible && settings.Fps, visible && settings.OnePercentLow, visible && settings.FrameTime);
         ScheduleClock();
         try { if (_media is not null) await _media.SetEnabledAsync(settings.Music); }
         catch (Exception ex) { Log(ex); }

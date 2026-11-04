@@ -49,10 +49,11 @@ public partial class MainWindow
     {
         VerifyAccess();
         if (!Components.Charts || !Components.Fps || _closed) return;
-        if (!string.Equals(_fpsHistoryProcess, snapshot.ProcessName, StringComparison.OrdinalIgnoreCase))
+        string? stream = snapshot.StreamId ?? snapshot.ProcessName;
+        if (!string.Equals(_fpsHistoryProcess, stream, StringComparison.OrdinalIgnoreCase))
         {
             _fpsHistory.Clear();
-            _fpsHistoryProcess = snapshot.ProcessName;
+            _fpsHistoryProcess = stream;
         }
         double now = ChartTime();
         double? value = snapshot.Fps is >= 0 && double.IsFinite(snapshot.Fps.Value) ? snapshot.Fps : null;
@@ -104,6 +105,7 @@ public partial class MainWindow
         _cpuHistory.Clear(); _gpuHistory.Clear(); _memoryHistory.Clear(); _fpsHistory.Clear();
         _fpsHistoryProcess = null;
         CpuChartLine.Data = GpuChartLine.Data = MemoryChartLine.Data = FpsChartLine.Data = null;
+        ClearFrameTimeHistory();
     }
 
     private void OnChartSizeChanged(object sender, SizeChangedEventArgs e)
