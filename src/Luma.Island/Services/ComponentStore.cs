@@ -23,7 +23,7 @@ public sealed record ComponentSettings(
 }
 
 /// <summary>Component choices only; reading settings does not start any system monitors.</summary>
-public sealed class ComponentStore
+public class ComponentStore
 {
     private readonly string _path;
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -41,7 +41,7 @@ public sealed class ComponentStore
             "LumaIsland", "components.json"));
     }
 
-    public ComponentSettings Load()
+    public virtual ComponentSettings Load()
     {
         if (!File.Exists(_path)) return ComponentSettings.Default;
         try
@@ -56,7 +56,7 @@ public sealed class ComponentStore
         }
     }
 
-    public bool Save(ComponentSettings settings)
+    public virtual bool Save(ComponentSettings settings)
     {
         string temporaryPath = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try

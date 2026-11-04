@@ -19,6 +19,8 @@ public partial class App : System.Windows.Application
     private SystemService? _system;
     private PerformanceService? _performance;
     private FpsService? _fps;
+    private GameProfileController? _profileController;
+    private GameProfileMonitor? _profileMonitor;
     private MainWindow? _island;
     private TrayService? _tray;
     private DispatcherTimer? _clock;
@@ -60,10 +62,13 @@ public partial class App : System.Windows.Application
             }
             _media = new MediaService();
             _system = new SystemService();
-            _island = new MainWindow(_media, _system, diagnostic
-                ? new PlacementStore(Path.Combine(Path.GetFullPath(e.Args[1]), "test-placement.json")) : null,
-                diagnostic ? new AppearanceStore(Path.Combine(Path.GetFullPath(e.Args[1]), "test-appearance.json")) : null,
-                diagnostic ? new ComponentStore(Path.Combine(Path.GetFullPath(e.Args[1]), "test-components.json")) : null, autostart);
+            _profileController = new GameProfileController(
+                new AppearanceStore(diagnostic ? Path.Combine(Path.GetFullPath(e.Args[1]), "test-appearance.json") : null),
+                new ComponentStore(diagnostic ? Path.Combine(Path.GetFullPath(e.Args[1]), "test-components.json") : null),
+                new PlacementStore(diagnostic ? Path.Combine(Path.GetFullPath(e.Args[1]), "test-placement.json") : null),
+                new GameProfileStore(diagnostic ? Path.Combine(Path.GetFullPath(e.Args[1]), "test-profiles.json") : null));
+            _island = new MainWindow(_media, _system, _profileController.PlacementStore, _profileController.AppearanceStore,
+                _profileController.ComponentStore, autostart, _profileController);
             _performance = new PerformanceService();
             _fps = new FpsService();
             _performance.Changed += _island.ApplyPerformance;
@@ -126,6 +131,7 @@ public partial class App : System.Windows.Application
             _tray?.SetHotkeyStatus(hotkeyAvailable);
             _inputHotkeyAvailable = RegisterHotKey(_windowSource.Handle, InputHotkeyId, 0x0001 | 0x0002 | 0x4000, 0x49);
             _island.InitializeInputRecovery(_inputHotkeyAvailable, _tray?.IsRegistered == true);
+            InitializeGameProfiles();
             ScheduleClock();
             try { await _media.InitializeAsync(); }
             catch (Exception ex) { Log(ex); }
@@ -175,7 +181,7 @@ public partial class App : System.Windows.Application
             _island!.RestoreForInteraction(); _island.ToggleExpanded();
         }, () => Shutdown(), _island!.CreatePositionMenu, _island!.CreateAppearanceMenu, _island!.CreateComponentsMenu,
             _island!.CreateAutostartMenu, _island!.RefreshAutostartMenus, _island!.RestoreForInteraction,
-            _island!.CreateInputMenuItem);
+            _island!.CreateInputMenuItem, _island!.CreateProfilesMenu);
         _tray.RegistrationChanged += OnTrayRegistrationChanged;
         _island.InputModeChanged += OnInputModeChanged;
     }
@@ -319,6 +325,7 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         _clock?.Stop();
+        DisposeGameProfiles();
         if (_tray is not null) _tray.RegistrationChanged -= OnTrayRegistrationChanged;
         if (_island is not null) _island.InputModeChanged -= OnInputModeChanged;
         if (_windowSource != null)

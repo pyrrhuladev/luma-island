@@ -75,6 +75,7 @@ public partial class MainWindow
             SetBrush("AlbumSurface", "#25332E");
             SetBrush("VolumeTrack", "#343B42");
         }
+        ApplyHudScale();
     }
 
     private void SetBrush(string key, string color)
@@ -129,6 +130,8 @@ public partial class MainWindow
             var compact = new MenuItem { Header = "Компактная капсула", IsCheckable = true, IsChecked = Appearance.Compact };
             compact.Click += (_, _) => SetCompactMode(compact.IsChecked);
             menu.Items.Add(compact);
+            menu.Items.Add(new Separator());
+            menu.Items.Add(CreateScaleControl());
         }
         Populate();
         menu.SubmenuOpened += (_, e) => { if (ReferenceEquals(e.OriginalSource, menu)) Populate(); };
@@ -166,6 +169,31 @@ public partial class MainWindow
         var panel = new StackPanel { Margin = new Thickness(0, 5, 0, 5) };
         panel.Children.Add(label);
         panel.Children.Add(slider);
+        return new MenuItem { Header = panel, StaysOpenOnClick = true };
+    }
+
+    private MenuItem CreateScaleControl()
+    {
+        var label = new TextBlock { Margin = new Thickness(0, 0, 0, 6) };
+        var slider = new Slider { Name = "HudScaleSlider", Minimum = 75, Maximum = 150,
+            Value = Math.Round(HudScale * 100), TickFrequency = 1, IsSnapToTickEnabled = true,
+            SmallChange = 1, LargeChange = 5, Width = 230, IsMoveToPointEnabled = true };
+        System.Windows.Automation.AutomationProperties.SetName(slider, "Масштаб HUD, проценты");
+        void Label() => label.Text = $"Масштаб HUD: {HudScale * 100:0}%" +
+            (EffectiveHudScale < HudScale - .005 ? $" · на экране {EffectiveHudScale * 100:0}%" : string.Empty);
+        Label();
+        slider.ValueChanged += (_, _) =>
+        {
+            CompleteTransition();
+            Appearance = AppearanceStore.Normalize(Appearance with { Scale = Math.Round(slider.Value) / 100 });
+            ApplyHudScale(); Label();
+        };
+        slider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler((_, _) => SaveAppearance()));
+        slider.PreviewMouseLeftButtonUp += (_, _) => SaveAppearance();
+        slider.KeyUp += (_, _) => SaveAppearance();
+        slider.LostKeyboardFocus += (_, _) => SaveAppearance();
+        var panel = new StackPanel { Margin = new Thickness(0, 5, 0, 5) };
+        panel.Children.Add(label); panel.Children.Add(slider);
         return new MenuItem { Header = panel, StaysOpenOnClick = true };
     }
 }

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="../../src/Luma.Island/Services/GameProfileStore.cs" Link="GameProfileStore.cs" />
+    <Compile Include="../../src/Luma.Island/Services/GameProfileSelector.cs" Link="GameProfileSelector.cs" />
+    <Compile Include="../../src/Luma.Island/Services/GameProfileMonitor.cs" Link="GameProfileMonitor.cs" />
+    <Compile Include="../../src/Luma.Island/Services/GameProcessReader.cs" Link="GameProcessReader.cs" />
+    <Compile Include="../../src/Luma.Island/Services/AppearanceStore.cs" Link="AppearanceStore.cs" />
+    <Compile Include="../../src/Luma.Island/Services/ComponentStore.cs" Link="ComponentStore.cs" />
+    <Compile Include="../../src/Luma.Island/Services/PlacementStore.cs" Link="PlacementStore.cs" />
+  </ItemGroup>
+</Project>

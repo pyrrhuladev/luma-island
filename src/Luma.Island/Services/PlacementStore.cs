@@ -23,7 +23,7 @@ public sealed record PlacementSettings(
 }
 
 /// <summary>Small, atomic settings file. An explicit filename keeps tests isolated.</summary>
-public sealed class PlacementStore
+public class PlacementStore
 {
     private readonly string _path;
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -42,7 +42,7 @@ public sealed class PlacementStore
             "LumaIsland", "placement.json"));
     }
 
-    public PlacementSettings Load()
+    public virtual PlacementSettings Load()
     {
         if (!File.Exists(_path)) return PlacementSettings.Default;
         try
@@ -57,7 +57,7 @@ public sealed class PlacementStore
         }
     }
 
-    public bool Save(PlacementSettings settings)
+    public virtual bool Save(PlacementSettings settings)
     {
         string temporaryPath = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -83,7 +83,7 @@ public sealed class PlacementStore
         }
     }
 
-    private static PlacementSettings Normalize(PlacementSettings? settings)
+    public static PlacementSettings Normalize(PlacementSettings? settings)
     {
         settings ??= PlacementSettings.Default;
         return settings with

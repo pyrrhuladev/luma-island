@@ -22,9 +22,11 @@ public partial class MainWindow
         : Components.Time || _batteryVisible || (!Components.Music && !HasHardwareMetrics) ? Appearance.Compact ? 20 : 24 : 0;
     private double HudMetricsHeight => HasHardwareMetrics ? (Appearance.Compact ? 28 : 40) + TemperatureRowHeight : 0;
     private double HudMusicHeight => Components.Music ? Appearance.Compact ? 34 : 44 : 0;
-    public double CollapsedWindowHeight => 24 + (Appearance.Compact ? 10 : 12) + HudHeaderHeight + HudMetricsHeight + HudMusicHeight;
-    public double ExpandedWindowHeight => 25 + 29 + (Components.Music ? 130 : 0) + (Components.Volume ? 34 : 0)
+    private double BaseCollapsedWindowHeight => 24 + (Appearance.Compact ? 10 : 12) + HudHeaderHeight + HudMetricsHeight + HudMusicHeight;
+    public double CollapsedWindowHeight => ScaledHudDimension(BaseCollapsedWindowHeight);
+    private double BaseExpandedWindowHeight => 25 + 29 + (Components.Music ? 130 : 0) + (Components.Volume ? 34 : 0)
         + (HasPerformance ? 32 + TemperatureRowHeight : 0) + ChartsHeight + (Components.Date || _batteryVisible ? 26 : 0) + 24;
+    public double ExpandedWindowHeight => ScaledHudDimension(BaseExpandedWindowHeight);
 
     private void InitializeComponents(ComponentStore store)
     {
@@ -89,14 +91,15 @@ public partial class MainWindow
     private void RefreshComponentSize()
     {
         CompleteTransition();
+        UpdateHudScaleTransform();
         HudHeaderRow.Height = new GridLength(HudHeaderHeight);
         HudHeader.Visibility = Show(HudHeaderHeight > 0);
         HudMetricsRow.Height = new GridLength(HudMetricsHeight);
         HudMusicRow.Height = new GridLength(HudMusicHeight);
-        IslandSurface.Height = (_expanded ? ExpandedWindowHeight : CollapsedWindowHeight) - 24;
+        IslandSurface.Height = (_expanded ? BaseExpandedWindowHeight : BaseCollapsedWindowHeight) - 24;
         IslandSurface.Width = _expanded ? 384 : CollapsedSurfaceWidth;
         Height = _expanded ? ExpandedWindowHeight : CollapsedWindowHeight;
-        Width = _expanded ? 408 : CollapsedWindowWidth;
+        Width = _expanded ? ExpandedWindowWidth : CollapsedWindowWidth;
         _surfaceOffset.X = _surfaceOffset.Y = 0;
         UpdateSurfaceRounding();
         _placement?.Apply();

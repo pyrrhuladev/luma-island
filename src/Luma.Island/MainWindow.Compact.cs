@@ -5,7 +5,8 @@ namespace Luma.Island;
 
 public partial class MainWindow
 {
-    public double CollapsedWindowWidth => Appearance.Compact ? 352 : 408;
+    private double BaseCollapsedWindowWidth => Appearance.Compact ? 352 : 408;
+    public double CollapsedWindowWidth => ScaledHudDimension(BaseCollapsedWindowWidth);
     private double CollapsedSurfaceWidth => Appearance.Compact ? 320 : 376;
 
     public void SetCompactMode(bool enabled)

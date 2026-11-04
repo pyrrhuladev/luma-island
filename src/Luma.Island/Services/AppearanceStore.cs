@@ -7,16 +7,18 @@ namespace Luma.Island.Services;
 
 public enum IslandAppearance { Matte, Glass }
 
-public sealed record AppearanceSettings(IslandAppearance Mode = IslandAppearance.Glass, double GlassOpacity = .40, bool Compact = false, bool ClickThrough = false)
+public sealed record AppearanceSettings(IslandAppearance Mode = IslandAppearance.Glass, double GlassOpacity = .40, bool Compact = false, bool ClickThrough = false, double Scale = 1)
 {
     public static AppearanceSettings Default { get; } = new();
 }
 
 /// <summary>Independent appearance preferences, replaced atomically after a complete write.</summary>
-public sealed class AppearanceStore
+public class AppearanceStore
 {
     public const double MinOpacity = .05;
     public const double MaxOpacity = 1;
+    public const double MinScale = .75;
+    public const double MaxScale = 1.5;
 
     private readonly string _path;
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -35,7 +37,7 @@ public sealed class AppearanceStore
             "LumaIsland", "appearance.json"));
     }
 
-    public AppearanceSettings Load()
+    public virtual AppearanceSettings Load()
     {
         if (!File.Exists(_path)) return AppearanceSettings.Default;
         try
@@ -50,7 +52,7 @@ public sealed class AppearanceStore
         }
     }
 
-    public bool Save(AppearanceSettings settings)
+    public virtual bool Save(AppearanceSettings settings)
     {
         string temporaryPath = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -84,7 +86,10 @@ public sealed class AppearanceStore
             Mode = Enum.IsDefined(settings.Mode) ? settings.Mode : IslandAppearance.Matte,
             GlassOpacity = double.IsFinite(settings.GlassOpacity)
                 ? Math.Clamp(settings.GlassOpacity, MinOpacity, MaxOpacity)
-                : AppearanceSettings.Default.GlassOpacity
+                : AppearanceSettings.Default.GlassOpacity,
+            Scale = double.IsFinite(settings.Scale)
+                ? Math.Clamp(settings.Scale, MinScale, MaxScale)
+                : AppearanceSettings.Default.Scale
         };
     }
 }

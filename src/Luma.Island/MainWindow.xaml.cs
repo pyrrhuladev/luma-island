@@ -34,12 +34,13 @@ public partial class MainWindow : Window
     private MediaSnapshot? _lastMedia;
 
     public MainWindow(MediaService media, SystemService system, PlacementStore? placementStore = null, AppearanceStore? appearanceStore = null,
-        ComponentStore? componentStore = null, AutostartService? autostart = null)
+        ComponentStore? componentStore = null, AutostartService? autostart = null, GameProfileController? profiles = null)
     {
         _media = media;
         _system = system;
         _placementStore = placementStore ?? new PlacementStore();
         _autostart = autostart ?? new AutostartService();
+        _profiles = profiles;
         InitializeComponent();
         InitializeAppearance(appearanceStore ?? new AppearanceStore());
         InitializeComponents(componentStore ?? new ComponentStore());
@@ -55,13 +56,15 @@ public partial class MainWindow : Window
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (_placement is not null) return;
-        _placement = new PlacementController(this, _placementStore);
+        _placement = new PlacementController(this, _placementStore, FitHudToDisplay);
+        _placement.DragCompleted += OnProfileDragCompleted;
         IslandSurface.ContextMenu.Items.Insert(1, CreatePositionMenu());
         IslandSurface.ContextMenu.Items.Insert(2, CreateAppearanceMenu());
         IslandSurface.ContextMenu.Items.Insert(3, CreateComponentsMenu());
         IslandSurface.ContextMenu.Items.Insert(4, CreateAutostartMenu());
         InitializeTrayVisibility();
         IslandSurface.ContextMenu.Items.Insert(2, CreateInputMenuItem());
+        IslandSurface.ContextMenu.Items.Insert(3, CreateProfilesMenu());
         IslandSurface.ContextMenu.Opened += (_, _) => RefreshAutostartMenus();
     }
 
@@ -95,24 +98,24 @@ public partial class MainWindow : Window
         int transition = ++_transition;
         bool animate = SystemParameters.ClientAreaAnimation && IsVisible;
         _animating = animate;
-        double targetHeight = (_expanded ? ExpandedWindowHeight : CollapsedWindowHeight) - 24;
+        double targetHeight = (_expanded ? BaseExpandedWindowHeight : BaseCollapsedWindowHeight) - 24;
         double targetWidth = _expanded ? 384 : CollapsedSurfaceWidth;
-        double targetWindowWidth = _expanded ? 408 : CollapsedWindowWidth;
+        double targetWindowWidth = _expanded ? ExpandedWindowWidth : CollapsedWindowWidth;
         double targetWindowHeight = _expanded ? ExpandedWindowHeight : CollapsedWindowHeight;
 
         // Preserve the anchor during both transitions. The surface moves inside
         // a temporary larger host, so bottom/custom positions do not drift.
         Height = Math.Max(ExpandedWindowHeight, CollapsedWindowHeight);
-        Width = Math.Max(408, CollapsedWindowWidth);
+        Width = Math.Max(ExpandedWindowWidth, CollapsedWindowWidth);
         Placement.Apply(Height);
         UpdateLayout();
         Rect hostBounds = DisplayService.GetWindowBounds(this);
         scale = DisplayService.GetWindowScale(this);
-        _surfaceOffset.Y = (oldSurfaceTop - hostBounds.Top) / scale - 12;
-        _surfaceOffset.X = (oldSurfaceLeft - hostBounds.Left) / scale - (Width - oldWidth) / 2;
+        _surfaceOffset.Y = (oldSurfaceTop - hostBounds.Top) / scale / EffectiveHudScale - 12;
+        _surfaceOffset.X = (oldSurfaceLeft - hostBounds.Left) / scale / EffectiveHudScale - (Width / EffectiveHudScale - oldWidth) / 2;
         Rect targetBounds = Placement.DesiredBounds(targetWindowHeight, targetWindowWidth);
-        double targetOffset = (targetBounds.Top - hostBounds.Top) / scale;
-        double targetOffsetX = (targetBounds.Left - hostBounds.Left) / scale + (targetWindowWidth - Width) / 2;
+        double targetOffset = (targetBounds.Top - hostBounds.Top) / scale / EffectiveHudScale;
+        double targetOffsetX = (targetBounds.Left - hostBounds.Left) / scale / EffectiveHudScale + (targetWindowWidth - Width) / EffectiveHudScale / 2;
         UpdateSurfaceRounding();
         if (_expanded)
         {
@@ -231,12 +234,12 @@ public partial class MainWindow : Window
         ExpandedView.BeginAnimation(OpacityProperty, null);
         _surfaceOffset.BeginAnimation(TranslateTransform.YProperty, null);
         _surfaceOffset.BeginAnimation(TranslateTransform.XProperty, null);
-        IslandSurface.Height = (_expanded ? ExpandedWindowHeight : CollapsedWindowHeight) - 24;
+        IslandSurface.Height = (_expanded ? BaseExpandedWindowHeight : BaseCollapsedWindowHeight) - 24;
         IslandSurface.Width = _expanded ? 384 : CollapsedSurfaceWidth;
         ExpandedView.Opacity = _expanded ? 1 : 0;
         _surfaceOffset.X = _surfaceOffset.Y = 0;
         Height = _expanded ? ExpandedWindowHeight : CollapsedWindowHeight;
-        Width = _expanded ? 408 : CollapsedWindowWidth;
+        Width = _expanded ? ExpandedWindowWidth : CollapsedWindowWidth;
         UpdateSurfaceRounding();
         Placement.Apply();
         _transitionCompletion?.TrySetResult();
@@ -406,8 +409,10 @@ public partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        SaveCurrentProfileEdits();
         _closed = true;
         _transitionCompletion?.TrySetCanceled();
+        if (_placement is not null) _placement.DragCompleted -= OnProfileDragCompleted;
         _placement?.Dispose();
         _media.Changed -= OnMediaChanged;
         _system.VolumeChanged -= OnSystemVolumeChanged;

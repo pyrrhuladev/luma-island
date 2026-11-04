@@ -33,7 +33,7 @@ public static class AppearanceVerification
         window.SetAppearance(window.Appearance.Mode, .76);
         MenuItem menu = window.CreateAppearanceMenu();
         int menuItems = menu.Items.Count;
-        if (!menu.HasItems || menuItems != 17)
+        if (!menu.HasItems || menuItems != 19)
             errors.Add("Меню оформления не содержит оба режима, пресеты и настройку прозрачности фона.");
 
         Click(menu, 0);

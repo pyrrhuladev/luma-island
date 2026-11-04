@@ -13,6 +13,7 @@ public sealed class PlacementController : IDisposable
     private readonly Window _window;
     private readonly PlacementStore _store;
     private readonly HwndSource? _source;
+    private readonly Action<DisplayInfo, double>? _beforeApply;
     private volatile bool _disposed;
     private bool _applying;
     private volatile bool _dragging;
@@ -20,12 +21,15 @@ public sealed class PlacementController : IDisposable
     private int _queued;
     public PlacementSettings Settings { get; private set; }
     public IReadOnlyList<DisplayInfo> Displays { get; private set; }
+    public bool IsDragging => _dragging;
+    public event Action? DragCompleted;
     public DisplayInfo CurrentDisplay => DisplayService.Resolve(Settings.MonitorId, Displays);
 
-    public PlacementController(Window window, PlacementStore store)
+    public PlacementController(Window window, PlacementStore store, Action<DisplayInfo, double>? beforeApply = null)
     {
         _window = window;
         _store = store;
+        _beforeApply = beforeApply;
         Settings = store.Load();
         Displays = DisplayService.GetDisplays();
         _source = HwndSource.FromHwnd(new WindowInteropHelper(window).Handle);
@@ -49,6 +53,7 @@ public sealed class PlacementController : IDisposable
         try
         {
             DisplayService.MoveToDisplay(_window, CurrentDisplay);
+            _beforeApply?.Invoke(CurrentDisplay, DisplayService.GetWindowScale(_window));
             var bounds = DesiredBounds(logicalHeight ?? _window.Height);
             DisplayService.MoveWindow(_window, bounds.X, bounds.Y);
         }
@@ -59,6 +64,13 @@ public sealed class PlacementController : IDisposable
     public void SetMonitor(string id) => Change(Settings with { MonitorId = id });
     public void SetLocked(bool locked) => Change(Settings with { Locked = locked });
 
+    public void ApplySettings(PlacementSettings settings)
+    {
+        _window.Dispatcher.VerifyAccess();
+        Settings = PlacementStore.Normalize(settings);
+        Apply(); // Profile selection itself never writes the ordinary placement file.
+    }
+
     public void BeginDrag()
     {
         _dragStart = DisplayService.GetWindowBounds(_window);
@@ -68,8 +80,12 @@ public sealed class PlacementController : IDisposable
     {
         _dragging = false;
         if (_disposed) return;
-        Rect end = DisplayService.GetWindowBounds(_window);
-        if (Math.Abs(end.X - _dragStart.X) > .5 || Math.Abs(end.Y - _dragStart.Y) > .5) CaptureDrag();
+        try
+        {
+            Rect end = DisplayService.GetWindowBounds(_window);
+            if (Math.Abs(end.X - _dragStart.X) > .5 || Math.Abs(end.Y - _dragStart.Y) > .5) CaptureDrag();
+        }
+        finally { DragCompleted?.Invoke(); }
     }
 
     public void CaptureDrag()
