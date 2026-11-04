@@ -14,11 +14,15 @@ public partial class MainWindow
     public event Action<ComponentSettings>? ComponentsChanged;
     public bool HasPerformance => Components.Cpu || Components.Gpu || Components.Memory || Components.Fps
         || Components.GpuTemperature || Components.CpuTemperature || Components.MemoryTemperature;
+    private bool HasHardwareMetrics => Components.Cpu || Components.Gpu || Components.Memory
+        || Components.GpuTemperature || Components.CpuTemperature || Components.MemoryTemperature;
     private double TemperatureRowHeight => (Components.Gpu && Components.GpuTemperature)
         || (Components.Cpu && Components.CpuTemperature) || (Components.Memory && Components.MemoryTemperature) ? 16 : 0;
-    public double CollapsedWindowHeight => (Appearance.Compact
-        ? 44 + (HasPerformance ? 28 + TemperatureRowHeight : 0)
-        : HasPerformance ? 100 + TemperatureRowHeight : 56) + 24;
+    private double HudHeaderHeight => Components.Fps ? Appearance.Compact ? 42 : 50
+        : Components.Time || _batteryVisible || (!Components.Music && !HasHardwareMetrics) ? Appearance.Compact ? 20 : 24 : 0;
+    private double HudMetricsHeight => HasHardwareMetrics ? (Appearance.Compact ? 28 : 40) + TemperatureRowHeight : 0;
+    private double HudMusicHeight => Components.Music ? Appearance.Compact ? 34 : 44 : 0;
+    public double CollapsedWindowHeight => 24 + (Appearance.Compact ? 10 : 12) + HudHeaderHeight + HudMetricsHeight + HudMusicHeight;
     public double ExpandedWindowHeight => 25 + 29 + (Components.Music ? 130 : 0) + (Components.Volume ? 34 : 0)
         + (HasPerformance ? 32 + TemperatureRowHeight : 0) + ChartsHeight + (Components.Date || _batteryVisible ? 26 : 0) + 24;
 
@@ -29,7 +33,8 @@ public partial class MainWindow
         CompactCpu.Text = ExpandedCpu.Text = "CPU —";
         CompactGpu.Text = ExpandedGpu.Text = "GPU —";
         CompactMemory.Text = ExpandedMemory.Text = "RAM —";
-        CompactFps.Text = ExpandedFps.Text = "FPS —";
+        CompactFps.Text = "—";
+        ExpandedFps.Text = "FPS —";
         ApplyComponentVisibility();
         OnMediaChanged(_media.Current);
     }
@@ -51,6 +56,7 @@ public partial class MainWindow
     private void ApplyComponentVisibility()
     {
         ApplyCompactDensity();
+        CompactMusicRow.Visibility = Show(Components.Music);
         CompactArtworkFrame.Visibility = Show(Components.Music);
         CompactArtworkColumn.Width = new GridLength(Components.Music ? Appearance.Compact ? 25 : 30 : 0);
         CompactClock.Visibility = ExpandedClock.Visibility = Show(Components.Time);
@@ -61,16 +67,18 @@ public partial class MainWindow
         MusicInfoRow.Height = new GridLength(Components.Music ? 78 : 0);
         MusicControlsRow.Height = new GridLength(Components.Music ? 52 : 0);
         VolumeRow.Height = new GridLength(Components.Volume ? 34 : 0);
-        CompactPerformance.Visibility = ExpandedPerformance.Visibility = Show(HasPerformance);
+        CompactPerformance.Visibility = Show(HasHardwareMetrics);
+        ExpandedPerformance.Visibility = Show(HasPerformance);
         CompactPerformance.Height = (Appearance.Compact ? 20 : 28) + TemperatureRowHeight;
         PerformanceRow.Height = new GridLength(HasPerformance ? 32 + TemperatureRowHeight : 0);
         ChartsRow.Height = new GridLength(ChartsHeight);
         CompactPerformance.Columns = Math.Max(1, (Components.Cpu || Components.CpuTemperature ? 1 : 0) + (Components.Gpu || Components.GpuTemperature ? 1 : 0)
-            + (Components.Memory || Components.MemoryTemperature ? 1 : 0) + (Components.Fps ? 1 : 0));
+            + (Components.Memory || Components.MemoryTemperature ? 1 : 0));
         CompactCpu.Visibility = ExpandedCpu.Visibility = Show(Components.Cpu || Components.CpuTemperature);
         CompactGpu.Visibility = ExpandedGpu.Visibility = Show(Components.Gpu || Components.GpuTemperature);
         CompactMemory.Visibility = ExpandedMemory.Visibility = Show(Components.Memory || Components.MemoryTemperature);
         CompactFps.Visibility = ExpandedFps.Visibility = Show(Components.Fps);
+        CompactFpsPanel.Visibility = Show(Components.Fps);
         FooterRow.Height = new GridLength(Components.Date || _batteryVisible ? 26 : 0);
         RefreshGpuMetric();
         RefreshCpuMemoryMetrics();
@@ -81,6 +89,10 @@ public partial class MainWindow
     private void RefreshComponentSize()
     {
         CompleteTransition();
+        HudHeaderRow.Height = new GridLength(HudHeaderHeight);
+        HudHeader.Visibility = Show(HudHeaderHeight > 0);
+        HudMetricsRow.Height = new GridLength(HudMetricsHeight);
+        HudMusicRow.Height = new GridLength(HudMusicHeight);
         IslandSurface.Height = (_expanded ? ExpandedWindowHeight : CollapsedWindowHeight) - 24;
         IslandSurface.Width = _expanded ? 384 : CollapsedSurfaceWidth;
         Height = _expanded ? ExpandedWindowHeight : CollapsedWindowHeight;
@@ -185,8 +197,10 @@ public partial class MainWindow
         if (!Dispatcher.CheckAccess()) { _ = Dispatcher.BeginInvoke(new Action(() => ApplyFps(snapshot))); return; }
         if (_closed) return;
         RecordFpsHistory(snapshot);
-        CompactFps.Text = ExpandedFps.Text = snapshot.Fps is >= 0 && double.IsFinite(snapshot.Fps.Value)
-            ? $"{snapshot.Fps.Value:0} FPS" : "FPS —";
+        bool valid = snapshot.Fps is >= 0 && double.IsFinite(snapshot.Fps.Value);
+        CompactFps.Text = valid ? snapshot.Fps!.Value.ToString("0", _culture) : "—";
+        ExpandedFps.Text = valid ? $"{snapshot.Fps!.Value:0} FPS" : "FPS —";
+        System.Windows.Automation.AutomationProperties.SetName(CompactFpsPanel, valid ? CompactFps.Text + " FPS" : "FPS: нет данных");
         CompactFps.ToolTip = ExpandedFps.ToolTip = string.IsNullOrEmpty(snapshot.ProcessName)
             ? snapshot.Status : $"{snapshot.ProcessName} · {snapshot.Status}";
     }

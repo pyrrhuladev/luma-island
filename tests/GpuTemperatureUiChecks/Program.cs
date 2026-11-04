@@ -130,8 +130,9 @@ internal static class Program
             window.ApplyFps(new FpsSnapshot(144, "Test fixture", "Synthetic UI fixture"));
             Text(window, "CompactClock").Text = Text(window, "ExpandedClock").Text = "21:48";
             await SettleAsync(window);
-            Check(compact.Columns == 4 && VisibleTextCount(compact) == 4,
-                "Four metrics retain four columns when GPU temperature is also enabled");
+            Check(compact.Columns == 3 && VisibleTextCount(compact) == 3 &&
+                ((FrameworkElement)window.FindName("CompactFpsPanel")).Visibility == Visibility.Visible,
+                "Three hardware columns and a separate FPS headline remain visible with GPU temperature");
             foreach (double scale in new[] { 1d, 1.5, 2d })
             {
                 CheckLabels(window, "CompactPerformance", scale);

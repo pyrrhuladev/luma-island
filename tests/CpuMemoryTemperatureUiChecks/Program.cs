@@ -107,7 +107,7 @@ internal static class Program
                 (Name: "temperatures", Settings: Empty with { CpuTemperature = true, MemoryTemperature = true, Charts = true }, Cpu: "CPU68°C", Ram: "RAM41°C", Columns: 2),
                 (Name: "cpu-load-temp", Settings: Empty with { Cpu = true, CpuTemperature = true }, Cpu: "CPU18%68°C", Ram: "RAM", Columns: 1),
                 (Name: "ram-load-temp", Settings: Empty with { Memory = true, MemoryTemperature = true }, Cpu: "CPU", Ram: "RAM42%41°C", Columns: 1),
-                (Name: "all-metrics", Settings: Empty with { Cpu = true, Gpu = true, Memory = true, Fps = true, CpuTemperature = true, GpuTemperature = true, MemoryTemperature = true, Charts = true }, Cpu: "CPU18%68°C", Ram: "RAM42%41°C", Columns: 4)
+                (Name: "all-metrics", Settings: Empty with { Cpu = true, Gpu = true, Memory = true, Fps = true, CpuTemperature = true, GpuTemperature = true, MemoryTemperature = true, Charts = true }, Cpu: "CPU18%68°C", Ram: "RAM42%41°C", Columns: 3)
             };
             foreach (bool compact in new[] { false, true })
             {

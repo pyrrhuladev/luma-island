@@ -7,7 +7,7 @@ namespace Luma.Island.Services;
 
 public enum IslandAppearance { Matte, Glass }
 
-public sealed record AppearanceSettings(IslandAppearance Mode = IslandAppearance.Matte, double GlassOpacity = .76, bool Compact = false)
+public sealed record AppearanceSettings(IslandAppearance Mode = IslandAppearance.Glass, double GlassOpacity = .40, bool Compact = false)
 {
     public static AppearanceSettings Default { get; } = new();
 }
@@ -15,8 +15,8 @@ public sealed record AppearanceSettings(IslandAppearance Mode = IslandAppearance
 /// <summary>Independent appearance preferences, replaced atomically after a complete write.</summary>
 public sealed class AppearanceStore
 {
-    public const double MinOpacity = .25;
-    public const double MaxOpacity = .9;
+    public const double MinOpacity = .05;
+    public const double MaxOpacity = 1;
 
     private readonly string _path;
     private static readonly JsonSerializerOptions JsonOptions = new()

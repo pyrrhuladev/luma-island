@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using Luma.Island.Services;
@@ -11,12 +12,14 @@ public partial class MainWindow
 {
     private static readonly DropShadowEffect StrongGlassTextShadow = CreateGlassTextShadow(.85);
     private AppearanceStore _appearanceStore = null!;
+    private AppearanceSettings _savedAppearance = AppearanceSettings.Default;
     public AppearanceSettings Appearance { get; private set; } = AppearanceSettings.Default;
 
     private void InitializeAppearance(AppearanceStore store)
     {
         _appearanceStore = store;
         Appearance = store.Load();
+        _savedAppearance = Appearance;
         ApplyAppearance();
     }
 
@@ -31,23 +34,25 @@ public partial class MainWindow
 
     private void SaveAppearance()
     {
-        if (!_appearanceStore.Save(Appearance)) System.Windows.MessageBox.Show(
+        if (Appearance == _savedAppearance) return;
+        if (_appearanceStore.Save(Appearance)) _savedAppearance = Appearance;
+        else System.Windows.MessageBox.Show(
             "Оформление изменено, но сохранить выбор не удалось.", "Luma Island", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
     private void ApplyAppearance()
     {
         bool glass = Appearance.Mode == IslandAppearance.Glass;
-        GlassSheen.Visibility = glass ? Visibility.Visible : Visibility.Collapsed;
+        // A flat translucent surface keeps the game visible without a blur pass or sheen layer.
+        GlassSheen.Visibility = Visibility.Collapsed;
         Resources["GlassTextShadow"] = glass && Appearance.GlassOpacity <= .50 ? StrongGlassTextShadow : null;
         if (glass)
         {
             byte alpha = (byte)Math.Round(Appearance.GlassOpacity * 255);
-            bool airy = Appearance.GlassOpacity < .72;
-            Resources["SurfaceFill"] = Gradient(
-                airy ? Color.FromArgb(alpha, 8, 11, 16) : Color.FromArgb(alpha, 23, 31, 40),
-                airy ? Color.FromArgb(alpha, 2, 5, 10) : Color.FromArgb(alpha, 11, 17, 25));
-            Resources["SurfaceStroke"] = Gradient(Color.FromArgb(105, 235, 244, 255), Color.FromArgb(48, 164, 203, 216));
+            var fill = new SolidColorBrush(Color.FromArgb(alpha, 18, 23, 28));
+            fill.Freeze();
+            Resources["SurfaceFill"] = fill;
+            SetBrush("SurfaceStroke", "#00000000");
             SetBrush("TextPrimary", "#FFFFFF");
             SetBrush("TextSecondary", "#F0F4F8");
             SetBrush("Muted", "#E4EBF2");
@@ -59,8 +64,8 @@ public partial class MainWindow
         }
         else
         {
-            SetBrush("SurfaceFill", "#161A1F");
-            SetBrush("SurfaceStroke", "#343A41");
+            SetBrush("SurfaceFill", "#12171C");
+            SetBrush("SurfaceStroke", "#00000000");
             SetBrush("TextPrimary", "#F0F3F5");
             SetBrush("TextSecondary", "#C7CFD5");
             SetBrush("Muted", "#989FA8");
@@ -92,13 +97,6 @@ public partial class MainWindow
         return shadow;
     }
 
-    private static LinearGradientBrush Gradient(Color top, Color bottom)
-    {
-        var brush = new LinearGradientBrush(top, bottom, new Point(0, 0), new Point(0, 1));
-        brush.Freeze();
-        return brush;
-    }
-
     public MenuItem CreateAppearanceMenu()
     {
         var menu = new MenuItem { Header = "Оформление" };
@@ -115,7 +113,9 @@ public partial class MainWindow
             foreach (var preset in new[]
             {
                 ("Прозрачность 10%", .90), ("Прозрачность 24%", .76), ("Прозрачность 35%", .65),
-                ("Прозрачность 50%", .50), ("Прозрачность 65%", .35), ("Прозрачность 75%", .25)
+                ("Прозрачность 50%", .50), ("Прозрачность 65%", .35), ("Прозрачность 75%", .25),
+                ("Прозрачность 0%", 1.0), ("Прозрачность 60%", .40),
+                ("Прозрачность 85%", .15), ("Прозрачность 95%", .05)
             })
             {
                 var item = new MenuItem { Header = preset.Item1, IsCheckable = true,
@@ -124,12 +124,48 @@ public partial class MainWindow
                 menu.Items.Add(item);
             }
             menu.Items.Add(new Separator());
+            menu.Items.Add(CreateTransparencyControl());
+            menu.Items.Add(new Separator());
             var compact = new MenuItem { Header = "Компактная капсула", IsCheckable = true, IsChecked = Appearance.Compact };
             compact.Click += (_, _) => SetCompactMode(compact.IsChecked);
             menu.Items.Add(compact);
         }
         Populate();
         menu.SubmenuOpened += (_, e) => { if (ReferenceEquals(e.OriginalSource, menu)) Populate(); };
+        menu.SubmenuClosed += (_, e) => { if (ReferenceEquals(e.OriginalSource, menu)) SaveAppearance(); };
         return menu;
+    }
+
+    private MenuItem CreateTransparencyControl()
+    {
+        double transparency = Appearance.Mode == IslandAppearance.Glass
+            ? Math.Round((1 - Appearance.GlassOpacity) * 100) : 0;
+        var label = new TextBlock { Text = $"Прозрачность фона: {transparency:0}%", Margin = new Thickness(0, 0, 0, 6) };
+        var slider = new Slider
+        {
+            Name = "BackgroundTransparencySlider", Minimum = 0, Maximum = 95,
+            Value = transparency, TickFrequency = 1, IsSnapToTickEnabled = true,
+            SmallChange = 1, LargeChange = 5, Width = 230, IsMoveToPointEnabled = true,
+            ToolTip = "Меняется только фон. Текст и кнопки остаются непрозрачными."
+        };
+        System.Windows.Automation.AutomationProperties.SetName(slider, "Прозрачность фона, проценты");
+        slider.ValueChanged += (_, _) =>
+        {
+            double value = Math.Round(slider.Value);
+            label.Text = $"Прозрачность фона: {value:0}%";
+            Appearance = AppearanceStore.Normalize(Appearance with
+            {
+                Mode = IslandAppearance.Glass, GlassOpacity = 1 - value / 100
+            });
+            ApplyAppearance();
+        };
+        slider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler((_, _) => SaveAppearance()));
+        slider.PreviewMouseLeftButtonUp += (_, _) => SaveAppearance();
+        slider.KeyUp += (_, _) => SaveAppearance();
+        slider.LostKeyboardFocus += (_, _) => SaveAppearance();
+        var panel = new StackPanel { Margin = new Thickness(0, 5, 0, 5) };
+        panel.Children.Add(label);
+        panel.Children.Add(slider);
+        return new MenuItem { Header = panel, StaysOpenOnClick = true };
     }
 }

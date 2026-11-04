@@ -14,13 +14,19 @@ var store = new AppearanceStore(path);
 Check(store.Load() == AppearanceSettings.Default, "missing file returns defaults");
 Check(!File.Exists(path), "reading missing settings does not create a file");
 Check(AppearanceStore.Normalize(null) == AppearanceSettings.Default, "null settings normalize");
-Check(AppearanceSettings.Default == new AppearanceSettings(IslandAppearance.Matte, .76), "existing appearance defaults unchanged");
-Check(AppearanceStore.MinOpacity == .25 && AppearanceStore.MaxOpacity == .9, "supported opacity range is .25 through .90");
+Check(AppearanceSettings.Default == new AppearanceSettings(IslandAppearance.Glass, .40), "new installs default to the quiet HUD with 60% background transparency");
+Check(AppearanceStore.MinOpacity == .05 && AppearanceStore.MaxOpacity == 1, "supported background transparency range is zero through 95 percent");
 Check(!store.Load().Compact && !AppearanceSettings.Default.Compact, "missing/default settings leave compact mode disabled");
 Check(!new AppearanceSettings(IslandAppearance.Glass, .35).Compact, "legacy two-argument constructor leaves compact mode disabled");
 File.WriteAllText(path, "{\"mode\":\"Glass\",\"glassOpacity\":0.35}");
 Check(new AppearanceStore(path).Load() == new AppearanceSettings(IslandAppearance.Glass, .35, false),
     "legacy JSON preserves mode/opacity and defaults compact to false");
+File.WriteAllText(path, "{\"mode\":\"Matte\",\"glassOpacity\":0.76,\"compact\":true}");
+Check(new AppearanceStore(path).Load() == new AppearanceSettings(IslandAppearance.Matte, .76, true),
+    "existing matte mode and saved compact density survive the new defaults");
+File.WriteAllText(path, "{\"mode\":\"Glass\",\"glassOpacity\":0.25,\"compact\":true}");
+Check(new AppearanceStore(path).Load() == new AppearanceSettings(IslandAppearance.Glass, .25, true),
+    "existing highest-transparency choice remains exactly as saved");
 
 var glass = new AppearanceSettings(IslandAppearance.Glass, .82);
 Check(store.Save(glass), "valid settings save");
@@ -30,7 +36,7 @@ using (var json = JsonDocument.Parse(File.ReadAllText(path)))
     Check(json.RootElement.GetProperty("mode").GetString() == "Glass", "enum stored as string");
     Check(json.RootElement.GetProperty("glassOpacity").GetDouble() == .82, "camelCase properties");
 }
-foreach (double opacity in new[] { .50, .35, .25 })
+foreach (double opacity in new[] { 1.0, .50, .40, .35, .25, .15, .05 })
 {
     var airy = glass with { GlassOpacity = opacity };
     Check(store.Save(airy), "high-transparency preset saves: " + opacity);
@@ -53,7 +59,7 @@ Check(AppearanceStore.Normalize(new AppearanceSettings((IslandAppearance)999, .3
     new AppearanceSettings(IslandAppearance.Matte, .35, true), "invalid appearance mode fallback preserves compact mode");
 foreach (double opacity in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
 {
-    var normalized = new AppearanceSettings(IslandAppearance.Glass, .76, true);
+    var normalized = new AppearanceSettings(IslandAppearance.Glass, .40, true);
     Check(AppearanceStore.Normalize(new AppearanceSettings(IslandAppearance.Glass, opacity, true)) == normalized,
         "non-finite opacity normalization preserves compact mode");
     Check(store.Save(new AppearanceSettings(IslandAppearance.Glass, opacity, true)) && new AppearanceStore(path).Load() == normalized,
@@ -84,7 +90,7 @@ Check(AppearanceStore.Normalize(new AppearanceSettings((IslandAppearance)999, .8
 foreach (double opacity in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
 {
     Check(store.Save(glass with { GlassOpacity = opacity }), "non-finite value can be saved safely");
-    Check(new AppearanceStore(path).Load() == (glass with { GlassOpacity = .76 }), "non-finite opacity normalized before serialization");
+    Check(new AppearanceStore(path).Load() == (glass with { GlassOpacity = .40 }), "non-finite opacity normalized before serialization");
 }
 Check(store.Save(glass with { GlassOpacity = -1 }), "save lower bound");
 Check(store.Load().GlassOpacity == AppearanceStore.MinOpacity, "saved lower bound clamped");

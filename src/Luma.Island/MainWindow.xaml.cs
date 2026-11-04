@@ -270,7 +270,7 @@ public partial class MainWindow : Window
         _lastMedia = state;
         if (!Components.Music)
         {
-            CompactTitle.Text = "Luma Island";
+            CompactTitle.Text = string.Empty;
             CompactArtist.Visibility = Visibility.Collapsed;
             CompactArtwork.Source = ExpandedArtwork.Source = null;
             return;
@@ -278,7 +278,7 @@ public partial class MainWindow : Window
         CompactArtist.Visibility = Appearance.Compact ? Visibility.Collapsed : Visibility.Visible;
         CompactTitle.Text = ExpandedTitle.Text = state.HasSession && !string.IsNullOrWhiteSpace(state.Title)
             ? state.Title : "Откройте музыку";
-        CompactArtist.Text = state.HasSession && !string.IsNullOrWhiteSpace(state.Artist) ? state.Artist : "Luma Island";
+        CompactArtist.Text = state.HasSession && !string.IsNullOrWhiteSpace(state.Artist) ? state.Artist : "Системный плеер";
         ExpandedArtist.Text = state.HasSession
             ? (string.IsNullOrWhiteSpace(state.Artist) ? "Системный плеер" : state.Artist)
             : "Плеер появится здесь";

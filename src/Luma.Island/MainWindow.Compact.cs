@@ -22,6 +22,8 @@ public partial class MainWindow
     private void ApplyCompactDensity()
     {
         bool compact = Appearance.Compact;
+        CompactView.Margin = new Thickness(13, compact ? 5 : 6, 13, compact ? 5 : 6);
+        CompactExpandButton.Margin = new Thickness(-13, compact ? -5 : -6, -13, compact ? -5 : -6);
         CompactContentGrid.Width = compact ? 292 : 348;
         CompactArtworkFrame.Width = CompactArtworkFrame.Height = CompactArtwork.Width = CompactArtwork.Height = compact ? 24 : 29;
         CompactArtworkFrame.CornerRadius = new CornerRadius(compact ? 7 : 9);
@@ -40,8 +42,9 @@ public partial class MainWindow
             button.Width = compact ? 22 : 24;
             button.Height = compact ? 26 : 28;
         }
-        CompactPerformance.Margin = compact ? new Thickness(0, 4, 0, 4) : new Thickness(0, 8, 0, 8);
-        CompactCpu.FontSize = CompactGpu.FontSize = CompactMemory.FontSize = CompactFps.FontSize = compact ? 11 : 12;
+        CompactPerformance.Margin = compact ? new Thickness(0, 4, 0, 4) : new Thickness(0, 6, 0, 6);
+        CompactCpu.FontSize = CompactGpu.FontSize = CompactMemory.FontSize = compact ? 11 : 12;
+        CompactFps.FontSize = compact ? 28 : 34;
         CompactCpu.LineHeight = CompactGpu.LineHeight = CompactMemory.LineHeight = compact ? 14 : 16;
         UpdateSurfaceRounding();
     }
@@ -49,7 +52,8 @@ public partial class MainWindow
     private void UpdateSurfaceRounding()
     {
         bool compact = Appearance.Compact && !_expanded;
-        IslandSurface.CornerRadius = new CornerRadius(compact ? 22 : 28);
-        GlassSheen.CornerRadius = new CornerRadius(compact ? 21 : 27);
+        double radius = _expanded ? 20 : compact ? 14 : 16;
+        IslandSurface.CornerRadius = new CornerRadius(radius);
+        GlassSheen.CornerRadius = new CornerRadius(radius - 1);
     }
 }

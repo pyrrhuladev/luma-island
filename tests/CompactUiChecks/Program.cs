@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -95,6 +96,7 @@ internal static class Program
             await Settle(window);
             Check(!window.Topmost && !window.ShowActivated && window.Opacity == 0, "Native test HWND is invisible and never requests activation");
             Check(window.CollapsedWindowWidth == 408 && Surface(window).Width == 376, "Default density retains the 408/376 DIP widths");
+            double normalBasicHeight = Surface(window).Height;
             MenuItem menu = window.CreateAppearanceMenu();
             var compactItem = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Компактная капсула"));
             Check(compactItem.IsCheckable && !compactItem.IsChecked, "Appearance menu exposes an unchecked compact checkbox");
@@ -102,7 +104,8 @@ internal static class Program
             compactItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent, compactItem));
             await Settle(window);
             Check(window.Appearance.Compact && appearance.Load().Compact, "The real checkbox enables and persists compact mode");
-            Check(window.Width == 352 && Surface(window).Width == 320 && Surface(window).Height == 44, "Basic compact capsule is 320 by 44 DIP inside a 352 DIP host");
+            Check(window.Width == 352 && Surface(window).Width == 320 && Surface(window).Height < normalBasicHeight,
+                "Compact HUD reduces the content height and keeps its 320 DIP surface inside a 352 DIP host");
             InjectMedia(window, "Synthetic long track title retained in compact mode", "Synthetic artist");
             Check(Text(window, "CompactTitle").Text == "Synthetic long track title retained in compact mode", "Compact mode preserves the music title");
             Check(Text(window, "CompactArtist").Visibility == Visibility.Collapsed, "Compact mode hides the artist line");
@@ -129,8 +132,11 @@ internal static class Program
             InjectMetrics(window);
             await Settle(window);
             Check(((Border)window.FindName("CompactArtworkFrame")).Width == 24 && ((Image)window.FindName("CompactArtwork")).Width == 24, "Compact artwork frame and image are 24 DIP");
-            Check(new[] { "CompactCpu", "CompactGpu", "CompactMemory", "CompactFps" }.All(name => Text(window, name).FontSize == 11), "Compact metrics use 11 DIP text");
-            Check(((UniformGrid)window.FindName("CompactPerformance")).Columns == 4 && Text(window, "CompactGpu").Text.Contains('\n'), "Four metric columns include a two-line GPU value");
+            Check(new[] { "CompactCpu", "CompactGpu", "CompactMemory" }.All(name => Text(window, name).FontSize == 11), "Compact CPU/GPU/RAM metrics retain readable 11 DIP text");
+            Check(((UniformGrid)window.FindName("CompactPerformance")).Columns == 3 && Text(window, "CompactGpu").Text.Contains('\n'),
+                "CPU/GPU/RAM use three columns while FPS has its own headline");
+            await CheckQuietHud(window);
+            await CheckTransparency(window, appearance);
 
             foreach (IslandPlacement preset in Enum.GetValues<IslandPlacement>().Where(value => value != IslandPlacement.Custom))
             {
@@ -201,6 +207,7 @@ internal static class Program
                 Check(DisplayService.GetWindowBounds(window).Right < 0, "Capture HWND stays offscreen");
                 Check(GetForegroundWindow() != new WindowInteropHelper(window).Handle, "Test HWND never owns foreground focus");
             }
+            await CaptureQuietHud(window);
             Check(media.Current == MediaSnapshot.Empty, "Synthetic UI updates never initialize or change the real media service");
             Check(typeof(MediaService).GetField("_initialization", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(media) is null,
                 "No media initialization is invoked by this harness");
@@ -224,6 +231,136 @@ internal static class Program
         Check(Math.Abs(offset.X) < .01 && Math.Abs(offset.Y) < .01 && !offset.HasAnimatedProperties, label + ": both animated offsets are cleared");
         Check(!ReadPrivate<bool>(window, "_animating"), label + ": no transition remains active");
         Geometry.Add(new { label, scale, actual = Rectangle(actual), expected = Rectangle(expected), compact = window.Appearance.Compact, expanded });
+    }
+    private static async Task CheckQuietHud(MainWindow window)
+    {
+        var hero = (FrameworkElement)window.FindName("CompactFpsPanel");
+        var metrics = (UniformGrid)window.FindName("CompactPerformance");
+        var music = (FrameworkElement)window.FindName("CompactMusicText");
+        foreach (bool compact in new[] { false, true })
+        {
+            window.SetCompactMode(compact);
+            window.SetComponents(Metrics);
+            InjectMedia(window, "Synthetic fixture track", "Synthetic artist");
+            InjectMetrics(window);
+            await Settle(window);
+            Check(Text(window, "CompactFps").Text == "999" && Text(window, "ExpandedFps").Text == "999 FPS" &&
+                Text(window, "CompactFpsUnit").Text == "FPS", "Quiet HUD splits headline FPS value and unit without changing the expanded metric: " + compact);
+            Check(Text(window, "CompactFps").FontSize >= 2 * Text(window, "CompactCpu").FontSize &&
+                !metrics.Children.Contains(Text(window, "CompactFps")), "FPS remains a separate prominent headline: " + compact);
+            Rect fpsBounds = hero.TransformToAncestor(Surface(window)).TransformBounds(new Rect(new Point(), hero.RenderSize));
+            Rect metricBounds = metrics.TransformToAncestor(Surface(window)).TransformBounds(new Rect(new Point(), metrics.RenderSize));
+            Rect musicBounds = music.TransformToAncestor(Surface(window)).TransformBounds(new Rect(new Point(), music.RenderSize));
+            Check(fpsBounds.Bottom <= metricBounds.Top + 1 && metricBounds.Bottom <= musicBounds.Top + 1,
+                "Quiet HUD places FPS above hardware metrics and music without overlap: " + compact);
+            Rect clockBounds = Text(window, "CompactClock").TransformToAncestor(Surface(window)).TransformBounds(
+                new Rect(new Point(), Text(window, "CompactClock").RenderSize));
+            Check(fpsBounds.Left >= 0 && fpsBounds.Top >= 0 && fpsBounds.Right <= clockBounds.Left + 1 &&
+                musicBounds.Bottom <= Surface(window).ActualHeight,
+                "Headline FPS, clock and music remain inside the HUD without overlap: " + compact);
+            Check(((Image)window.FindName("CompactArtwork")).Source is not null &&
+                ((Border)window.FindName("CompactArtworkFrame")).Visibility == Visibility.Visible,
+                "Quiet HUD retains actual album artwork rather than replacing it with branding: " + compact);
+
+            window.SetComponents(Metrics with { Fps = false });
+            await Settle(window);
+            Check(hero.Visibility == Visibility.Collapsed && metrics.Visibility == Visibility.Visible && metrics.Columns == 3,
+                "Disabling FPS removes its headline while retaining the three hardware metrics: " + compact);
+            window.SetComponents(Basic with { Fps = true });
+            await Settle(window);
+            Check(hero.Visibility == Visibility.Visible && metrics.Visibility == Visibility.Collapsed &&
+                !Text(window, "CompactCpu").IsVisible && !Text(window, "CompactGpu").IsVisible && !Text(window, "CompactMemory").IsVisible,
+                "FPS-only mode removes the unused hardware row: " + compact);
+            window.ApplyFps(new FpsSnapshot(null, null, "Synthetic unavailable source"));
+            Check(Text(window, "CompactFps").Text == "—" && Text(window, "ExpandedFps").Text.Contains('—') &&
+                Text(window, "CompactFps").ToolTip is string reason && reason.Contains("Synthetic unavailable source", StringComparison.Ordinal),
+                "Unavailable headline FPS shows a dash and its real source status: " + compact);
+        }
+        window.SetComponents(new ComponentSettings(false, false, false, false, false, false, false, false, false));
+        await Settle(window);
+        Check(!window.HasPerformance && hero.Visibility == Visibility.Collapsed && metrics.Visibility == Visibility.Collapsed &&
+            ((Border)window.FindName("CompactArtworkFrame")).Visibility == Visibility.Collapsed &&
+            ((StackPanel)window.FindName("CompactPlaybackControls")).Visibility == Visibility.Collapsed,
+            "Disabling components leaves no FPS, hardware, artwork or music controls in the collapsed HUD");
+        window.SetCompactMode(true);
+        window.SetComponents(Metrics);
+        InjectMedia(window, "Synthetic fixture track", "Synthetic artist");
+        InjectMetrics(window);
+        await Settle(window);
+    }
+    private static async Task CheckTransparency(MainWindow window, AppearanceStore store)
+    {
+        AppearanceSettings original = window.Appearance;
+        var placement = window.Placement.Settings;
+        Rect bounds = DisplayService.GetWindowBounds(window);
+        MenuItem menu = window.CreateAppearanceMenu();
+        MenuItem control = menu.Items.OfType<MenuItem>().Single(item => item.Header is StackPanel panel &&
+            panel.Children.OfType<Slider>().Any(slider => slider.Name == "BackgroundTransparencySlider"));
+        var panel = (StackPanel)control.Header;
+        Slider slider = panel.Children.OfType<Slider>().Single();
+        Check(control.StaysOpenOnClick && slider.Minimum == 0 && slider.Maximum == 95 && slider.IsSnapToTickEnabled && slider.TickFrequency == 1,
+            "The real appearance menu exposes a precise 0–95% background transparency slider");
+        Check(!string.IsNullOrWhiteSpace(System.Windows.Automation.AutomationProperties.GetName(slider)),
+            "The background transparency slider has an accessible name");
+        slider.Value = 46;
+        await Settle(window);
+        Check(window.Appearance.Mode == IslandAppearance.Glass && Math.Abs(window.Appearance.GlassOpacity - .54) < .0001 &&
+            store.Load() == original && panel.Children.OfType<TextBlock>().Single().Text.Contains("46%", StringComparison.Ordinal),
+            "Slider movement previews arbitrary transparency immediately without writing preferences");
+        Check(window.Resources["SurfaceFill"] is SolidColorBrush preview && preview.Color.A == 138 && Surface(window).Opacity == 1 &&
+            new[] { "CompactFps", "CompactTitle", "CompactCpu", "CompactClock" }.All(name => Text(window, name).Opacity == 1 &&
+                Text(window, name).Foreground is SolidColorBrush brush && brush.Color.A == 255) &&
+            ((System.Windows.Shapes.Path)window.FindName("CompactPlayIcon")).Opacity == 1,
+            "Transparency changes only surface alpha while text and playback glyph opacity remain intact");
+        slider.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+        Check(Math.Abs(store.Load().GlassOpacity - .54) < .0001 && store.Load().Compact == original.Compact,
+            "Finishing a slider drag persists arbitrary 46% transparency without changing density");
+
+        slider.Value = 95;
+        Check(window.Resources["SurfaceFill"] is SolidColorBrush airy && airy.Color.A == 13 && Math.Abs(store.Load().GlassOpacity - .54) < .0001,
+            "The 95% preview uses real background alpha and retains the last committed preference until release");
+        var input = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window)!, 0, Key.Right) { RoutedEvent = Keyboard.KeyUpEvent };
+        slider.RaiseEvent(input);
+        Check(Math.Abs(store.Load().GlassOpacity - .05) < .0001, "Keyboard adjustment commits 95% transparency on key release");
+        slider.Value = 0;
+        Check(window.Resources["SurfaceFill"] is SolidColorBrush opaque && opaque.Color.A == 255,
+            "The 0% endpoint restores a fully opaque surface");
+        menu.RaiseEvent(new RoutedEventArgs(MenuItem.SubmenuClosedEvent, menu));
+        Check(store.Load().Mode == IslandAppearance.Glass && store.Load().GlassOpacity == 1,
+            "Closing the appearance submenu commits its final transparency preview");
+        Check(window.Placement.Settings == placement && Near(DisplayService.GetWindowBounds(window), bounds, 1.1),
+            "Transparency preview and commits preserve saved placement and native window bounds");
+        window.SetAppearance(original.Mode, original.GlassOpacity);
+    }
+    private static async Task CaptureQuietHud(MainWindow window)
+    {
+        if (((FrameworkElement)window.FindName("ExpandedView")).Visibility == Visibility.Visible) await Toggle(window);
+        window.SetComponents(ComponentSettings.Default with
+        {
+            Battery = false, Cpu = true, Gpu = true, Memory = true, Fps = true, Charts = true,
+            CpuTemperature = true, GpuTemperature = true, MemoryTemperature = true
+        });
+        window.SetAppearance(IslandAppearance.Glass, .40);
+        InjectMedia(window, "Night Drive", "Luma Sessions");
+        ApplyMedia.Invoke(window, new object[] { new MediaSnapshot("Night Drive", "Luma Sessions", true, true, true, true, true,
+            ((Image)window.FindName("CompactArtwork")).Source as BitmapSource) });
+        window.ApplyPerformance(new PerformanceSnapshot(18, 65, 42, 28862180229, 68719476736, 61, "Synthetic fixture",
+            58, "ok", 41, "ok"));
+        window.ApplyFps(new FpsSnapshot(184, "Synthetic game", "Synthetic fixture"));
+        Text(window, "CompactClock").Text = Text(window, "ExpandedClock").Text = "21:48";
+        Text(window, "DateLabel").Text = "4 ноября";
+        foreach (bool compact in new[] { false, true })
+        {
+            window.SetCompactMode(compact);
+            await Settle(window);
+            string file = compact ? "quiet-hud-compact.png" : "quiet-hud-normal.png";
+            Save(Render(window, 2), Path.Combine(Output, file));
+            Captures.Add(new { mode = compact ? "quiet-hud-compact" : "quiet-hud-normal", demonstrationData = true, backgroundTransparency = 60, file });
+        }
+        await Toggle(window);
+        Save(Render(window, 2), Path.Combine(Output, "quiet-hud-expanded.png"));
+        Captures.Add(new { mode = "quiet-hud-expanded", demonstrationData = true, backgroundTransparency = 60, file = "quiet-hud-expanded.png" });
+        Check(DisplayService.GetWindowBounds(window).Right < 0, "All Quiet HUD demonstration captures remain offscreen");
     }
     private static void CheckTextBounds(MainWindow window, string panelName, double scale)
     {

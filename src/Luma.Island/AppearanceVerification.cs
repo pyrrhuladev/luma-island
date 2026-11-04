@@ -5,6 +5,7 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -32,13 +33,13 @@ public static class AppearanceVerification
         window.SetAppearance(window.Appearance.Mode, .76);
         MenuItem menu = window.CreateAppearanceMenu();
         int menuItems = menu.Items.Count;
-        if (!menu.HasItems || menuItems != 11)
-            errors.Add("Меню оформления не содержит оба режима и шесть уровней прозрачности.");
+        if (!menu.HasItems || menuItems != 17)
+            errors.Add("Меню оформления не содержит оба режима, пресеты и настройку прозрачности фона.");
 
         Click(menu, 0);
         await SettleAsync(window);
         BitmapSource matteCollapsed = window.CapturePreview();
-        int matteAlpha = AlphaAt(matteCollapsed, 25, 30);
+        int matteAlpha = SurfaceAlpha(window, matteCollapsed);
         if (window.Appearance.Mode != IslandAppearance.Matte || matteAlpha != 255)
             errors.Add($"Матовое оформление не стало непрозрачным: alpha={matteAlpha}.");
         if (AlphaAt(matteCollapsed, 0, 0) != 0)
@@ -48,30 +49,50 @@ public static class AppearanceVerification
         Click(menu, 1);
         await SettleAsync(window);
         BitmapSource glassCollapsed = window.CapturePreview();
-        int glassAlpha = AlphaAt(glassCollapsed, 25, 30);
-        if (window.Appearance.Mode != IslandAppearance.Glass || glassAlpha < 191 || glassAlpha > 198)
+        int glassAlpha = SurfaceAlpha(window, glassCollapsed);
+        if (window.Appearance.Mode != IslandAppearance.Glass || Math.Abs(glassAlpha - 194) > 1)
             errors.Add($"Переключатель стекла не установил ожидаемую альфу .76: alpha={glassAlpha}.");
         if (AlphaAt(glassCollapsed, 0, 0) != 0)
             errors.Add("Снаружи стеклянной капсулы потеряна прозрачность окна.");
         Save(glassCollapsed, Path.Combine(directory, "glass-collapsed.png"));
         placementUnchanged &= SameBounds(collapsedBounds, DisplayService.GetWindowBounds(window));
 
-        var presetAlphas = new int[6];
-        double[] expectedOpacities = { .90, .76, .65, .50, .35, .25 };
+        var presetAlphas = new int[10];
+        double[] expectedOpacities = { .90, .76, .65, .50, .35, .25, 1, .40, .15, .05 };
         for (int index = 0; index < presetAlphas.Length; index++)
         {
             Click(menu, index + 3);
             await SettleAsync(window);
-            presetAlphas[index] = AlphaAt(window.CapturePreview(), 25, 30);
+            presetAlphas[index] = SurfaceAlpha(window, window.CapturePreview());
             int expectedAlpha = (int)Math.Round(expectedOpacities[index] * 255);
-            // The very faint sheen can increase the final alpha by one or two levels.
             if (Math.Abs(window.Appearance.GlassOpacity - expectedOpacities[index]) > .0001 ||
-                Math.Abs(presetAlphas[index] - expectedAlpha) > 4)
+                Math.Abs(presetAlphas[index] - expectedAlpha) > 1)
                 errors.Add($"Пресет стекла {expectedOpacities[index]:0.00} не применился: alpha={presetAlphas[index]}.");
             placementUnchanged &= SameBounds(collapsedBounds, DisplayService.GetWindowBounds(window));
         }
-        for (int i = 1; i < presetAlphas.Length; i++)
+        for (int i = 1; i < 6; i++)
             if (presetAlphas[i] >= presetAlphas[i - 1]) errors.Add("Пресеты прозрачности не дают последовательно уменьшающуюся альфу.");
+
+        if (menu.Items[14] is not MenuItem { Header: StackPanel sliderPanel } ||
+            sliderPanel.Children.Count != 2 || sliderPanel.Children[1] is not Slider slider ||
+            slider.Minimum != 0 || slider.Maximum != 95)
+            errors.Add("В меню нет доступного ползунка прозрачности от 0 до 95 процентов.");
+        else
+        {
+            foreach (int transparency in new[] { 0, 46, 60, 95 })
+            {
+                slider.Value = transparency;
+                await SettleAsync(window);
+                int alpha = SurfaceAlpha(window, window.CapturePreview());
+                int expected = (int)Math.Round((1 - transparency / 100d) * 255);
+                if (window.Appearance.Mode != IslandAppearance.Glass ||
+                    Math.Abs(window.Appearance.GlassOpacity - (1 - transparency / 100d)) > .0001 ||
+                    Math.Abs(alpha - expected) > 1)
+                    errors.Add($"Ползунок прозрачности {transparency}% не изменил только фон: alpha={alpha}.");
+            }
+            slider.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+            placementUnchanged &= SameBounds(collapsedBounds, DisplayService.GetWindowBounds(window));
+        }
 
         Click(menu, 4); // Glass, .76; the default used for comparison.
         await SettleAsync(window);
@@ -82,13 +103,17 @@ public static class AppearanceVerification
         BitmapSource glassExpanded = window.CapturePreview();
         Save(glassExpanded, Path.Combine(directory, "glass-expanded.png"));
 
+        window.SetAppearance(IslandAppearance.Glass, .05);
+        await SettleAsync(window);
+        BitmapSource transparentExpanded = window.CapturePreview();
+        Save(transparentExpanded, Path.Combine(directory, "transparent-expanded.png"));
         if (window.FindName("ExpandedTitle") is TextBlock title)
         {
             Rect titleBounds = title.TransformToAncestor(window).TransformBounds(
                 new Rect(new Point(), title.RenderSize));
             opaqueText = window.Opacity == 1 && title.Opacity == 1 &&
                 title.Foreground is SolidColorBrush foreground && foreground.Color.A == 255 &&
-                CountOpaquePixels(glassExpanded, titleBounds) > 0;
+                CountOpaquePixels(transparentExpanded, titleBounds) > 0;
         }
         if (!opaqueText) errors.Add("Стеклянный фон сделал основной текст полупрозрачным.");
 
@@ -136,6 +161,13 @@ public static class AppearanceVerification
         var pixel = new byte[4];
         source.CopyPixels(new Int32Rect(x, y, 1, 1), pixel, 4, 0);
         return pixel[3];
+    }
+
+    private static int SurfaceAlpha(MainWindow window, BitmapSource source)
+    {
+        var surface = (Border)window.FindName("IslandSurface");
+        Point point = surface.TransformToAncestor(window).Transform(new Point(surface.ActualWidth / 2, 3));
+        return AlphaAt(source, (int)Math.Round(point.X), (int)Math.Round(point.Y));
     }
 
     private static int CountOpaquePixels(BitmapSource source, Rect logicalBounds)
