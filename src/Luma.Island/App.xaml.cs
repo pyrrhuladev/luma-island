@@ -180,12 +180,12 @@ public partial class App : System.Windows.Application
 
     private void CreateTray()
     {
-        _tray = new TrayService(_island!, ToggleVisible, () =>
+        var island = _island ?? throw new InvalidOperationException("HUD is not initialized.");
+        _tray = new TrayService(island, ToggleVisible, () =>
         {
-            _island!.RestoreForInteraction(); _island.ToggleExpanded();
-        }, () => Shutdown(), _island!.CreatePositionMenu, _island!.CreateAppearanceMenu, _island!.CreateComponentsMenu,
-            _island!.CreateAutostartMenu, _island!.RefreshAutostartMenus, _island!.RestoreForInteraction,
-            _island!.CreateInputMenuItem, _island!.CreateProfilesMenu, _island!.CreateHudEditorMenuItem);
+            island.RestoreForInteraction(); island.ToggleExpanded();
+        }, () => Shutdown(), showVisible: island.RestoreForInteraction,
+            inputMenuFactory: island.CreateInputMenuItem, hudEditorMenuFactory: island.CreateSettingsMenuItem);
         _tray.RegistrationChanged += OnTrayRegistrationChanged;
         _island.InputModeChanged += OnInputModeChanged;
     }

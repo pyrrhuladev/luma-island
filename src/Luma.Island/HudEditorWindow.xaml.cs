@@ -1,12 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Luma.Island.Services;
+using Luma.Island.Settings;
 
 namespace Luma.Island;
 
@@ -20,30 +23,59 @@ public partial class HudEditorWindow : Window
     private AppearanceSettings? _renderedAppearance;
     private ComponentSettings? _renderedComponents;
     private bool _ready, _closed;
+    private readonly SettingsSectionRegistry _sections = new();
+    private readonly ObservableCollection<SettingsSectionDefinition> _filteredSections = new();
+    private readonly Dictionary<string, TabItem> _sectionTabs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SettingsApplicationPages? _applicationPages;
+    private readonly SettingsEditorContext? _context;
+    private readonly AppearanceSettings _initialAppearance;
+    private readonly ComponentSettings _initialComponents;
+    private readonly SettingsApplicationDraft? _initialApplication;
+    private readonly string _initialTargetName;
+    private bool _navigationReady, _selectingNavigation, _showWidePreview = true, _focusedPreview, _extensionDirty;
 
     public AppearanceSettings DraftAppearance { get; private set; }
     public ComponentSettings DraftComponents { get; private set; }
     public bool PreviewAvailable { get; private set; }
     public bool HasPendingPreview => _previewTimer.IsEnabled;
+    public ReadOnlyObservableCollection<SettingsSectionDefinition> Sections => _sections.Sections;
+    public IReadOnlyList<SettingsSectionDefinition> FilteredSections => _filteredSections;
+    public string? SelectedSectionId { get; private set; }
+    public SettingsApplicationDraft? DraftApplication => _applicationPages?.Capture();
+    public bool HasUnsavedChanges => _extensionDirty || DraftAppearance != _initialAppearance || DraftComponents != _initialComponents
+        || !SameApplicationDraft(_initialApplication, DraftApplication);
 
     public HudEditorWindow(AppearanceSettings appearance, ComponentSettings components, string targetName,
-        Func<AppearanceSettings, ComponentSettings, BitmapSource> preview)
+        Func<AppearanceSettings, ComponentSettings, BitmapSource> preview, SettingsEditorContext? context = null)
     {
         _preview = preview ?? throw new ArgumentNullException(nameof(preview));
         DraftAppearance = AppearanceStore.Normalize(appearance);
         DraftComponents = components ?? ComponentSettings.Default;
+        _initialAppearance = DraftAppearance;
+        _initialComponents = DraftComponents;
+        _context = context;
+        _initialTargetName = string.IsNullOrWhiteSpace(targetName) ? "Общий HUD" : targetName;
         _previewTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
             { Interval = TimeSpan.FromMilliseconds(100) };
         _previewTimer.Tick += OnPreviewTick;
         InitializeComponent();
-        TargetNameText.Text = string.IsNullOrWhiteSpace(targetName) ? "Общий HUD" : targetName;
+        if (context is not null)
+        {
+            _applicationPages = new SettingsApplicationPages(context, CurrentHudDraft, OnApplicationDraftChanged, () => this);
+            _initialApplication = _applicationPages.Capture();
+        }
+        TargetNameText.Text = _initialTargetName;
         TargetNameText.ToolTip = "Изменения сохранятся здесь: " + TargetNameText.Text;
         BlockOrderList.ItemsSource = _blocks;
         MetricOrderList.ItemsSource = _metrics;
         LoadControls();
         _ready = true;
+        InitializeSections();
+        CommandBindings.Add(new CommandBinding(ApplicationCommands.Find, (_, _) => SettingsSearchBox.Focus()));
+        InputBindings.Add(new KeyBinding(ApplicationCommands.Find, Key.F, ModifierKeys.Control));
         RefreshMoveButtons();
         RenderPreview();
+        UpdateResponsiveLayout();
         Closed += OnEditorClosed;
     }
 
@@ -111,6 +143,7 @@ public partial class HudEditorWindow : Window
     {
         if (!_ready || _closed) return;
         UpdateDraft();
+        UpdateDirtyStatus();
         SchedulePreview();
     }
 
@@ -180,11 +213,9 @@ public partial class HudEditorWindow : Window
                 ? Visibility.Visible : Visibility.Collapsed;
             _renderedAppearance = DraftAppearance;
             _renderedComponents = DraftComponents;
-            UpdatePreviewSize();
+            UpdateResponsiveLayout();
             PreviewAvailable = true;
-            StatusText.Text = "Изменения применятся после сохранения.";
-            StatusText.Foreground = new SolidColorBrush(Color.FromRgb(173, 191, 199));
-            StatusText.ToolTip = null;
+            UpdateDirtyStatus();
             return true;
         }
         catch (Exception exception)
@@ -227,7 +258,22 @@ public partial class HudEditorWindow : Window
         if (_closed) return false;
         UpdateDraft();
         _previewTimer.Stop();
-        return RenderPreview();
+        try
+        {
+            foreach (var section in _sections.Sections) section.CaptureDraft?.Invoke();
+            string? applicationError = _applicationPages?.Validate();
+            if (applicationError is not null) { SelectSection("profiles"); ShowStatusError(applicationError); return false; }
+            foreach (var section in _sections.Sections)
+            {
+                string? error = section.Validate?.Invoke();
+                if (error is null) continue;
+                SelectSection(section.Id);
+                ShowStatusError(error);
+                return false;
+            }
+            return RenderPreview();
+        }
+        catch (Exception error) { ShowStatusError("Не удалось проверить изменения. Они ещё не сохранены.", error.Message); return false; }
     }
 
     private void OnSave(object sender, RoutedEventArgs e)
@@ -278,6 +324,232 @@ public partial class HudEditorWindow : Window
         _closed = true;
         _previewTimer.Stop();
         _previewTimer.Tick -= OnPreviewTick;
+        foreach (var section in _sections.Sections)
+            try { section.ReleaseContent(); } catch (Exception error) { App.Log(error); }
+    }
+
+    private HudProfileSettings CurrentHudDraft() => new(DraftAppearance, DraftComponents,
+        _applicationPages?.Capture().Placement ?? _context?.Placement ?? PlacementSettings.Default);
+
+    private void OnApplicationDraftChanged()
+    {
+        if (!_ready || _closed) return;
+        if (_context?.ActiveProfileId is { } activeId && DraftApplication is { } draft)
+        {
+            var active = draft.Profiles.Profiles.FirstOrDefault(profile => profile.Id == activeId);
+            TargetNameText.Text = active is null ? "Активный профиль удалён" : !draft.Profiles.Enabled ? "Общий HUD после сохранения" : active.Name;
+            TargetNameText.ToolTip = active is null
+                ? "После сохранения вернутся общие настройки. Изменения вида удалённого профиля не сохранятся."
+                : "Изменения HUD сохранятся здесь: " + TargetNameText.Text;
+        }
+        UpdateDirtyStatus();
+    }
+
+    private void InitializeSections()
+    {
+        RegisterBuiltIn("appearance", "Внешний вид", "Фон, масштаб, текст и расстояния между блоками.",
+            "стекло матовое прозрачность размер шрифт компактная капсула", AppearanceTab);
+        RegisterBuiltIn("layout", "Раскладка", "Порядок блоков и показателей, число элементов в строке.",
+            "порядок музыка заголовок cpu gpu ram строки колонки расположение", LayoutTab);
+        RegisterBuiltIn("components", "Показатели", "Выбери, что должно быть видно во время игры.",
+            "музыка громкость время дата часы батарея fps фпс low кадр фреймтайм cpu gpu ram процессор видеокарта оперативка озу нагрузка температура память графики", ComponentsTab);
+        RegisterBuiltIn("alerts", "Предупреждения", "Тихий индикатор температуры и серий просадок.",
+            "порог температура перегрев просадки задержки кадры фреймтайм фриз статтер уведомления", AlertsTab);
+        RegisterBuiltIn("placement", "Положение", "Монитор, точка привязки и защита от случайного перемещения.",
+            "монитор экран позиция угол центр закрепить перетаскивание", PlacementTab,
+            () => _applicationPages?.CreatePositionPage() ?? UnavailableApplicationPage());
+        RegisterBuiltIn("profiles", "Профили игр", "Свой HUD для каждой игры и автоматическое переключение.",
+            "игра exe процесс профиль автопереключение добавить удалить имя переименовать путь", ProfilesTab,
+            () => _applicationPages?.CreateProfilesPage() ?? UnavailableApplicationPage());
+        RegisterBuiltIn("application", "Приложение", "Автозапуск Windows, датчики и управление HUD.",
+            "автозагрузка запуск windows датчики установка cpu ram горячие клавиши трей версия", ApplicationTab,
+            () => _applicationPages?.CreateApplicationPage() ?? UnavailableApplicationPage());
+        SettingsNavigation.ItemsSource = _filteredSections;
+        _navigationReady = true;
+        ApplySearch();
+    }
+
+    private static FrameworkElement UnavailableApplicationPage() => new Border
+    {
+        Padding = new Thickness(18), CornerRadius = new CornerRadius(10),
+        Background = new SolidColorBrush(Color.FromRgb(25, 36, 43)),
+        Child = new TextBlock { Text = "Параметры приложения доступны при открытии настроек из Luma.", TextWrapping = TextWrapping.Wrap }
+    };
+
+    private void RegisterBuiltIn(string id, string title, string description, string keywords, TabItem tab,
+        Func<FrameworkElement>? factory = null)
+    {
+        _sections.Register(new SettingsSectionDefinition(id, title, description, keywords,
+            factory ?? (() => (FrameworkElement)tab.Content)));
+        _sectionTabs.Add(id, tab);
+    }
+
+    /// <summary>Adds an internal settings page without changing navigation or preview infrastructure.</summary>
+    public void RegisterSection(SettingsSectionDefinition section)
+    {
+        VerifyAccess();
+        ObjectDisposedException.ThrowIf(_closed, this);
+        _sections.Register(section);
+        var tab = new TabItem { Header = section.Title };
+        _sectionTabs.Add(section.Id, tab);
+        EditorTabs.Items.Add(tab);
+        ApplySearch();
+    }
+
+    public void NotifyDraftChanged(bool updatePreview = false)
+    {
+        VerifyAccess();
+        if (_closed) return;
+        _extensionDirty = true;
+        UpdateDirtyStatus();
+        if (updatePreview) SchedulePreview();
+    }
+
+    public bool SelectSection(string id)
+    {
+        VerifyAccess();
+        if (_closed || _sections.Find(id) is not { } section) return false;
+        bool wasSelecting = _selectingNavigation;
+        try
+        {
+            var content = section.GetContent();
+            TabItem tab = _sectionTabs[section.Id];
+            if (tab.Content is null) tab.Content = content;
+            _selectingNavigation = true;
+            if (!_filteredSections.Contains(section)) { SettingsSearchBox.Text = string.Empty; ApplySearch(); }
+            EditorTabs.SelectedItem = tab;
+            SettingsNavigation.SelectedItem = section;
+            SelectedSectionId = section.Id;
+            ActiveSectionTitle.Text = section.Title;
+            ActiveSectionDescription.Text = section.Description;
+            _focusedPreview = false;
+            UpdateResponsiveLayout();
+            return true;
+        }
+        catch (Exception error)
+        {
+            _selectingNavigation = true;
+            SettingsNavigation.SelectedItem = _sections.Find(SelectedSectionId ?? string.Empty);
+            ShowStatusError("Не удалось открыть раздел настроек.", error.Message);
+            return false;
+        }
+        finally { _selectingNavigation = wasSelecting; }
+    }
+
+    public IReadOnlyList<SettingsSectionDefinition> SearchSections(string? query)
+    {
+        VerifyAccess();
+        string text = query ?? string.Empty;
+        if (SettingsSearchBox.Text == text) ApplySearch(); else SettingsSearchBox.Text = text;
+        return _filteredSections.ToArray();
+    }
+
+    public object? FindSettingsControl(string name)
+    {
+        if (FindName(name) is { } existing) return existing;
+        if (_applicationPages?.FindControl(name) is { } applicationControl) return applicationControl;
+        foreach (var section in _sections.Sections)
+            if (section.IsContentCreated && FindElement(section.GetContent(), name) is { } extensionControl) return extensionControl;
+        return null;
+    }
+
+    private static FrameworkElement? FindElement(DependencyObject root, string name)
+    {
+        if (root is FrameworkElement element && element.Name == name) return element;
+        foreach (object child in LogicalTreeHelper.GetChildren(root))
+            if (child is DependencyObject node && FindElement(node, name) is { } found) return found;
+        return null;
+    }
+
+    private void OnSearchChanged(object sender, TextChangedEventArgs e) { if (_navigationReady && !_closed) ApplySearch(); }
+    private void ApplySearch()
+    {
+        if (!_navigationReady || _closed) return;
+        var matches = _sections.Search(SettingsSearchBox.Text);
+        var previous = _sections.Find(SelectedSectionId ?? string.Empty);
+        bool wasSelecting = _selectingNavigation;
+        _selectingNavigation = true;
+        _filteredSections.Clear();
+        foreach (var section in matches) _filteredSections.Add(section);
+        NoSearchResults.Visibility = matches.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        SettingsNavigation.Visibility = matches.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        _selectingNavigation = wasSelecting;
+        if (matches.Count == 0) return;
+        SelectSection(previous is not null && matches.Contains(previous) ? previous.Id : matches[0].Id);
+    }
+
+    private void OnNavigationChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_navigationReady && !_selectingNavigation && SettingsNavigation.SelectedItem is SettingsSectionDefinition section)
+            SelectSection(section.Id);
+    }
+
+    private void OnEditorTabChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_navigationReady || _selectingNavigation || !ReferenceEquals(e.Source, EditorTabs)) return;
+        var entry = _sectionTabs.FirstOrDefault(pair => pair.Value == EditorTabs.SelectedItem);
+        if (entry.Key is not null) SelectSection(entry.Key);
+    }
+
+    private void OnSettingsKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && SettingsSearchBox.IsKeyboardFocusWithin && SettingsSearchBox.Text.Length > 0)
+        { SettingsSearchBox.Clear(); e.Handled = true; }
+    }
+
+    private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e) { if (_ready) UpdateResponsiveLayout(); }
+    private void OnSettingsBodySizeChanged(object sender, SizeChangedEventArgs e) { if (_ready) UpdateResponsiveLayout(); }
+    private void OnTogglePreview(object sender, RoutedEventArgs e)
+    {
+        if (_focusedPreview) _focusedPreview = false;
+        else if (IsNarrow()) _focusedPreview = true;
+        else _showWidePreview = !_showWidePreview;
+        UpdateResponsiveLayout();
+    }
+    private void OnExpandPreview(object sender, RoutedEventArgs e)
+    {
+        _focusedPreview = !_focusedPreview;
+        UpdateResponsiveLayout();
+    }
+    private bool IsNarrow() => (ActualWidth > 0 ? ActualWidth : Width) < 1000;
+    private void UpdateResponsiveLayout()
+    {
+        if (PreviewPane is null || SettingsContentPanel is null) return;
+        bool narrow = IsNarrow(), visible = _focusedPreview || (!narrow && _showWidePreview);
+        PreviewColumn.Width = new GridLength(!_focusedPreview && !narrow && visible ? 270 : 0);
+        PreviewGapColumn.Width = new GridLength(!_focusedPreview && !narrow && visible ? 18 : 0);
+        Grid.SetColumn(PreviewPane, _focusedPreview || narrow ? 2 : 4);
+        PreviewPane.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        SettingsContentPanel.Visibility = _focusedPreview ? Visibility.Collapsed : Visibility.Visible;
+        PreviewPane.VerticalAlignment = _focusedPreview ? VerticalAlignment.Stretch : VerticalAlignment.Top;
+        PreviewDetails.Visibility = _focusedPreview ? Visibility.Collapsed : Visibility.Visible;
+        double availableHeight = SettingsBody.ActualHeight > 0 ? SettingsBody.ActualHeight : Math.Max(120, Height - 180);
+        double detailsHeight = AlertPreviewCaption.Visibility == Visibility.Visible ? 120 : 100;
+        PreviewSurface.Height = _focusedPreview ? Math.Clamp(availableHeight - detailsHeight, 50, 400) : 260;
+        PreviewDataCaption.Text = _focusedPreview ? "Уменьшенный предпросмотр · примерные данные." : "Предпросмотр уменьшен; данные приведены для примера.";
+        TogglePreviewButton.Content = _focusedPreview ? "К настройкам" : visible ? "Скрыть предпросмотр" : "Предпросмотр";
+        ExpandPreviewButton.Content = _focusedPreview ? "Свернуть" : "Крупнее";
+        UpdatePreviewSize();
+    }
+
+    private static bool SameApplicationDraft(SettingsApplicationDraft? a, SettingsApplicationDraft? b)
+    {
+        if (a is null || b is null) return a == b;
+        return a.Placement == b.Placement && a.AutostartRegistered == b.AutostartRegistered
+            && a.Profiles.Enabled == b.Profiles.Enabled && a.Profiles.Profiles.SequenceEqual(b.Profiles.Profiles);
+    }
+    private void UpdateDirtyStatus()
+    {
+        if (StatusText is null) return;
+        StatusText.Text = HasUnsavedChanges ? "Есть несохранённые изменения." : "Изменения применятся после сохранения.";
+        StatusText.Foreground = new SolidColorBrush(Color.FromRgb(173, 191, 199));
+        StatusText.ToolTip = null;
+    }
+    private void ShowStatusError(string message, string? details = null)
+    {
+        StatusText.Text = message;
+        StatusText.Foreground = new SolidColorBrush(Color.FromRgb(242, 194, 150));
+        StatusText.ToolTip = details;
     }
 
     private sealed record OrderEntry(string Id, string Label);

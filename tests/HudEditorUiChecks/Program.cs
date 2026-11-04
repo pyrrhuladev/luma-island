@@ -126,12 +126,12 @@ internal static class Program
             CheckPixels((BitmapSource)Named<Image>(editor, "HudPreviewImage").Source,
                 "Custom rows, reordered blocks and hidden music still produce a nonempty native preview");
 
-            editor.Width = 940; editor.Height = 760; editor.UpdateLayout();
+            editor.Width = 1120; editor.Height = 780; editor.UpdateLayout();
             SaveEditor(editor, "hud-editor-appearance.png");
             Named<TabControl>(editor, "EditorTabs").SelectedItem = Named<TabItem>(editor, "AlertsTab");
             await Settle(); editor.UpdateLayout();
             SaveEditor(editor, "hud-editor-alerts.png");
-            editor.Width = 720; editor.Height = 420; editor.UpdateLayout();
+            editor.Width = 760; editor.Height = 420; editor.UpdateLayout();
             await Settle();
             CheckInside(Named<Button>(editor, "SaveDraftButton"), (FrameworkElement)editor.Content,
                 "Save remains inside the visible footer at the smallest editor size");
@@ -342,7 +342,8 @@ internal static class Program
         {
             context.DrawRectangle(editor.Background, null, new Rect(0, 0, root.ActualWidth + root.Margin.Left + root.Margin.Right,
                 root.ActualHeight + root.Margin.Top + root.Margin.Bottom));
-            var brush = new VisualBrush(root) { Stretch = Stretch.Fill };
+            var brush = new VisualBrush(root) { Stretch = Stretch.Fill, ViewboxUnits = BrushMappingMode.Absolute,
+                Viewbox = new Rect(0, 0, root.ActualWidth, root.ActualHeight) };
             context.DrawRectangle(brush, null, new Rect(root.Margin.Left, root.Margin.Top, root.ActualWidth, root.ActualHeight));
         }
         var bitmap = new RenderTargetBitmap(Math.Max(1, (int)Math.Ceiling(root.ActualWidth + root.Margin.Left + root.Margin.Right)),

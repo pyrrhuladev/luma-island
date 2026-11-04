@@ -41,20 +41,23 @@ public sealed class TrayService : IDisposable
         _menuOpening = menuOpening;
         _menu = new ContextMenu
         {
-            PlacementTarget = window, Placement = PlacementMode.MousePoint,
-            Background = new SolidColorBrush(Color.FromRgb(28, 32, 38)),
-            Foreground = Brushes.WhiteSmoke, BorderBrush = new SolidColorBrush(Color.FromRgb(58, 66, 75))
+            PlacementTarget = window, Placement = PlacementMode.MousePoint
         };
+        QuickMenuTheme.Apply(_menu);
         _visibilityItem = AddItem(string.Empty, toggleVisible);
         _visibilityItem.InputGestureText = "Ctrl+Alt+Space";
         AddItem("Развернуть / свернуть", toggleExpanded);
         if (inputMenuFactory is not null) _menu.Items.Add(inputMenuFactory());
-        if (profilesMenuFactory is not null) _menu.Items.Add(profilesMenuFactory());
         if (hudEditorMenuFactory is not null) _menu.Items.Add(hudEditorMenuFactory());
-        if (positionMenuFactory is not null) _menu.Items.Add(positionMenuFactory());
-        if (appearanceMenuFactory is not null) _menu.Items.Add(appearanceMenuFactory());
-        if (componentsMenuFactory is not null) _menu.Items.Add(componentsMenuFactory());
-        if (autostartMenuFactory is not null) _menu.Items.Add(autostartMenuFactory());
+        else
+        {
+            // Older embedding callers can still supply individual factories.
+            if (profilesMenuFactory is not null) _menu.Items.Add(profilesMenuFactory());
+            if (positionMenuFactory is not null) _menu.Items.Add(positionMenuFactory());
+            if (appearanceMenuFactory is not null) _menu.Items.Add(appearanceMenuFactory());
+            if (componentsMenuFactory is not null) _menu.Items.Add(componentsMenuFactory());
+            if (autostartMenuFactory is not null) _menu.Items.Add(autostartMenuFactory());
+        }
         _menu.Items.Add(new Separator());
         AddItem("Выход", exit);
         _menu.Closed += OnMenuClosed;

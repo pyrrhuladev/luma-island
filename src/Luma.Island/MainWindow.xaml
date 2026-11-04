@@ -143,7 +143,7 @@
                 <ContextMenu>
                     <MenuItem Header="Показать / свернуть" Click="OnToggleExpanded"/>
                     <Separator/>
-                    <MenuItem Header="Выйти из Luma Island" Click="OnExit"/>
+                    <MenuItem Header="Выход" Click="OnExit"/>
                 </ContextMenu>
             </Border.ContextMenu>
             <Grid>

@@ -58,15 +58,10 @@ public partial class MainWindow : Window
         if (_placement is not null) return;
         _placement = new PlacementController(this, _placementStore, FitHudToDisplay);
         _placement.DragCompleted += OnProfileDragCompleted;
-        IslandSurface.ContextMenu.Items.Insert(1, CreatePositionMenu());
-        IslandSurface.ContextMenu.Items.Insert(2, CreateAppearanceMenu());
-        IslandSurface.ContextMenu.Items.Insert(3, CreateComponentsMenu());
-        IslandSurface.ContextMenu.Items.Insert(4, CreateAutostartMenu());
         InitializeTrayVisibility();
         IslandSurface.ContextMenu.Items.Insert(2, CreateInputMenuItem());
-        IslandSurface.ContextMenu.Items.Insert(3, CreateProfilesMenu());
-        IslandSurface.ContextMenu.Items.Insert(4, CreateHudEditorMenuItem());
-        IslandSurface.ContextMenu.Opened += (_, _) => RefreshAutostartMenus();
+        IslandSurface.ContextMenu.Items.Insert(3, CreateSettingsMenuItem());
+        QuickMenuTheme.Apply(IslandSurface.ContextMenu);
     }
 
     public void ToggleExpanded()

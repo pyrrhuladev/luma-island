@@ -1,19 +1,25 @@
 using System;
+using System.Diagnostics;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Luma.Island.Services;
+using Luma.Island.Settings;
 
 namespace Luma.Island;
 
 public partial class MainWindow
 {
     public bool IsHudEditorOpen { get; private set; }
+    public bool IsSettingsOpen => IsHudEditorOpen;
+    public MenuItem CreateSettingsMenuItem() => CreateHudEditorMenuItem();
+    public void OpenSettings() => OpenHudEditor();
 
     public MenuItem CreateHudEditorMenuItem()
     {
-        var item = new MenuItem { Header = "Редактор HUD и предупреждения…" };
+        var item = new MenuItem { Header = "Настройки…" };
         item.Click += (_, _) => OpenHudEditor();
         return item;
     }
@@ -21,29 +27,98 @@ public partial class MainWindow
     public void OpenHudEditor()
     {
         VerifyAccess();
-        if (_closed || IsProfileEditorOpen || IsHudDragging) return;
+        if (_closed || _placement is null || IsProfileEditorOpen || IsHudDragging) return;
         SaveCurrentProfileEdits();
         IsHudEditorOpen = IsProfileEditorOpen = true;
         ProfileEditorVisibilityChanged?.Invoke(true);
         try
         {
             using var preview = new HudPreviewSession();
+            var context = new SettingsEditorContext(_placement.Settings,
+                _profiles?.BaseSettings ?? CaptureHudSettings(), GameProfileStore.Normalize(GameProfiles), ActiveGameProfileId,
+                _placement.Displays.ToArray(), _autostart.Read(),
+                owner => new SensorSetupWindow { Owner = owner }.ShowDialog(),
+                () => Process.Start(new ProcessStartInfo("ms-settings:startupapps") { UseShellExecute = true }),
+                DisplayService.GetDisplays);
             var editor = new HudEditorWindow(Appearance, Components,
-                _profiles?.ActiveProfile?.Name ?? "Общий HUD", preview.Render) { Owner = this };
+                _profiles?.ActiveProfile?.Name ?? "Общий HUD", preview.Render, context) { Owner = this };
             double availableHeight = Placement.CurrentDisplay.WorkArea.Height / DisplayService.GetWindowScale(this) - 16;
             editor.MaxHeight = Math.Max(editor.MinHeight, availableHeight);
             editor.Height = Math.Min(editor.Height, editor.MaxHeight);
             double availableWidth = Placement.CurrentDisplay.WorkArea.Width / DisplayService.GetWindowScale(this) - 16;
             editor.MaxWidth = Math.Max(editor.MinWidth, availableWidth);
             editor.Width = Math.Min(editor.Width, editor.MaxWidth);
-            if (editor.ShowDialog() == true && !ApplyHudEditorSettings(editor.DraftAppearance, editor.DraftComponents))
-                ShowProfileSaveWarning();
+            if (editor.ShowDialog() == true)
+            {
+                bool saved = editor.DraftApplication is { } application
+                    ? ApplySettingsDraft(editor.DraftAppearance, editor.DraftComponents, application, context.ActiveProfileId)
+                    : ApplyHudEditorSettings(editor.DraftAppearance, editor.DraftComponents);
+                if (!saved) ShowProfileSaveWarning();
+            }
         }
         finally
         {
             IsHudEditorOpen = IsProfileEditorOpen = false;
             ProfileEditorVisibilityChanged?.Invoke(false);
         }
+    }
+
+    public bool ApplySettingsDraft(AppearanceSettings appearance, ComponentSettings components,
+        SettingsApplicationDraft application, string? expectedActiveProfileId)
+    {
+        VerifyAccess();
+        if (_closed || _placement is null) return false;
+        if (_profiles is not null && _profiles.ActiveProfileId != expectedActiveProfileId)
+        {
+            App.Log(new InvalidOperationException("The settings target changed while its draft was open."));
+            return false;
+        }
+        CompleteTransition();
+        var edited = new HudProfileSettings(AppearanceStore.Normalize(appearance with { ClickThrough = Appearance.ClickThrough }),
+            components, PlacementStore.Normalize(application.Placement));
+        bool saved;
+        if (_profiles is not null)
+        {
+            var plan = SettingsCommitPlan.Create(_profiles.BaseSettings, expectedActiveProfileId, edited, application.Profiles);
+            saved = _profiles.ReplaceSettings(plan.Profiles);
+            _profiles.Activate(plan.ActiveProfileId);
+            using (_profiles.SuppressWrites()) ApplySettingsView(plan.VisibleHud);
+            if (plan.SaveHudAsGlobal || plan.ActiveProfileId is not null)
+                saved &= _profiles.CaptureCurrent(CaptureHudSettings());
+        }
+        else
+        {
+            ApplySettingsView(edited);
+            saved = _appearanceStore.Save(Appearance) & _componentStore.Save(Components) & _placementStore.Save(_placement.Settings);
+        }
+        if (saved) _savedAppearance = Appearance;
+        if (application.AutostartChanged)
+        {
+            try
+            {
+                var startup = _autostart.Read();
+                if (startup.Error is not null) throw new InvalidOperationException(startup.Error);
+                if (startup.Registered != application.AutostartRegistered)
+                    _autostart.SetEnabled(application.AutostartRegistered);
+            }
+            catch (Exception error) { App.Log(error); saved = false; }
+        }
+        RecordProfileSaveResult(saved);
+        ComponentsChanged?.Invoke(Components);
+        ProfileConfigurationChanged?.Invoke(GameProfiles);
+        return saved;
+    }
+
+    private void ApplySettingsView(HudProfileSettings settings)
+    {
+        Appearance = AppearanceStore.Normalize(settings.Appearance with { ClickThrough = Appearance.ClickThrough });
+        Components = settings.Components;
+        ResetAlerts();
+        _placement?.ApplySettings(settings.Placement);
+        UpdateClockAndBattery();
+        ApplyComponentVisibility();
+        ApplyAppearance();
+        OnMediaChanged(_lastMedia ?? _media.Current);
     }
 
     public bool ApplyHudEditorSettings(AppearanceSettings appearance, ComponentSettings components)

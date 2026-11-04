@@ -58,8 +58,9 @@ internal static class Program
             new WindowInteropHelper(window).EnsureHandle();
             window.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, window));
             var surface = (Border)window.FindName("IslandSurface");
-            MenuItem capsule = surface.ContextMenu.Items.OfType<MenuItem>()
-                .Single(item => Equals(item.Header, "Запускать вместе с Windows"));
+            Check(!surface.ContextMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "Запускать вместе с Windows")),
+                "Autostart preferences live in settings rather than the quick-action menu");
+            MenuItem capsule = window.CreateAutostartMenu();
             MenuItem tray = window.CreateAutostartMenu();
             Check(!window.IsVisible, "The test never shows a window or starts the application");
             Check(capsule.IsCheckable && tray.IsCheckable && !ReferenceEquals(capsule, tray),
