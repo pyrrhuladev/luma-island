@@ -153,6 +153,7 @@ public partial class MainWindow
         private readonly SystemService _system = new();
         private readonly MainWindow _window;
         private readonly FrameworkElement _content;
+        private HudPreviewSession? _musicPreview;
 
         public HudPreviewSession()
         {
@@ -195,11 +196,41 @@ public partial class MainWindow
                 96, 96, PixelFormats.Pbgra32);
             bitmap.Render(_content);
             bitmap.Freeze();
+            if (_window.Appearance.Layout.DetachedMusic && (components.Music || components.Volume))
+            {
+                // Composite another never-shown tree. A settings preview must not create
+                // a real floating window or connect another media/monitoring source.
+                _musicPreview ??= new HudPreviewSession();
+                var musicAppearance = _window.Appearance with
+                {
+                    Layout = _window.Appearance.Layout with { DetachedMusic = false },
+                    Alerts = AlertSettings.Default
+                };
+                var musicComponents = new ComponentSettings(Music: components.Music, Volume: components.Volume,
+                    Time: false, Date: false, Battery: false);
+                BitmapSource music = _musicPreview.Render(musicAppearance, musicComponents);
+                const int gap = 12;
+                var composite = new RenderTargetBitmap(Math.Max(bitmap.PixelWidth, music.PixelWidth),
+                    bitmap.PixelHeight + gap + music.PixelHeight, 96, 96, PixelFormats.Pbgra32);
+                var drawing = new DrawingVisual();
+                using (DrawingContext context = drawing.RenderOpen())
+                {
+                    context.DrawImage(bitmap, new Rect((composite.PixelWidth - bitmap.PixelWidth) / 2d, 0,
+                        bitmap.PixelWidth, bitmap.PixelHeight));
+                    context.DrawImage(music, new Rect((composite.PixelWidth - music.PixelWidth) / 2d,
+                        bitmap.PixelHeight + gap, music.PixelWidth, music.PixelHeight));
+                }
+                composite.Render(drawing);
+                composite.Freeze();
+                return composite;
+            }
             return bitmap;
         }
 
         public void Dispose()
         {
+            _musicPreview?.Dispose();
+            _musicPreview = null;
             _window.Close();
             _media.Dispose();
             _system.Dispose();

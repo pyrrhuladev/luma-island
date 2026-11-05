@@ -75,9 +75,9 @@ public partial class App : System.Windows.Application
             _performance.Sampled += snapshot => _island.ApplyAlertPerformance(snapshot);
             _fps.Changed += _island.ApplyFps;
             _island.ComponentsChanged += ConfigureComponents;
-            _island.IsVisibleChanged += (_, _) =>
+            _island.PresentationVisibilityChanged += () =>
             {
-                if (_island.IsVisible) _island.UpdateClockAndBattery();
+                if (_island.IsHudPresentationVisible) _island.UpdateClockAndBattery();
                 ConfigureComponents(_island.Components);
             };
             if (Array.IndexOf(e.Args, "--ui-check") >= 0)
@@ -166,7 +166,7 @@ public partial class App : System.Windows.Application
 
     private async void ConfigureComponents(ComponentSettings settings)
     {
-        bool visible = _island?.IsVisible == true;
+        bool visible = _island?.IsHudPresentationVisible == true;
         var monitors = MonitorRequirements.Resolve(settings, _island?.Appearance.Alerts, visible);
         // Alerts share the existing collectors, including when the corresponding number is hidden.
         _performance?.Configure(monitors.Cpu, monitors.Gpu, monitors.Memory,

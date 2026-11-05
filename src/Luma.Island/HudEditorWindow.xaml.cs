@@ -125,6 +125,7 @@ public partial class HudEditorWindow : Window
         ColumnsOneRadio.IsChecked = layout.MetricColumns == 1;
         ColumnsTwoRadio.IsChecked = layout.MetricColumns == 2;
         ColumnsThreeRadio.IsChecked = layout.MetricColumns == 3;
+        DetachedMusicCheckBox.IsChecked = layout.DetachedMusic;
         _blocks.Clear();
         foreach (string id in layout.BlockOrder.Split(','))
             _blocks.Add(new OrderEntry(id, id switch
@@ -157,7 +158,8 @@ public partial class HudEditorWindow : Window
             MetricOrder = string.Join(',', _metrics.Select(entry => entry.Id)),
             MetricColumns = ColumnsOneRadio.IsChecked == true ? 1 : ColumnsTwoRadio.IsChecked == true ? 2 : 3,
             TextScale = KeepEquivalent(DraftAppearance.Layout.TextScale, TextScaleSlider.Value / 100),
-            Spacing = SpacingSlider.Value
+            Spacing = SpacingSlider.Value,
+            DetachedMusic = Checked(DetachedMusicCheckBox)
         });
         AlertSettings alerts = AlertSettings.Normalize(DraftAppearance.Alerts with
         {
@@ -313,10 +315,21 @@ public partial class HudEditorWindow : Window
     private void OnResetLayout(object sender, RoutedEventArgs e)
     {
         _ready = false;
+        DraftAppearance = DraftAppearance with { Layout = HudLayoutSettings.Default };
         LoadLayout(HudLayoutSettings.Default);
         _ready = true;
         RefreshMoveButtons();
         UpdateDraft();
+        UpdateDirtyStatus();
+        SchedulePreview();
+    }
+
+    private void OnResetMusicPosition(object sender, RoutedEventArgs e)
+    {
+        if (!_ready || _closed) return;
+        UpdateDraft();
+        DraftAppearance = DraftAppearance with { Layout = DraftAppearance.Layout with { MusicPosition = null } };
+        UpdateDirtyStatus();
         SchedulePreview();
     }
 
@@ -350,8 +363,8 @@ public partial class HudEditorWindow : Window
     {
         RegisterBuiltIn("appearance", "Внешний вид", "Фон, масштаб, текст и расстояния между блоками.",
             "стекло матовое прозрачность размер шрифт компактная капсула", AppearanceTab);
-        RegisterBuiltIn("layout", "Раскладка", "Порядок блоков и показателей, число элементов в строке.",
-            "порядок музыка заголовок cpu gpu ram строки колонки расположение", LayoutTab);
+        RegisterBuiltIn("layout", "Раскладка", "Отдельные островки, порядок блоков и число показателей в строке.",
+            "порядок музыка заголовок cpu gpu ram строки колонки расположение островок островки раздельные разделить отдельно перетаскивать", LayoutTab);
         RegisterBuiltIn("components", "Показатели", "Выбери, что должно быть видно во время игры.",
             "музыка громкость время дата часы батарея fps фпс low кадр фреймтайм cpu gpu ram процессор видеокарта оперативка озу нагрузка температура память графики", ComponentsTab);
         RegisterBuiltIn("alerts", "Предупреждения", "Тихий индикатор температуры и серий просадок.",

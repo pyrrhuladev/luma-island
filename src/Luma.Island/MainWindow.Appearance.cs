@@ -77,6 +77,7 @@ public partial class MainWindow
         }
         RefreshAlerts();
         ApplyHudScale();
+        SynchronizeMusicIsland();
     }
 
     private void SetBrush(string key, string color)

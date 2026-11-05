@@ -13,11 +13,23 @@ public partial class MainWindow
     public string? ActiveGameProfileId => _profiles?.ActiveProfileId;
     public GameProfileSettings GameProfiles => _profiles?.Settings ?? GameProfileSettings.Default;
     public bool IsProfileEditorOpen { get; private set; }
-    public bool IsHudDragging => _placement?.IsDragging == true;
+    public bool IsHudDragging => _placement?.IsDragging == true || _musicIsland?._placement?.IsDragging == true;
     public event Action<GameProfileSettings>? ProfileConfigurationChanged;
     public event Action<bool>? ProfileEditorVisibilityChanged;
     public event Action? ProfileInteractionEnded;
-    private void OnProfileDragCompleted() => ProfileInteractionEnded?.Invoke();
+    private void OnProfileDragCompleted()
+    {
+        if (_islandOwner is not null) { _islandOwner.OnProfileDragCompleted(); return; }
+        SynchronizeMusicIsland();
+        if (_musicIsland is not null)
+        {
+            SaveAppearance();
+            // A newly selected profile may still contain an automatic (null)
+            // music position even when the rendered appearance is already equal.
+            SaveCurrentProfileEdits();
+        }
+        ProfileInteractionEnded?.Invoke();
+    }
 
     public HudProfileSettings CaptureHudSettings() => new(Appearance, Components,
         _placement?.Settings ?? _placementStore.Load());

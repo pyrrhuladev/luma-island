@@ -1,4 +1,5 @@
 using Luma.Island.Services;
+using System.Text.Json;
 
 int count = 0;
 void Check(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); count++; }
@@ -23,4 +24,31 @@ foreach (string order in blocks)
         Check(normalized == settings && HudLayoutSettings.Normalize(normalized) == normalized, "Normalization is canonical, idempotent and value-comparable");
     }
 Check(HudLayoutSettings.Default == new HudLayoutSettings(), "Normalization never mutates the shared default");
+Check(!HudLayoutSettings.Default.DetachedMusic && HudLayoutSettings.Default.MusicPosition is null,
+    "Existing installations keep a single island and no stored secondary position");
+Check(HudIslandPosition.Normalize(null) is null, "Missing music position keeps initial automatic placement");
+var musicPosition = new HudIslandPosition("  DISPLAY2  ", .123456789, .87654321);
+var canonicalPosition = new HudIslandPosition("DISPLAY2", .123456789, .87654321);
+Check(HudIslandPosition.Normalize(musicPosition) == canonicalPosition, "A secondary position keeps exact fractions and trims the monitor ID");
+Check(musicPosition.MonitorId == "  DISPLAY2  ", "Position normalization leaves the input record untouched");
+Check(HudIslandPosition.Normalize(new(" ", double.NaN, double.NegativeInfinity)) == new HudIslandPosition(),
+    "Nonfinite secondary coordinates have stable finite defaults");
+Check(HudIslandPosition.Normalize(new(null, -5, 20)) == new HudIslandPosition(null, 0, 1),
+    "Secondary coordinates stay within the monitor travel range");
+Check(HudIslandPosition.Normalize(canonicalPosition) == canonicalPosition, "Valid positions normalize without drift");
+Check(HudIslandPosition.Normalize(HudIslandPosition.Normalize(musicPosition)) == canonicalPosition,
+    "Secondary position normalization is idempotent");
+var detached = new HudLayoutSettings(DetachedMusic: true, MusicPosition: musicPosition);
+var canonicalDetached = detached with { MusicPosition = canonicalPosition };
+Check(HudLayoutSettings.Normalize(detached) == canonicalDetached, "Layout normalization preserves split mode and normalizes its position");
+Check(HudLayoutSettings.Normalize(canonicalDetached with { DetachedMusic = false }).MusicPosition == canonicalPosition,
+    "Returning to one island retains the position for the next split");
+Check(HudLayoutSettings.Normalize(canonicalDetached) == canonicalDetached, "A split layout is structurally comparable and stable");
+var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true };
+var migrated = JsonSerializer.Deserialize<HudLayoutSettings>("{\"blockOrder\":\"header,metrics,music\",\"metricOrder\":\"cpu,gpu,memory\",\"metricColumns\":3,\"textScale\":1,\"spacing\":6}", jsonOptions);
+Check(HudLayoutSettings.Normalize(migrated) == HudLayoutSettings.Default, "Pre-split JSON migrates to the original single island");
+Check(HudLayoutSettings.Normalize(JsonSerializer.Deserialize<HudLayoutSettings>(JsonSerializer.Serialize(canonicalDetached, jsonOptions), jsonOptions)) == canonicalDetached,
+    "A detached monitor position round-trips through the settings JSON");
+Check(JsonSerializer.Deserialize<HudLayoutSettings>("{\"detachedMusic\":true,\"musicPosition\":null}", jsonOptions) is { DetachedMusic: true, MusicPosition: null },
+    "Split mode may intentionally request initial automatic placement");
 Console.WriteLine($"PASS: {count} HUD layout settings checks.");

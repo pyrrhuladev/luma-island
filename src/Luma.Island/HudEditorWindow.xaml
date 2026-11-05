@@ -378,6 +378,15 @@
                         </StackPanel>
                     </ScrollViewer></TabItem>
                     <TabItem x:Name="LayoutTab" Header="Раскладка"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
+                        <StackPanel>
+                        <Border Style="{StaticResource SectionCard}" Margin="0,0,0,14"><StackPanel>
+                            <TextBlock Text="Отдельные островки" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                            <TextBlock Text="Показатели CPU, GPU и RAM остаются в основном островке. Музыку и громкость можно вынести в отдельный и перемещать независимо. Их включение остаётся в разделе «Показатели»." Style="{StaticResource Caption}" Margin="0,0,0,9"/>
+                            <CheckBox x:Name="DetachedMusicCheckBox" Content="Музыка и громкость в отдельном островке" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
+                            <TextBlock Text="Прозрачность и масштаб общие. Скрытие в трей и пропуск кликов действуют на оба островка. Перетаскивайте за фон; закрепление защищает оба положения." Style="{StaticResource Caption}" Margin="0,7,0,10"/>
+                            <Button x:Name="ResetMusicPositionButton" Content="Сбросить положение музыки" Click="OnResetMusicPosition" HorizontalAlignment="Left"
+                                    IsEnabled="{Binding IsChecked, ElementName=DetachedMusicCheckBox}" ToolTip="После сохранения музыкальный островок появится рядом с основным."/>
+                        </StackPanel></Border>
                         <Border Style="{StaticResource SectionCard}"><StackPanel>
                             <TextBlock Text="Порядок блоков и строки меняют свёрнутую капсулу. Раскрытая панель сохраняет карточки и управление музыкой." Style="{StaticResource Caption}" Margin="0,0,0,12"/>
                             <TextBlock Text="Порядок блоков" Style="{StaticResource Section}"/>
@@ -402,6 +411,7 @@
                             <Button x:Name="ResetLayoutButton" Content="Вернуть исходную раскладку" HorizontalAlignment="Left" Click="OnResetLayout" Margin="0,8,0,0"/>
 
                         </StackPanel></Border>
+                        </StackPanel>
                     </ScrollViewer></TabItem>
                     <TabItem x:Name="ComponentsTab" Header="Показатели"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0"><StackPanel>                        <Border Style="{StaticResource SectionCard}" Margin="0,0,0,14"><StackPanel>
                             <TextBlock Text="Игра и плавность" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,5"/>

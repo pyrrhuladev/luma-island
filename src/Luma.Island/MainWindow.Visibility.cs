@@ -30,6 +30,7 @@ public partial class MainWindow
     public void ToggleTrayVisibility()
     {
         VerifyAccess();
+        if (_islandOwner is not null) { _islandOwner.ToggleTrayVisibility(); return; }
         if (_closed) return;
         if (IsVisible) HideToTray(); else RestoreFromTray();
     }
@@ -44,6 +45,7 @@ public partial class MainWindow
     public void HideToTray()
     {
         VerifyAccess();
+        if (_islandOwner is not null) { _islandOwner.HideToTray(); return; }
         if (_closed) return;
         CompleteTransition();
         IslandSurface.ContextMenu.IsOpen = false;
@@ -54,6 +56,7 @@ public partial class MainWindow
     public void RestoreFromTray()
     {
         VerifyAccess();
+        if (_islandOwner is not null) { _islandOwner.RestoreFromTray(); return; }
         if (_closed) return;
         CompleteTransition();
         IslandSurface.ContextMenu.IsOpen = false;

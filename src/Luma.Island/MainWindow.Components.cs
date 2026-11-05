@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using Luma.Island.Services;
@@ -20,15 +20,15 @@ public partial class MainWindow
     private double TemperatureRowHeight => (Components.Gpu && Components.GpuTemperature)
         || (Components.Cpu && Components.CpuTemperature) || (Components.Memory && Components.MemoryTemperature) ? 16 : 0;
     private double HudHeaderContentHeight => (Components.Fps || Components.OnePercentLow ? Appearance.Compact ? 42 : 50
-        : Components.Time || _batteryVisible || Components.FrameTime || (!Components.Music && !HasHardwareMetrics) ? Appearance.Compact ? 20 : 24 : 0) * LayoutGrowth;
+        : Components.Time || _batteryVisible || Components.FrameTime || (!MusicInThisIsland && !HasHardwareMetrics) ? Appearance.Compact ? 20 : 24 : 0) * LayoutGrowth;
     private double HudMetricsContentHeight => HasHardwareMetrics ? CompactMetricGridHeight + 2 * (Appearance.Compact ? 4 : 6) * LayoutSpacing / 6 : 0;
-    private double HudMusicContentHeight => Components.Music ? (Appearance.Compact ? 34 : 44) * LayoutGrowth : 0;
+    private double HudMusicContentHeight => MusicInThisIsland ? (Appearance.Compact ? 34 : 44) * LayoutGrowth : 0;
     private double HudHeaderHeight => HudHeaderContentHeight > 0 ? HudHeaderContentHeight + LayoutBlockGap("header") : 0;
     private double HudMetricsHeight => HudMetricsContentHeight > 0 ? HudMetricsContentHeight + LayoutBlockGap("metrics") : 0;
     private double HudMusicHeight => HudMusicContentHeight > 0 ? HudMusicContentHeight + LayoutBlockGap("music") : 0;
     private double BaseCollapsedWindowHeight => 24 + (Appearance.Compact ? 10 : 12) + HudHeaderHeight + HudMetricsHeight + HudMusicHeight;
     public double CollapsedWindowHeight => ScaledHudDimension(BaseCollapsedWindowHeight);
-    private double BaseExpandedWindowHeight => 25 + 29 + (Components.Music ? 78 * LayoutGrowth + 52 : 0) + (Components.Volume ? 34 : 0)
+    private double BaseExpandedWindowHeight => 25 + 29 + (MusicInThisIsland ? 78 * LayoutGrowth + 52 : 0) + (VolumeInThisIsland ? 34 : 0)
         + ExpandedMetricBandHeight + LayoutChartsHeight + LayoutFrameTimeHeight + (Components.Date || _batteryVisible ? 26 * LayoutGrowth : 0) + 24;
     public double ExpandedWindowHeight => ScaledHudDimension(BaseExpandedWindowHeight);
 
@@ -62,17 +62,17 @@ public partial class MainWindow
     private void ApplyComponentVisibility()
     {
         ApplyCompactDensity();
-        CompactMusicRow.Visibility = Show(Components.Music);
-        CompactArtworkFrame.Visibility = Show(Components.Music);
-        CompactArtworkColumn.Width = new GridLength(Components.Music ? Appearance.Compact ? 25 : 30 : 0);
+        CompactMusicRow.Visibility = Show(MusicInThisIsland);
+        CompactArtworkFrame.Visibility = Show(MusicInThisIsland);
+        CompactArtworkColumn.Width = new GridLength(MusicInThisIsland ? Appearance.Compact ? 25 : 30 : 0);
         CompactClock.Visibility = ExpandedClock.Visibility = Show(Components.Time);
         DateLabel.Visibility = Show(Components.Date);
-        CompactArtist.Visibility = Show(Components.Music && !Appearance.Compact);
-        ExpandedMusicInfo.Visibility = ExpandedPlaybackControls.Visibility = Show(Components.Music);
-        ExpandedVolume.Visibility = Show(Components.Volume);
-        MusicInfoRow.Height = new GridLength(Components.Music ? 78 : 0);
-        MusicControlsRow.Height = new GridLength(Components.Music ? 52 : 0);
-        VolumeRow.Height = new GridLength(Components.Volume ? 34 : 0);
+        CompactArtist.Visibility = Show(MusicInThisIsland && !Appearance.Compact);
+        ExpandedMusicInfo.Visibility = ExpandedPlaybackControls.Visibility = Show(MusicInThisIsland);
+        ExpandedVolume.Visibility = Show(VolumeInThisIsland);
+        MusicInfoRow.Height = new GridLength(MusicInThisIsland ? 78 : 0);
+        MusicControlsRow.Height = new GridLength(MusicInThisIsland ? 52 : 0);
+        VolumeRow.Height = new GridLength(VolumeInThisIsland ? 34 : 0);
         CompactPerformance.Visibility = Show(HasHardwareMetrics);
         ExpandedPerformance.Visibility = Show(HasInlinePerformance);
         CompactPerformance.Height = (Appearance.Compact ? 20 : 28) + TemperatureRowHeight;
@@ -96,6 +96,7 @@ public partial class MainWindow
         RefreshCpuMemoryMetrics();
         RefreshChartsVisibility();
         RefreshComponentSize();
+        SynchronizeMusicIsland();
     }
 
     private void RefreshComponentSize()

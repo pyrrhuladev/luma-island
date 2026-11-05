@@ -22,6 +22,7 @@ public partial class MainWindow
         CompleteTransition();
         Appearance = AppearanceStore.Normalize(Appearance with { Scale = scale });
         ApplyHudScale();
+        SynchronizeMusicIsland();
         SaveAppearance();
     }
 

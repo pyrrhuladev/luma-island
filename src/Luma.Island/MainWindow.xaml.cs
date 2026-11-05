@@ -34,13 +34,15 @@ public partial class MainWindow : Window
     private MediaSnapshot? _lastMedia;
 
     public MainWindow(MediaService media, SystemService system, PlacementStore? placementStore = null, AppearanceStore? appearanceStore = null,
-        ComponentStore? componentStore = null, AutostartService? autostart = null, GameProfileController? profiles = null)
+        ComponentStore? componentStore = null, AutostartService? autostart = null, GameProfileController? profiles = null,
+        MainWindow? islandOwner = null)
     {
         _media = media;
         _system = system;
         _placementStore = placementStore ?? new PlacementStore();
         _autostart = autostart ?? new AutostartService();
         _profiles = profiles;
+        _islandOwner = islandOwner;
         InitializeComponent();
         InitializeAppearance(appearanceStore ?? new AppearanceStore());
         InitializeComponents(componentStore ?? new ComponentStore());
@@ -51,6 +53,7 @@ public partial class MainWindow : Window
         Closed += OnClosed;
         UpdateClockAndBattery();
         ApplyVolume(_system.Volume, _system.IsMuted);
+        InitializeIslandLifecycle();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -58,10 +61,15 @@ public partial class MainWindow : Window
         if (_placement is not null) return;
         _placement = new PlacementController(this, _placementStore, FitHudToDisplay);
         _placement.DragCompleted += OnProfileDragCompleted;
-        InitializeTrayVisibility();
-        IslandSurface.ContextMenu.Items.Insert(2, CreateInputMenuItem());
-        IslandSurface.ContextMenu.Items.Insert(3, CreateSettingsMenuItem());
-        QuickMenuTheme.Apply(IslandSurface.ContextMenu);
+        if (_islandOwner is not null) InitializeMusicIslandMenu();
+        else
+        {
+            InitializeTrayVisibility();
+            IslandSurface.ContextMenu.Items.Insert(2, CreateInputMenuItem());
+            IslandSurface.ContextMenu.Items.Insert(3, CreateSettingsMenuItem());
+            QuickMenuTheme.Apply(IslandSurface.ContextMenu);
+            SynchronizeMusicIsland();
+        }
     }
 
     public void ToggleExpanded()
@@ -268,7 +276,7 @@ public partial class MainWindow : Window
         }
 
         _lastMedia = state;
-        if (!Components.Music)
+        if (!MusicInThisIsland)
         {
             CompactTitle.Text = string.Empty;
             CompactArtist.Visibility = Visibility.Collapsed;
@@ -371,7 +379,7 @@ public partial class MainWindow : Window
 
     private void OnCompactPointerMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || _dragged || _animating || Placement.Settings.Locked) return;
+        if (e.LeftButton != MouseButtonState.Pressed || _dragged || _animating || IsPositionLocked) return;
         Point current = e.GetPosition(this);
         if (Math.Abs(current.X - _pointerStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
             Math.Abs(current.Y - _pointerStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
@@ -384,7 +392,7 @@ public partial class MainWindow : Window
 
     private void OnDragHeader(object sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Left || _animating || Placement.Settings.Locked) return;
+        if (e.ChangedButton != MouseButton.Left || _animating || IsPositionLocked) return;
         Placement.BeginDrag();
         try { DragMove(); }
         catch (InvalidOperationException) { }
@@ -407,6 +415,7 @@ public partial class MainWindow : Window
     {
         SaveCurrentProfileEdits();
         _closed = true;
+        DisposeIslandLifecycle();
         ResetAlerts();
         _transitionCompletion?.TrySetCanceled();
         if (_placement is not null) _placement.DragCompleted -= OnProfileDragCompleted;

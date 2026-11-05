@@ -43,6 +43,7 @@ public partial class MainWindow
     public bool SetClickThrough(bool enabled)
     {
         VerifyAccess();
+        if (_islandOwner is not null) return _islandOwner.SetClickThrough(enabled);
         if (_closed) return false;
         if (enabled && !InputRecoveryAvailable)
         {
@@ -59,6 +60,7 @@ public partial class MainWindow
     public void RestoreForInteraction()
     {
         VerifyAccess();
+        if (_islandOwner is not null) { _islandOwner.RestoreForInteraction(); return; }
         if (_closed) return;
         SetClickThrough(false);
         RestoreFromTray();
@@ -73,13 +75,14 @@ public partial class MainWindow
             CompleteTransition();
             if (enabled)
             {
+                PrepareMusicIslandForClickThrough();
                 IslandSurface.ContextMenu.IsOpen = false;
                 if (_expanded) { ToggleExpanded(); CompleteTransition(); }
                 // Release only this UI thread's captures; never activate or synthesize input to the game.
                 if (Mouse.Captured is DependencyObject captured && Window.GetWindow(captured) == this) Mouse.Capture(null);
                 if (IsKeyboardFocusWithin) Keyboard.ClearFocus();
             }
-            if (!TrySetClickThroughWindowStyle(enabled))
+            if (!TrySetAllIslandClickThroughStyles(enabled))
             {
                 if (TryReadClickThroughWindowStyle(out bool actual) && actual != IsClickThrough)
                 {

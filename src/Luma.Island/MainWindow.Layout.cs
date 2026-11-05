@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -55,6 +55,7 @@ public partial class MainWindow
         CompleteTransition();
         Appearance = Appearance with { Layout = normalized };
         ApplyComponentVisibility();
+        OnMediaChanged(_lastMedia ?? _media.Current);
         SaveAppearance();
     }
 
@@ -112,7 +113,7 @@ public partial class MainWindow
                 row < LayoutMetricRows - 1 ? layout.Spacing / 2 : 0);
         }
         ArrangeExpandedMetrics(layout);
-        MusicInfoRow.Height = new GridLength(Components.Music ? 78 * LayoutGrowth : 0);
+        MusicInfoRow.Height = new GridLength(MusicInThisIsland ? 78 * LayoutGrowth : 0);
         PerformanceRow.Height = new GridLength(ExpandedMetricBandHeight);
         ChartsRow.Height = new GridLength(LayoutChartsHeight);
         FrameTimeRow.Height = new GridLength(LayoutFrameTimeHeight);

@@ -18,6 +18,7 @@ New-Item -ItemType Directory -Path $resultsDirectory -Force | Out-Null
 $checks = @('PlacementChecks', 'AppearanceChecks', 'ComponentChecks', 'PerformanceChecks', 'CpuUsageChecks', 'HistoryChecks', 'ArtworkChecks', 'MediaArtworkChecks', 'AutostartChecks', 'AutostartUiChecks', 'GpuTemperatureChecks', 'GpuTemperatureUiChecks', 'CompactUiChecks', 'ScaleUiChecks', 'CollapsedMediaUiChecks', 'VisibilityUiChecks', 'ClickThroughUiChecks', 'CpuMemoryTemperatureUiChecks', 'SensorHostChecks', 'AppIconChecks', 'GameProfileChecks', 'GameProfileRoutingChecks', 'GameProfilesUiChecks', 'FrameTimeChecks', 'FrameViewChecks', 'FrameTimingServiceChecks', 'FrameMetricsUiChecks')
 $checks += @('HudLayoutChecks', 'HudLayoutUiChecks', 'AlertChecks', 'AlertsUiChecks', 'HudEditorUiChecks', 'HudEditorIntegrationUiChecks')
 $checks += @('SettingsCommitChecks', 'SettingsApplicationUiChecks', 'SettingsNavigationUiChecks', 'QuickMenuUiChecks', 'SettingsIntegrationUiChecks')
+$checks += @('DetachedIslandsUiChecks')
 foreach ($check in $checks) {
     $project = Join-Path $projectRoot ('tests\' + $check)
     $arguments = @('run', '--project', $project, '-c', 'Release')

@@ -9,7 +9,7 @@
     <SelfContained>true</SelfContained>
     <PublishSingleFile>false</PublishSingleFile>
     <AssemblyName>Luma.SensorHost</AssemblyName>
-    <Version>0.14.1</Version>
+    <Version>0.15.0</Version>
     <DebugType>embedded</DebugType>
   </PropertyGroup>
   <ItemGroup>
