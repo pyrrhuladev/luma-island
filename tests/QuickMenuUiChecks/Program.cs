@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
@@ -64,7 +65,7 @@ internal static class Program
             IntPtr handle = new WindowInteropHelper(window).EnsureHandle();
             window.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, window));
             var capsule = ((Border)window.FindName("IslandSurface")).ContextMenu;
-            var expected = new[] { "Показать капсулу", "Развернуть / свернуть", "Пропускать клики в игру", "Настройки…", "Выход" };
+            var expected = new[] { "Показать капсулу", "Развернуть", "Пропускать клики в игру", "Настройки…", "Выход" };
             Check(!window.IsVisible && !window.ShowActivated && !window.ShowInTaskbar && GetForegroundWindow() != handle,
                 "The production Loaded hook is exercised without displaying or activating the fixture HUD");
             Check(capsule.Items.Count == 6 && capsule.Items[4] is Separator && Labels(capsule).SequenceEqual(expected),
@@ -88,6 +89,21 @@ internal static class Program
             Check(legacyCalls == 0 && settingsCalls == 1, "Unified tray Settings avoids constructing legacy settings branches");
             Check(trayMenu.Items.Count == 6 && trayMenu.Items[4] is Separator && Labels(trayMenu).SequenceEqual(expected),
                 "Tray and HUD present the same five quick actions in the same order");
+            Check(capsule.Items.OfType<MenuItem>().Concat(trayMenu.Items.OfType<MenuItem>()).All(item => item.Icon is ShapePath { Data.IsFrozen: true }),
+                "Each quick action has a crisp vector icon in both menus");
+            window.Show();
+            await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            window.ToggleExpanded();
+            capsule.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent, capsule));
+            trayMenu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent, trayMenu));
+            Check(Equals(((MenuItem)capsule.Items[1]).Header, "Свернуть") && Equals(((MenuItem)trayMenu.Items[1]).Header, "Свернуть"),
+                "An open HUD offers the appropriate collapse command in both menus");
+            window.ToggleExpanded();
+            window.HideToTray();
+            capsule.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent, capsule));
+            trayMenu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent, trayMenu));
+            Check(Labels(capsule).SequenceEqual(expected) && Labels(trayMenu).SequenceEqual(expected),
+                "Reopening the menus after collapse offers expansion again");
             Check(!ReferenceEquals(capsule.Items[0], trayMenu.Items[0]) && !ReferenceEquals(capsuleInput, trayMenu.Items[2]),
                 "HUD and tray own distinct MenuItem instances");
             Check(ReferenceEquals(capsule.Style, trayMenu.Style) && capsule.Style is not null,
@@ -99,8 +115,9 @@ internal static class Program
             window.InitializeInputRecovery(hotkeyAvailable: true, trayAvailable: true);
             Check(capsuleInput.IsEnabled && Equals(capsuleInput.InputGestureText, "Ctrl+Alt+I") &&
                   Equals(((MenuItem)trayMenu.Items[2]).InputGestureText, "Ctrl+Alt+I"), "Input recovery enables and labels the action in both owners");
-            Check(window.SetClickThrough(true) && capsuleInput.IsChecked && ((MenuItem)trayMenu.Items[2]).IsChecked,
-                "Enabling the isolated HUD input mode refreshes both menu checkmarks");
+            Check(window.SetClickThrough(true) && capsuleInput.IsChecked && ((MenuItem)trayMenu.Items[2]).IsChecked &&
+                  AutomationProperties.GetHelpText(capsuleInput).Contains("HUD виден", StringComparison.Ordinal),
+                "Enabling the isolated HUD input mode updates both menu checkmarks and the spoken recovery help");
             Check(window.SetClickThrough(false) && !capsuleInput.IsChecked && !((MenuItem)trayMenu.Items[2]).IsChecked,
                 "Restoring the isolated HUD input mode clears both menu checkmarks");
             window.SetTrayHotkeyStatus(false); tray.SetHotkeyStatus(false);
@@ -115,31 +132,36 @@ internal static class Program
                 "Theme measurement never opens a real global context menu");
             Check(capsule.DesiredSize.Width > 200 && capsule.DesiredSize.Width < 600 && capsule.DesiredSize.Height > 150,
                 "The compact themed menu measures to a bounded readable size");
-            Check(BrushColor(capsule.Background) == "#FF172127" && BrushColor(capsule.Foreground) == "#FFEDF4F3" &&
+            Check(BrushColor(capsule.Background) == "#FF141A21" && BrushColor(capsule.Foreground) == "#FFEDF3F7" &&
                   BrushColor(capsule.Background) == BrushColor(trayMenu.Background), "Both menu surfaces share the dark palette and readable foreground");
-            Check(FindVisuals<Border>((Separator)capsule.Items[4]).Any(border => BrushColor(border.Background) == "#FF2B3D42"),
+            Check(FindVisuals<Border>((Separator)capsule.Items[4]).Any(border => BrushColor(border.Background) == "#FF2D3944"),
                 "The actual menu separator uses the muted shared palette rather than the default Windows line");
             var row = (Border)capsuleInput.Template.FindName("Row", capsuleInput)!;
             var marker = (ShapePath)capsuleInput.Template.FindName("Check", capsuleInput)!;
-            Check(row.CornerRadius.TopLeft == 6 && row.ActualHeight >= 30 && marker.Visibility == Visibility.Collapsed,
+            var statusBadge = (Border)capsuleInput.Template.FindName("ActiveBadge", capsuleInput)!;
+            Check(row.CornerRadius.TopLeft == 8 && row.ActualHeight >= 38 && marker.Visibility == Visibility.Collapsed && statusBadge.Visibility == Visibility.Collapsed,
                 "The unselected action has rounded readable geometry and no false checkmark");
             capsuleInput.IsChecked = true; capsuleInput.ApplyTemplate();
-            Check(marker.Visibility == Visibility.Visible && BrushColor(marker.Stroke) == "#FFA6E8CF", "Selected actions expose a mint checkmark");
+            Check(marker.Visibility == Visibility.Visible && BrushColor(marker.Stroke) == "#FF9DE6D1" && statusBadge.Visibility == Visibility.Visible,
+                "Selected actions expose a mint checkmark and a visible enabled badge");
             capsuleInput.IsChecked = false; capsuleInput.IsEnabled = false;
-            Check(Math.Abs(row.Opacity - .38) < .001, "Disabled action styling is visible without changing its text");
+            Check(Math.Abs(row.Opacity - .50) < .001, "Disabled action styling is visible without changing its text");
             capsuleInput.IsEnabled = true;
             Check(Math.Abs(row.Opacity - 1) < .001, "Re-enabled actions regain normal contrast");
             var highlightKey = (DependencyPropertyKey?)typeof(MenuItem).GetField("IsHighlightedPropertyKey", BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null)
                 ?? throw new InvalidOperationException("MenuItem highlight state key is unavailable.");
             capsuleInput.SetValue(highlightKey, true);
-            Check(BrushColor(row.Background) == "#FF2A4245", "Highlighted keyboard/mouse selection has a clear themed row background");
+            Check(BrushColor(row.Background) == "#FF253540", "Highlighted keyboard/mouse selection has a clear themed row background");
             capsuleInput.SetValue(highlightKey, false);
             Check(BrushColor(row.Background) == "#00FFFFFF" || row.Background == Brushes.Transparent,
                 "Clearing selection restores the transparent row background");
             Check(capsuleInput.Focusable && KeyboardNavigation.GetDirectionalNavigation(FindVisual<ItemsPresenter>(capsule)!) == KeyboardNavigationMode.Cycle,
                 "Quick actions retain focusability and cyclic directional navigation");
-            Check(FindVisuals<TextBlock>(capsuleInput).Any(text => text.Text == "Ctrl+Alt+I" && text.ActualWidth > 0),
-                "The template actually renders the input shortcut beside its action");
+            var shortcut = (Border)capsuleInput.Template.FindName("ShortcutBadge", capsuleInput)!;
+            var exit = (MenuItem)capsule.Items[5];
+            Check(FindVisuals<TextBlock>(shortcut).Any(text => text.Text == "Ctrl+Alt+I" && text.ActualWidth > 0) &&
+                  ((Border)exit.Template.FindName("ShortcutBadge", exit)!).Visibility == Visibility.Collapsed,
+                "The template renders the input shortcut and hides the badge when the action has no shortcut");
             Save(capsule, "quick-menu.png");
 
             var submenuFixture = new ContextMenu(); QuickMenuTheme.Apply(submenuFixture);

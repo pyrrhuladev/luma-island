@@ -105,7 +105,7 @@ internal static class Program
             Check(surface.ContextMenu.Items.OfType<MenuItem>().Count(item => Equals(item.Header, "Скрыть в трей")) == 1,
                 "Repeated initialization never duplicates the visibility command");
             Check(Equals(capsule.InputGestureText, "Ctrl+Alt+Space"), "Capsule hide command advertises its visibility hotkey");
-            Check(surface.ContextMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "Развернуть / свернуть")),
+            Check(surface.ContextMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "Развернуть")),
                 "Expansion remains a separate context command");
             Check(window.IsVisible && window.Opacity == 0 && !window.ShowActivated && !window.ShowInTaskbar,
                 "The native test window stays transparent, nonactivating and absent from taskbar");

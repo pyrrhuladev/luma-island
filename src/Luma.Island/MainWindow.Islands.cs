@@ -178,11 +178,12 @@ public partial class MainWindow
         var owner = _islandOwner!;
         var menu = IslandSurface.ContextMenu;
         menu.Items.Clear();
-        var visibility = new MenuItem { Header = "Скрыть в трей", InputGestureText = owner.TrayHotkeyAvailable ? "Ctrl+Alt+Space" : string.Empty };
+        var visibility = new MenuItem();
         visibility.Click += (_, _) => owner.ToggleTrayVisibility();
-        var expanded = new MenuItem { Header = "Развернуть / свернуть" };
+        var expanded = new MenuItem();
         expanded.Click += (_, _) => ToggleExpanded();
         var exit = new MenuItem { Header = "Выход" };
+        QuickMenuTheme.SetIcon(exit, QuickMenuIcon.Exit);
         exit.Click += OnExit;
         menu.Items.Add(visibility);
         menu.Items.Add(expanded);
@@ -191,6 +192,13 @@ public partial class MainWindow
         menu.Items.Add(new Separator());
         menu.Items.Add(exit);
         QuickMenuTheme.Apply(menu);
+        void RefreshActions()
+        {
+            QuickMenuTheme.UpdateVisibility(visibility, owner.IsVisible, owner.TrayHotkeyAvailable);
+            QuickMenuTheme.UpdateExpansion(expanded, _expanded);
+        }
+        RefreshActions();
+        menu.Opened += (_, _) => RefreshActions();
     }
 
     private void PrepareForIslandClickThrough()

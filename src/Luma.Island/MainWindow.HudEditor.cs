@@ -12,6 +12,8 @@ namespace Luma.Island;
 
 public partial class MainWindow
 {
+    private string? _lastSettingsSection;
+
     public bool IsHudEditorOpen { get; private set; }
     public bool IsSettingsOpen => IsHudEditorOpen;
     public MenuItem CreateSettingsMenuItem() => CreateHudEditorMenuItem();
@@ -20,6 +22,7 @@ public partial class MainWindow
     public MenuItem CreateHudEditorMenuItem()
     {
         var item = new MenuItem { Header = "Настройки…" };
+        QuickMenuTheme.SetIcon(item, QuickMenuIcon.Settings);
         item.Click += (_, _) => OpenHudEditor();
         return item;
     }
@@ -48,7 +51,10 @@ public partial class MainWindow
             double availableWidth = Placement.CurrentDisplay.WorkArea.Width / DisplayService.GetWindowScale(this) - 16;
             editor.MaxWidth = Math.Max(editor.MinWidth, availableWidth);
             editor.Width = Math.Min(editor.Width, editor.MaxWidth);
-            if (editor.ShowDialog() == true)
+            if (_lastSettingsSection is { } section) editor.SelectSection(section);
+            bool accepted = editor.ShowDialog() == true;
+            _lastSettingsSection = editor.SelectedSectionId;
+            if (accepted)
             {
                 bool saved = editor.DraftApplication is { } application
                     ? ApplySettingsDraft(editor.DraftAppearance, editor.DraftComponents, application, context.ActiveProfileId)

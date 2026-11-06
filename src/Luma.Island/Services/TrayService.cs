@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
@@ -16,6 +17,7 @@ public sealed class TrayService : IDisposable
     private readonly ContextMenu _menu;
     private readonly Window _window;
     private readonly MenuItem _visibilityItem;
+    private readonly MenuItem _expansionItem;
     private readonly Action _showVisible;
     private readonly Action? _menuOpening;
     private readonly uint _taskbarCreated = RegisterWindowMessage("TaskbarCreated");
@@ -45,8 +47,8 @@ public sealed class TrayService : IDisposable
         };
         QuickMenuTheme.Apply(_menu);
         _visibilityItem = AddItem(string.Empty, toggleVisible);
-        _visibilityItem.InputGestureText = "Ctrl+Alt+Space";
-        AddItem("Развернуть / свернуть", toggleExpanded);
+        _expansionItem = AddItem("Развернуть / свернуть", toggleExpanded);
+        QuickMenuTheme.SetIcon(_expansionItem, QuickMenuIcon.Expand);
         if (inputMenuFactory is not null) _menu.Items.Add(inputMenuFactory());
         if (hudEditorMenuFactory is not null) _menu.Items.Add(hudEditorMenuFactory());
         else
@@ -59,11 +61,12 @@ public sealed class TrayService : IDisposable
             if (autostartMenuFactory is not null) _menu.Items.Add(autostartMenuFactory());
         }
         _menu.Items.Add(new Separator());
-        AddItem("Выход", exit);
+        QuickMenuTheme.SetIcon(AddItem("Выход", exit), QuickMenuIcon.Exit);
         _menu.Closed += OnMenuClosed;
         _menu.Opened += OnMenuOpened;
         _window.IsVisibleChanged += OnOwnerVisibilityChanged;
         RefreshVisibilityItem();
+        RefreshExpansionItem();
         _icon = AppIcon.LoadTrayForWindow(_source.Handle);
         _data = new NotifyIconData
         {
@@ -127,6 +130,7 @@ public sealed class TrayService : IDisposable
     private void OnMenuOpened(object sender, RoutedEventArgs args)
     {
         RefreshVisibilityItem();
+        RefreshExpansionItem();
         _menuOpening?.Invoke();
     }
 
@@ -134,11 +138,17 @@ public sealed class TrayService : IDisposable
 
     private void RefreshVisibilityItem()
     {
-        _visibilityItem.Header = _window.IsVisible ? "Скрыть в трей" : "Показать капсулу";
-        _visibilityItem.InputGestureText = _hotkeyAvailable ? "Ctrl+Alt+Space" : string.Empty;
-        _visibilityItem.ToolTip = _hotkeyAvailable
+        QuickMenuTheme.UpdateVisibility(_visibilityItem, _window.IsVisible, _hotkeyAvailable);
+        string help = _hotkeyAvailable
             ? "Левый щелчок по значку показывает капсулу. Ctrl+Alt+Space показывает или скрывает её."
             : "Ctrl+Alt+Space недоступна: сочетание занято другой программой или заблокировано Windows. Левый щелчок по значку показывает капсулу.";
+        _visibilityItem.ToolTip = help;
+        AutomationProperties.SetHelpText(_visibilityItem, help);
+    }
+
+    private void RefreshExpansionItem()
+    {
+        if (_window is MainWindow island) QuickMenuTheme.UpdateExpansion(_expansionItem, island.IsHudExpanded);
     }
 
     public void SetHotkeyStatus(bool available)

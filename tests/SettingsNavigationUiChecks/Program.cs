@@ -88,6 +88,23 @@ internal static class Program
             Check(editor.SearchSections("фпс").Single().Id == "components", "Russian FPS wording finds the frame counter");
             Check(editor.SearchSections("импорт").Count == 0, "Search does not advertise an unavailable import feature");
             editor.SelectSection("application");
+            editor.SearchSections("температура");
+            var search = Named<TextBox>(editor, "SettingsSearchBox");
+            var clearSearch = Named<Button>(editor, "ClearSearchButton");
+            var resultLabel = Named<TextBlock>(editor, "SearchResultLabel");
+            Check(clearSearch.IsVisible && resultLabel.Text.EndsWith("· 2", StringComparison.Ordinal),
+                "A matching query offers a clear action and shows the number of matching sections");
+            var enterSearch = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(search), Environment.TickCount, Key.Enter)
+                { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+            search.RaiseEvent(enterSearch);
+            Check(enterSearch.Handled && editor.IsVisible && editor.DialogResult is null &&
+                  editor.SelectedSectionId == "components" && !editor.HasUnsavedChanges,
+                "Enter in search accepts the matching section without invoking the default Save action");
+            Click(clearSearch);
+            Check(search.Text.Length == 0 && editor.FilteredSections.Count == 7 && !clearSearch.IsVisible &&
+                  resultLabel.Text == "РАЗДЕЛЫ" && editor.SelectedSectionId == "components",
+                "Clearing search restores all sections and keeps the current page selected");
+            editor.SelectSection("application");
             string? previous = editor.SelectedSectionId;
             Check(editor.SearchSections("нет-такого-раздела-123").Count == 0 && Named<TextBlock>(editor, "NoSearchResults").Visibility == Visibility.Visible,
                 "An unmatched query shows a clear empty search state");
@@ -105,6 +122,24 @@ internal static class Program
             profileName.SetCurrentValue(TextBox.TextProperty, originalName);
             profileName.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
             Check(editor.CommitDraft() && !editor.HasUnsavedChanges, "Correcting a profile validation error restores the original local draft");
+
+            var previewSurface = Named<Border>(editor, "PreviewSurface");
+            Brush darkBackdrop = previewSurface.Background;
+            var lightPreview = Named<RadioButton>(editor, "LightPreviewRadio");
+            var darkPreview = Named<RadioButton>(editor, "DarkPreviewRadio");
+            string beforeBackdrop = DraftSnapshot(editor);
+            var previewImage = Named<Image>(editor, "HudPreviewImage");
+            ImageSource beforePreview = previewImage.Source;
+            lightPreview.IsChecked = true;
+            await Task.Delay(180); await Settle();
+            Check(darkPreview.IsChecked == false && !ReferenceEquals(previewSurface.Background, darkBackdrop),
+                "The light backdrop switches the actual preview surface");
+            darkPreview.IsChecked = true;
+            await Settle();
+            Check(lightPreview.IsChecked == false && ReferenceEquals(previewSurface.Background, darkBackdrop) &&
+                  ReferenceEquals(previewImage.Source, beforePreview) && previews == 1 && !editor.HasPendingPreview &&
+                  !editor.HasUnsavedChanges && DraftSnapshot(editor) == beforeBackdrop,
+                "Backdrop changes remain local to the preview and neither alter the draft nor render the HUD again");
 
             editor.SelectSection("layout");
             Named<RadioButton>(editor, "ColumnsTwoRadio").IsChecked = true;
@@ -127,6 +162,14 @@ internal static class Program
             editor.SelectSection("placement"); await Settle(); Save(editor, "settings-placement.png");
             editor.SelectSection("profiles"); await Settle(); Save(editor, "settings-profiles.png");
             editor.SelectSection("application"); await Settle(); Save(editor, "settings-application.png");
+            editor.Height = 420; await Settle();
+            Check(Named<Border>(editor, "PreviewPane").Visibility == Visibility.Collapsed && Named<Grid>(editor, "SettingsContentPanel").IsVisible,
+                "A wide but short settings window hides the side preview");
+            Click(Named<Button>(editor, "TogglePreviewButton")); await Settle();
+            var settingsBody = Named<Grid>(editor, "SettingsBody");
+            Inside(previewImage, settingsBody, "The wide short focused preview image fits in the settings body");
+            Inside(Named<TextBlock>(editor, "PreviewDataCaption"), settingsBody, "The wide short preview caption fits above the footer");
+            Inside(Named<Button>(editor, "SaveDraftButton"), (FrameworkElement)editor.Content, "Save remains visible in the wide short focused preview");
             editor.Width = 760; editor.Height = 420; editor.SelectSection("alerts"); await Settle();
             Check(Named<Border>(editor, "PreviewPane").Visibility == Visibility.Collapsed && Named<Grid>(editor, "SettingsContentPanel").Visibility == Visibility.Visible,
                 "Narrow windows preserve page width by hiding the side preview");

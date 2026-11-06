@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -74,11 +76,31 @@ public partial class HudEditorWindow : Window
         InitializeSections();
         CommandBindings.Add(new CommandBinding(ApplicationCommands.Find, (_, _) => SettingsSearchBox.Focus()));
         InputBindings.Add(new KeyBinding(ApplicationCommands.Find, Key.F, ModifierKeys.Control));
+        CommandBindings.Add(new CommandBinding(ApplicationCommands.Save, OnSave));
+        InputBindings.Add(new KeyBinding(ApplicationCommands.Save, Key.S, ModifierKeys.Control));
         RefreshMoveButtons();
         RenderPreview();
         UpdateResponsiveLayout();
         Closed += OnEditorClosed;
     }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) || SystemParameters.HighContrast) return;
+        IntPtr hwnd = new WindowInteropHelper(this).Handle;
+        // COLORREF uses BGR. Keep the native caption and its window controls.
+        SetCaptionAttribute(hwnd, 20, 1);
+        SetCaptionAttribute(hwnd, 34, 0x44392D);
+        SetCaptionAttribute(hwnd, 35, 0x211A14);
+        SetCaptionAttribute(hwnd, 36, 0xF7F1EC);
+    }
+
+    private static void SetCaptionAttribute(IntPtr hwnd, int attribute, int value)
+        => DwmSetWindowAttribute(hwnd, attribute, ref value, sizeof(int));
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
     private void LoadControls()
     {
@@ -227,9 +249,7 @@ public partial class HudEditorWindow : Window
             HudPreviewImage.Source = null;
             AlertPreviewCaption.Visibility = Visibility.Collapsed;
             PreviewSizeText.Text = string.Empty;
-            StatusText.Text = "Не удалось обновить предпросмотр. Изменения ещё не сохранены.";
-            StatusText.Foreground = new SolidColorBrush(Color.FromRgb(242, 194, 150));
-            StatusText.ToolTip = exception.Message;
+            ShowStatusError("Не удалось обновить предпросмотр. Изменения ещё не сохранены.", exception.Message);
             return false;
         }
     }
@@ -246,12 +266,13 @@ public partial class HudEditorWindow : Window
         double baseWidth = source.PixelWidth / scale, baseHeight = source.PixelHeight / scale;
         double areaWidth = PreviewSurface.ActualWidth > 16 ? PreviewSurface.ActualWidth - 16 : 300;
         double areaHeight = PreviewSurface.ActualHeight > 16 ? PreviewSurface.ActualHeight - 16 : 264;
-        double zoom = Math.Min(areaWidth / (baseWidth * AppearanceStore.MaxScale),
-            areaHeight / (baseHeight * AppearanceStore.MaxScale));
+        double zoom = _focusedPreview
+            ? Math.Min(1, Math.Min(areaWidth / source.PixelWidth, areaHeight / source.PixelHeight))
+            : Math.Min(areaWidth / (baseWidth * AppearanceStore.MaxScale), areaHeight / (baseHeight * AppearanceStore.MaxScale));
         // A fixed scale reference keeps the size change visible without feeding Image size back into its host.
         HudPreviewImage.Width = Math.Max(1, source.PixelWidth * zoom);
         HudPreviewImage.Height = Math.Max(1, source.PixelHeight * zoom);
-        PreviewSizeText.Text = $"Размер HUD: {source.PixelWidth} × {source.PixelHeight} при 100% Windows";
+        PreviewSizeText.Text = $"{source.PixelWidth} × {source.PixelHeight} · при 100% Windows";
     }
 
     /// <summary>Flushes pending edits and validates preview without writing or closing the window.</summary>
@@ -282,6 +303,12 @@ public partial class HudEditorWindow : Window
     private void OnSave(object sender, RoutedEventArgs e)
     {
         if (CommitDraft()) DialogResult = true;
+    }
+
+    private void OnTransparencyPreset(object sender, RoutedEventArgs e)
+    {
+        if (GlassRadio.IsChecked == true && sender is Button { Tag: string value } && int.TryParse(value, out int percent))
+            TransparencySlider.Value = percent;
     }
 
     private void OnOrderSelectionChanged(object sender, SelectionChangedEventArgs e) => RefreshMoveButtons();
@@ -365,7 +392,7 @@ public partial class HudEditorWindow : Window
             "стекло матовое прозрачность размер шрифт компактная капсула", AppearanceTab);
         RegisterBuiltIn("layout", "Раскладка", "Отдельные островки, порядок блоков и число показателей в строке.",
             "порядок музыка заголовок cpu gpu ram строки колонки расположение островок островки раздельные разделить отдельно перетаскивать", LayoutTab);
-        RegisterBuiltIn("components", "Показатели", "Выбери, что должно быть видно во время игры.",
+        RegisterBuiltIn("components", "Показатели", "Выберите, какие данные отображать в HUD.",
             "музыка громкость время дата часы батарея fps фпс low кадр фреймтайм cpu gpu ram процессор видеокарта оперативка озу нагрузка температура память графики", ComponentsTab);
         RegisterBuiltIn("alerts", "Предупреждения", "Тихий индикатор температуры и серий просадок.",
             "порог температура перегрев просадки задержки кадры фреймтайм фриз статтер уведомления", AlertsTab);
@@ -444,6 +471,7 @@ public partial class HudEditorWindow : Window
             if (!_filteredSections.Contains(section)) { SettingsSearchBox.Text = string.Empty; ApplySearch(); }
             EditorTabs.SelectedItem = tab;
             SettingsNavigation.SelectedItem = section;
+            SettingsNavigation.ScrollIntoView(section);
             SelectedSectionId = section.Id;
             ActiveSectionTitle.Text = section.Title;
             ActiveSectionDescription.Text = section.Description;
@@ -510,10 +538,20 @@ public partial class HudEditorWindow : Window
     }
 
     private void OnSearchChanged(object sender, TextChangedEventArgs e) { if (_navigationReady && !_closed) ApplySearch(); }
+    private void OnClearSearch(object sender, RoutedEventArgs e)
+    {
+        SettingsSearchBox.Clear();
+        SettingsSearchBox.Focus();
+    }
+
     private void ApplySearch()
     {
         if (!_navigationReady || _closed) return;
         var matches = _sections.Search(SettingsSearchBox.Text);
+        bool hasText = SettingsSearchBox.Text.Length > 0;
+        SearchPlaceholder.Visibility = hasText ? Visibility.Collapsed : Visibility.Visible;
+        ClearSearchButton.Visibility = hasText ? Visibility.Visible : Visibility.Collapsed;
+        SearchResultLabel.Text = string.IsNullOrWhiteSpace(SettingsSearchBox.Text) ? "РАЗДЕЛЫ" : $"НАЙДЕНО · {matches.Count}";
         var previous = _sections.Find(SelectedSectionId ?? string.Empty);
         bool wasSelecting = _selectingNavigation;
         _selectingNavigation = true;
@@ -541,8 +579,18 @@ public partial class HudEditorWindow : Window
 
     private void OnSettingsKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape && SettingsSearchBox.IsKeyboardFocusWithin && SettingsSearchBox.Text.Length > 0)
+        if (!SettingsSearchBox.IsKeyboardFocusWithin && !ReferenceEquals(e.OriginalSource, SettingsSearchBox)) return;
+        if (e.Key == Key.Escape && SettingsSearchBox.Text.Length > 0)
         { SettingsSearchBox.Clear(); e.Handled = true; }
+        else if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            if (SettingsNavigation.SelectedItem is not SettingsSectionDefinition section) return;
+            SelectSection(section.Id);
+            SettingsNavigation.ScrollIntoView(section);
+            if (SettingsNavigation.ItemContainerGenerator.ContainerFromItem(section) is ListBoxItem item) item.Focus();
+            else SettingsNavigation.Focus();
+        }
     }
 
     private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e) { if (_ready) UpdateResponsiveLayout(); }
@@ -550,7 +598,7 @@ public partial class HudEditorWindow : Window
     private void OnTogglePreview(object sender, RoutedEventArgs e)
     {
         if (_focusedPreview) _focusedPreview = false;
-        else if (IsNarrow()) _focusedPreview = true;
+        else if (!CanShowSidePreview()) _focusedPreview = true;
         else _showWidePreview = !_showWidePreview;
         UpdateResponsiveLayout();
     }
@@ -559,22 +607,25 @@ public partial class HudEditorWindow : Window
         _focusedPreview = !_focusedPreview;
         UpdateResponsiveLayout();
     }
-    private bool IsNarrow() => (ActualWidth > 0 ? ActualWidth : Width) < 1000;
+    private bool CanShowSidePreview() => (ActualWidth > 0 ? ActualWidth : Width) >= 1000
+        && (SettingsBody.ActualHeight > 0 ? SettingsBody.ActualHeight : Height - 180) >= 310;
+
     private void UpdateResponsiveLayout()
     {
         if (PreviewPane is null || SettingsContentPanel is null) return;
-        bool narrow = IsNarrow(), visible = _focusedPreview || (!narrow && _showWidePreview);
-        PreviewColumn.Width = new GridLength(!_focusedPreview && !narrow && visible ? 270 : 0);
-        PreviewGapColumn.Width = new GridLength(!_focusedPreview && !narrow && visible ? 18 : 0);
-        Grid.SetColumn(PreviewPane, _focusedPreview || narrow ? 2 : 4);
+        bool sidePreview = !_focusedPreview && CanShowSidePreview() && _showWidePreview;
+        bool visible = _focusedPreview || sidePreview;
+        PreviewColumn.Width = new GridLength(sidePreview ? 272 : 0);
+        PreviewGapColumn.Width = new GridLength(sidePreview ? 16 : 0);
+        Grid.SetColumn(PreviewPane, sidePreview ? 4 : 2);
         PreviewPane.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         SettingsContentPanel.Visibility = _focusedPreview ? Visibility.Collapsed : Visibility.Visible;
         PreviewPane.VerticalAlignment = _focusedPreview ? VerticalAlignment.Stretch : VerticalAlignment.Top;
         PreviewDetails.Visibility = _focusedPreview ? Visibility.Collapsed : Visibility.Visible;
         double availableHeight = SettingsBody.ActualHeight > 0 ? SettingsBody.ActualHeight : Math.Max(120, Height - 180);
-        double detailsHeight = AlertPreviewCaption.Visibility == Visibility.Visible ? 120 : 100;
-        PreviewSurface.Height = _focusedPreview ? Math.Clamp(availableHeight - detailsHeight, 50, 400) : 260;
-        PreviewDataCaption.Text = _focusedPreview ? "Уменьшенный предпросмотр · примерные данные." : "Предпросмотр уменьшен; данные приведены для примера.";
+        double detailsHeight = AlertPreviewCaption.Visibility == Visibility.Visible ? 128 : 106;
+        PreviewSurface.Height = _focusedPreview ? double.NaN
+            : Math.Clamp(availableHeight - detailsHeight - 26, 100, 225);
         TogglePreviewButton.Content = _focusedPreview ? "К настройкам" : visible ? "Скрыть предпросмотр" : "Предпросмотр";
         ExpandPreviewButton.Content = _focusedPreview ? "Свернуть" : "Крупнее";
         UpdatePreviewSize();
@@ -589,14 +640,16 @@ public partial class HudEditorWindow : Window
     private void UpdateDirtyStatus()
     {
         if (StatusText is null) return;
-        StatusText.Text = HasUnsavedChanges ? "Есть несохранённые изменения." : "Изменения применятся после сохранения.";
-        StatusText.Foreground = new SolidColorBrush(Color.FromRgb(173, 191, 199));
+        bool changed = HasUnsavedChanges;
+        StatusText.Text = changed ? "Есть несохранённые изменения" : "Настройки сохранены";
+        StatusText.Foreground = (Brush)Resources[changed ? "EditorMint" : "EditorMuted"];
+        StatusDot.Fill = StatusText.Foreground;
         StatusText.ToolTip = null;
     }
     private void ShowStatusError(string message, string? details = null)
     {
         StatusText.Text = message;
-        StatusText.Foreground = new SolidColorBrush(Color.FromRgb(242, 194, 150));
+        StatusText.Foreground = StatusDot.Fill = (Brush)Resources["EditorWarning"];
         StatusText.ToolTip = details;
     }
 

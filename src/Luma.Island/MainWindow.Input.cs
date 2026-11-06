@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Luma.Island.Services;
 
 namespace Luma.Island;
 
@@ -109,6 +111,7 @@ public partial class MainWindow
     public MenuItem CreateInputMenuItem()
     {
         var item = new MenuItem { Header = "Пропускать клики в игру", IsCheckable = true };
+        QuickMenuTheme.SetIcon(item, QuickMenuIcon.Input);
         ToolTipService.SetShowOnDisabled(item, true);
         item.Click += (_, _) => SetClickThrough(item.IsChecked);
         _inputMenuItems.Add(new WeakReference<MenuItem>(item));
@@ -132,7 +135,9 @@ public partial class MainWindow
             item.IsChecked = IsClickThrough;
             item.IsEnabled = IsClickThrough || InputRecoveryAvailable;
             item.InputGestureText = InputHotkeyAvailable ? "Ctrl+Alt+I" : string.Empty;
-            item.ToolTip = (_inputModeError is null ? string.Empty : _inputModeError + "\n") + description + "\n" + recovery;
+            string help = (_inputModeError is null ? string.Empty : _inputModeError + "\n") + description + "\n" + recovery;
+            item.ToolTip = help;
+            AutomationProperties.SetHelpText(item, help);
         }
     }
 }

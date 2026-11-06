@@ -1,8 +1,10 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using Luma.Island.Services;
 
 namespace Luma.Island;
 
@@ -12,14 +14,21 @@ public partial class MainWindow
     private MenuItem? _trayVisibilityMenu;
     private HwndSource? _visibilitySource;
     public bool TrayHotkeyAvailable { get; private set; } = true;
+    internal bool IsHudExpanded => _expanded;
 
     private void InitializeTrayVisibility()
     {
         if (_trayVisibilityMenu is not null) return;
-        _trayVisibilityMenu = new MenuItem { InputGestureText = "Ctrl+Alt+Space" };
+        var menu = IslandSurface.ContextMenu;
+        _trayVisibilityMenu = new MenuItem();
         _trayVisibilityMenu.Click += (_, _) => ToggleTrayVisibility();
-        if (IslandSurface.ContextMenu.Items[0] is MenuItem expanded) expanded.Header = "Развернуть / свернуть";
-        IslandSurface.ContextMenu.Items.Insert(0, _trayVisibilityMenu);
+        if (menu.Items[0] is MenuItem expanded)
+        {
+            QuickMenuTheme.UpdateExpansion(expanded, _expanded);
+            menu.Opened += (_, _) => QuickMenuTheme.UpdateExpansion(expanded, _expanded);
+        }
+        if (menu.Items[menu.Items.Count - 1] is MenuItem exit) QuickMenuTheme.SetIcon(exit, QuickMenuIcon.Exit);
+        menu.Items.Insert(0, _trayVisibilityMenu);
         IsVisibleChanged += OnTrayVisibilityChanged;
         Closed += OnVisibilityClosed;
         _visibilitySource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
@@ -85,11 +94,12 @@ public partial class MainWindow
     private void RefreshTrayVisibilityMenu()
     {
         if (_trayVisibilityMenu is null) return;
-        _trayVisibilityMenu.Header = IsVisible ? "Скрыть в трей" : "Показать капсулу";
-        _trayVisibilityMenu.InputGestureText = TrayHotkeyAvailable ? "Ctrl+Alt+Space" : string.Empty;
-        _trayVisibilityMenu.ToolTip = TrayHotkeyAvailable
+        QuickMenuTheme.UpdateVisibility(_trayVisibilityMenu, IsVisible, TrayHotkeyAvailable);
+        string help = TrayHotkeyAvailable
             ? "Показать или скрыть капсулу: Ctrl+Alt+Space. Значок Luma останется в трее."
             : "Ctrl+Alt+Space недоступна: сочетание занято другой программой или заблокировано Windows. Используйте значок Luma в трее.";
+        _trayVisibilityMenu.ToolTip = help;
+        AutomationProperties.SetHelpText(_trayVisibilityMenu, help);
     }
 
     private void OnVisibilityClosed(object? sender, EventArgs args)
