@@ -54,7 +54,8 @@ internal static class Program
     private static async Task RunAsync()
     {
         var preferenceHashes = Preferences();
-        var appearance = new AppearanceSettings(.4, ClickThrough: true);
+        var originalLayout = HudLayoutSettings.Default with { BlockOrder = "header,music,metrics", MetricOrder = "gpu,cpu,memory" };
+        var appearance = new AppearanceSettings(.4, ClickThrough: true) { Layout = originalLayout };
         var components = ComponentSettings.Default with
         {
             Cpu = true, Gpu = true, Memory = true, Fps = true, Charts = true,
@@ -87,10 +88,9 @@ internal static class Program
             Named<Slider>(editor, "ScaleSlider").Value = 125;
             Named<Slider>(editor, "TransparencySlider").Value = 90;
             Named<RadioButton>(editor, "ColumnsTwoRadio").IsChecked = true;
-            Named<ListBox>(editor, "BlockOrderList").SelectedIndex = 2;
-            Click(Named<Button>(editor, "BlockUpButton"));
-            Named<ListBox>(editor, "MetricOrderList").SelectedIndex = 0;
-            Click(Named<Button>(editor, "MetricDownButton"));
+            Check(editor.FindName("LayoutTab") is null && editor.FindName("DetachedMusicCheckBox") is null &&
+                  editor.FindName("BlockOrderList") is null && editor.FindName("MetricOrderList") is null,
+                "Settings leaves the screen editor as the only entry point for moving blocks");
             Named<CheckBox>(editor, "MusicCheckBox").IsChecked = false;
             Named<CheckBox>(editor, "AlertsEnabledCheckBox").IsChecked = true;
             Named<CheckBox>(editor, "AlertMemoryCheckBox").IsChecked = true;
@@ -104,7 +104,7 @@ internal static class Program
             Check(editor.CommitDraft() && PreviewCalls == 2 && !editor.HasPendingPreview,
                 "Commit flushes one pending production preview immediately");
             Check(editor.DraftAppearance.Layout.BlockOrder == "header,music,metrics" &&
-                  editor.DraftAppearance.Layout.MetricOrder == "gpu,cpu,memory", "The draft remembers both independent reorder lists");
+                  editor.DraftAppearance.Layout.MetricOrder == "gpu,cpu,memory", "Settings preserves existing block order without editing it");
             Check(editor.DraftAppearance.Layout.MetricColumns == 2 && editor.DraftAppearance.Layout.TextScale == 1.15 &&
                   editor.DraftAppearance.Layout.Spacing == 9, "The draft retains text size, spacing and metrics per row");
             Check(editor.DraftAppearance.Scale == 1.25 &&
@@ -118,7 +118,7 @@ internal static class Program
                   editor.DraftAppearance.Alerts.CpuThreshold == 96 && editor.DraftAppearance.Alerts.GpuThreshold == 89 &&
                   editor.DraftAppearance.Alerts.MemoryThreshold == 74 && editor.DraftAppearance.Alerts.FrameTimeThreshold == 55 &&
                   editor.DraftAppearance.Alerts.StutterCount == 4, "Master switch and every warning threshold are kept in the local draft");
-            Check(appearance.Layout == HudLayoutSettings.Default && !appearance.Alerts.Enabled && components.Music,
+            Check(appearance.Layout == originalLayout && !appearance.Alerts.Enabled && components.Music,
                 "Editing does not mutate the original records or nested defaults");
             await Settle();
             Check(Named<Slider>(editor, "MemoryThresholdSlider").IsEnabled,
@@ -148,15 +148,7 @@ internal static class Program
                 "The stutter threshold can be brought into view at the smallest editor size");
             SaveEditor(editor, "hud-editor-small-scrolled.png");
 
-            AlertSettings alertDraft = editor.DraftAppearance.Alerts;
-            ComponentSettings componentDraft = editor.DraftComponents;
-            Click(Named<Button>(editor, "ResetLayoutButton"));
-            Check(editor.DraftAppearance.Layout == HudLayoutSettings.Default && editor.DraftAppearance.Alerts == alertDraft &&
-                  editor.DraftComponents == componentDraft && editor.DraftAppearance.ClickThrough && editor.DraftAppearance.Scale == 1.25 &&
-                  Math.Abs(editor.DraftAppearance.GlassOpacity - .1) < 1e-10,
-                "Reset restores layout while preserving warnings, components, scale, transparency and input preference");
-            Check(editor.CommitDraft(), "The default layout can be previewed again after custom arrangement");
-            Check(editor.CommitDraft() && PreviewCalls == 3, "An unchanged commit reuses the successfully rendered preview");
+            Check(editor.CommitDraft() && PreviewCalls == 2, "An unchanged commit reuses the successfully rendered preview");
         }
         finally { editor.Close(); }
 

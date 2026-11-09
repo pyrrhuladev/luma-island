@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Luma.Island.Services;
@@ -11,6 +12,7 @@ public partial class MainWindow
     private readonly Dictionary<TextBlock, double> _layoutBaseFonts = new();
     private bool _layoutFontsCaptured;
     private string? _appliedBlockOrder, _appliedMetricOrder;
+    private string? _appliedHeaderOrder;
     private (int Fps, int Low, bool Clock, bool Battery, double TextScale)? _headerFitKey;
     private HudLayoutSettings LayoutSettings => Appearance.Layout ?? HudLayoutSettings.Default;
     private double LayoutTextScale => LayoutSettings.TextScale;
@@ -58,26 +60,26 @@ public partial class MainWindow
         foreach (var item in _layoutBaseFonts) item.Key.FontSize = item.Value * layout.TextScale;
         CompactCpu.LineHeight = CompactGpu.LineHeight = CompactMemory.LineHeight = 16 * layout.TextScale;
 
-        if (_appliedBlockOrder != layout.BlockOrder)
+        string rowKey = _presentationItemsKey ?? layout.BlockOrder;
+        if (_appliedBlockOrder != rowKey)
         {
-            var rows = new Dictionary<string, (RowDefinition Row, FrameworkElement Block)>
-            {
-                ["header"] = (HudHeaderRow, HudHeader), ["metrics"] = (HudMetricsRow, CompactPerformance),
-                ["music"] = (HudMusicRow, CompactMusicRow)
-            };
+            string[] tail = ["charts", "frame-time", "volume", "date"];
+            IEnumerable<string> groups = PresentationCapsuleItems is { } items
+                ? items.Select(HudCapsuleLayout.Group).Concat(["header", "metrics", "music"]).Concat(tail).Distinct()
+                : layout.BlockOrder.Split(',').Concat(tail);
             CompactContentGrid.RowDefinitions.Clear();
-            foreach (string key in layout.BlockOrder.Split(','))
+            foreach (string group in groups)
             {
-                var entry = rows[key];
-                Grid.SetRow(entry.Block, CompactContentGrid.RowDefinitions.Count);
-                CompactContentGrid.RowDefinitions.Add(entry.Row);
+                Grid.SetRow(PresentedWidgetGroup(group), CompactContentGrid.RowDefinitions.Count);
+                CompactContentGrid.RowDefinitions.Add(group switch
+                {
+                    "header" => HudHeaderRow, "metrics" => HudMetricsRow, "music" => HudMusicRow,
+                    "charts" => ChartsRow, "frame-time" => FrameTimeRow, "volume" => VolumeRow, _ => FooterRow
+                });
             }
-            CompactContentGrid.RowDefinitions.Add(ChartsRow);
-            CompactContentGrid.RowDefinitions.Add(FrameTimeRow);
-            CompactContentGrid.RowDefinitions.Add(VolumeRow);
-            CompactContentGrid.RowDefinitions.Add(FooterRow);
-            _appliedBlockOrder = layout.BlockOrder;
+            _appliedBlockOrder = rowKey;
         }
+        ApplyHeaderOrder();
         if (_appliedMetricOrder != layout.MetricOrder)
         {
             CompactPerformance.Children.Clear();
@@ -89,7 +91,9 @@ public partial class MainWindow
         CompactPerformance.Height = CompactMetricGridHeight;
         double bandMargin = layout.Spacing;
         HudHeader.Margin = new Thickness(0, LayoutBlockGap("header"), 0, 0);
-        CompactLowPanel.Margin = new Thickness(PresentedComponents.Fps ? 12 : 0, 0, 0, 0);
+        bool lowFirst = PresentationCapsuleItems is { } header && Array.IndexOf(header, "low") < Array.IndexOf(header, "fps");
+        CompactLowPanel.Margin = !PresentedComponents.Fps ? new Thickness(0)
+            : lowFirst ? new Thickness(0, 0, 12, 0) : new Thickness(12, 0, 0, 0);
         CompactMusicRow.Margin = new Thickness(0, LayoutBlockGap("music"), 0, 0);
         CompactPerformance.Margin = new Thickness(0, bandMargin + LayoutBlockGap("metrics"), 0, bandMargin);
         int visibleIndex = 0;
@@ -110,6 +114,59 @@ public partial class MainWindow
     }
 
     private TextBlock CompactMetric(string key) => key switch { "cpu" => CompactCpu, "gpu" => CompactGpu, _ => CompactMemory };
+
+    private FrameworkElement? PresentedWidget(string id) => id switch
+    {
+        "fps" => CompactFpsPanel, "low" => CompactLowPanel, "time" => CompactClock, "battery" => CompactBattery,
+        "cpu" => CompactCpu, "gpu" => CompactGpu, "memory" => CompactMemory, "music" => CompactMusicRow,
+        "cpu-chart" => CpuChartCard, "gpu-chart" => GpuChartCard, "memory-chart" => MemoryChartCard, "fps-chart" => FpsChartCard,
+        "frame-time" => FrameTimeCard, "volume" => CompactVolume, "date" => DateLabel, _ => null
+    };
+
+    private FrameworkElement PresentedWidgetGroup(string group) => group switch
+    {
+        "header" => HudHeader, "metrics" => CompactPerformance, "charts" => ChartsPanel, _ => PresentedWidget(group)!
+    };
+
+    private void ApplyHeaderOrder()
+    {
+        string[]? items = PresentationCapsuleItems?.Where(HudCapsuleLayout.IsHeader).ToArray();
+        string? order = items is null ? null : string.Join(',', items);
+        if (_appliedHeaderOrder == order) return;
+        _appliedHeaderOrder = order;
+
+        CompactFrameStats.Children.Clear();
+        HudHeader.Children.Clear();
+        HudHeader.ColumnDefinitions.Clear();
+        if (items is null)
+        {
+            HudHeader.ColumnDefinitions.Add(CompactFrameColumn);
+            HudHeader.ColumnDefinitions.Add(CompactClockColumn);
+            HudHeader.ColumnDefinitions.Add(CompactBatteryColumn);
+            CompactFrameStats.Children.Add(CompactFpsPanel);
+            CompactFrameStats.Children.Add(CompactLowPanel);
+            HudHeader.Children.Add(CompactFrameStats);
+            Grid.SetColumn(CompactClock, 1);
+            Grid.SetColumn(CompactBattery, 2);
+            HudHeader.Children.Add(CompactClock);
+            HudHeader.Children.Add(CompactBattery);
+            return;
+        }
+
+        // Keep the original left statistics/right clock alignment when their groups
+        // retain that order. Custom interleaving uses the requested left-to-right order.
+        int firstClock = Array.FindIndex(items, item => item is "time" or "battery");
+        int lastFrame = Array.FindLastIndex(items, item => item is "fps" or "low");
+        for (int index = 0; index < items.Length; index++)
+        {
+            if (index == firstClock && lastFrame < firstClock && _capsuleId is null)
+                HudHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            FrameworkElement widget = PresentedWidget(items[index])!;
+            Grid.SetColumn(widget, HudHeader.ColumnDefinitions.Count);
+            HudHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            HudHeader.Children.Add(widget);
+        }
+    }
 
     // Tabular FPS numerals only change width when their digit count changes. Avoid new
     // measurements on every frame update, while keeping large user fonts inside the capsule.

@@ -60,7 +60,7 @@ internal static class Program
             (appearance, components) => { previews++; return MainWindow.RenderHudPreview(appearance, components); }, context);
         try
         {
-            Check(editor.Sections.Select(section => section.Id).SequenceEqual(new[] { "appearance", "layout", "components", "alerts", "placement", "profiles", "application" }), "Seven clear settings sections share one registry");
+            Check(editor.Sections.Select(section => section.Id).SequenceEqual(new[] { "appearance", "components", "alerts", "placement", "profiles", "application" }), "Six settings sections leave arrangement to the screen editor");
             Check(editor.SelectedSectionId == "appearance" && !editor.HasUnsavedChanges, "Opening the default page leaves every draft unchanged");
             Check(editor.DraftApplication?.Placement == placement && editor.DraftApplication.Profiles.Profiles.SequenceEqual(profiles.Profiles), "Application draft preserves exact position and profile records");
             Check(editor.FindSettingsControl("PlacementMonitorCombo") is null && editor.FindSettingsControl("AppAutostartCheckBox") is null, "Application page trees remain unconstructed until first navigation");
@@ -104,7 +104,7 @@ internal static class Program
                   editor.SelectedSectionId == "components" && !editor.HasUnsavedChanges,
                 "Enter in search accepts the matching section without invoking the default Save action");
             Click(clearSearch);
-            Check(search.Text.Length == 0 && editor.FilteredSections.Count == 7 && !clearSearch.IsVisible &&
+            Check(search.Text.Length == 0 && editor.FilteredSections.Count == 6 && !clearSearch.IsVisible &&
                   resultLabel.Text == "РАЗДЕЛЫ" && editor.SelectedSectionId == "components",
                 "Clearing search restores all sections and keeps the current page selected");
             editor.SelectSection("application");
@@ -112,7 +112,7 @@ internal static class Program
             Check(editor.SearchSections("нет-такого-раздела-123").Count == 0 && Named<TextBlock>(editor, "NoSearchResults").Visibility == Visibility.Visible,
                 "An unmatched query shows a clear empty search state");
             Check(editor.SelectedSectionId == previous && previews == 1 && !editor.HasUnsavedChanges, "Empty search preserves current content and drafts");
-            Check(editor.SearchSections(null).Count == 7 && Named<TextBlock>(editor, "NoSearchResults").Visibility == Visibility.Collapsed, "Clearing search restores all sections");
+            Check(editor.SearchSections(null).Count == 6 && Named<TextBlock>(editor, "NoSearchResults").Visibility == Visibility.Collapsed, "Clearing search restores all sections");
             Check(!editor.SelectSection("missing"), "Unknown section IDs do not alter navigation");
             var profileName = (TextBox)editor.FindSettingsControl("SettingsProfileNameBox")!;
             editor.SelectSection("profiles"); await Settle();
@@ -144,9 +144,9 @@ internal static class Program
                   !editor.HasUnsavedChanges && DraftSnapshot(editor) == beforeBackdrop,
                 "Backdrop changes remain local to the preview and neither alter the draft nor render the HUD again");
 
-            editor.SelectSection("layout");
+            editor.SelectSection("appearance");
             Named<RadioButton>(editor, "ColumnsTwoRadio").IsChecked = true;
-            editor.SelectSection("components"); editor.SelectSection("layout");
+            editor.SelectSection("components"); editor.SelectSection("appearance");
             Check(Named<RadioButton>(editor, "ColumnsTwoRadio").IsChecked == true && editor.HasUnsavedChanges, "Unsaved page values survive navigation");
             await Task.Delay(180); await Settle();
             Check(previews == 2 && !editor.HasPendingPreview, "A HUD edit renders one debounced preview after navigation");
@@ -160,7 +160,6 @@ internal static class Program
             Check(Named<Grid>(editor, "SettingsContentPanel").Visibility == Visibility.Collapsed && Named<Image>(editor, "HudPreviewImage").ActualWidth > sidePreviewWidth,
                 "The side preview can expand into a readable full-width view");
             Inside(Named<Image>(editor, "HudPreviewImage"), (FrameworkElement)editor.Content, "The enlarged wide preview stays inside the window");
-            editor.SelectSection("layout"); await Settle(); Save(editor, "settings-layout.png");
             editor.SelectSection("components"); await Settle(); Save(editor, "settings-components.png");
             editor.SelectSection("placement"); await Settle(); Save(editor, "settings-placement.png");
             editor.SelectSection("profiles"); await Settle(); Save(editor, "settings-profiles.png");
@@ -203,7 +202,7 @@ internal static class Program
         {
             Prepare(editor); editor.Width = 800; editor.Height = 420; editor.Show(); await Settle();
             string before = DraftSnapshot(editor);
-            var cases = new[] { ("appearance", "SpacingSlider"), ("layout", "ResetLayoutButton"),
+            var cases = new[] { ("appearance", "ColumnsThreeRadio"),
                 ("components", "BatteryCheckBox"), ("alerts", "StutterCountSlider"),
                 ("placement", "PlacementLockCheckBox"), ("profiles", "CopyProfileButton"), ("application", "SettingsVersionText") };
             foreach (var (section, bottomName) in cases)
@@ -219,7 +218,7 @@ internal static class Program
                 InViewport(bottom, scroll, "Wheel scrolling reaches the last control: " + section);
                 if (section is "placement" or "profiles" or "application") Save(editor, "settings-" + section + "-short-bottom.png");
             }
-            Check(DraftSnapshot(editor) == before, "Scrolling all seven sections does not alter any preference draft");
+            Check(DraftSnapshot(editor) == before, "Scrolling all six sections does not alter any preference draft");
 
             editor.SelectSection("appearance"); await Settle();
             var appearanceScroll = PageScroll(editor);
@@ -350,8 +349,9 @@ internal static class Program
                 box.TextChanged += (_, _) => editor.NotifyDraftChanged();
                 return box;
             }, () => { captures++; captured = box?.Text ?? "unopened"; }, () => valid ? null : "Проверь тестовое значение.", () => closed++);
+            int initialSectionCount = editor.Sections.Count;
             editor.RegisterSection(extension);
-            Check(editor.Sections.Count == 8 && factories == 0 && !extension.IsContentCreated && !editor.HasUnsavedChanges,
+            Check(editor.Sections.Count == initialSectionCount + 1 && factories == 0 && !extension.IsContentCreated && !editor.HasUnsavedChanges,
                 "Registering a new section adds navigation without creating controls or changing the draft");
             Check(editor.SearchSections("дополнение").Single().Id == extension.Id && factories == 1 && extension.IsContentCreated,
                 "Search activates an extension factory only on first navigation");

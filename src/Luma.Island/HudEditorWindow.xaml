@@ -417,6 +417,13 @@
                                 <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=SpacingSlider, StringFormat={}{0:0}}" Foreground="#BEEBD6"/>
                             </Grid>
                             <Slider x:Name="SpacingSlider" Minimum="2" Maximum="12" ValueChanged="OnDraftChanged" AutomationProperties.Name="Расстояния между блоками"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
+                                <TextBlock Text="CPU, GPU и RAM в строке" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                <RadioButton x:Name="ColumnsOneRadio" Content="1" GroupName="MetricColumns" Checked="OnDraftChanged" AutomationProperties.Name="Один показатель в строке"/>
+                                <RadioButton x:Name="ColumnsTwoRadio" Content="2" GroupName="MetricColumns" Checked="OnDraftChanged" AutomationProperties.Name="Два показателя в строке"/>
+                                <RadioButton x:Name="ColumnsThreeRadio" Content="3" GroupName="MetricColumns" Checked="OnDraftChanged" AutomationProperties.Name="Три показателя в строке"/>
+                            </StackPanel>
+                            <TextBlock Text="Чтобы переставить или отделить блоки, выберите «Редактировать HUD…» в меню капсулы или трея." Style="{StaticResource Caption}" Margin="0,10,0,0"/>
 
                         </StackPanel></Border></StackPanel>
                     </ScrollViewer></TabItem>
@@ -471,50 +478,6 @@
                                 <TextBlock Text="Включённые правила используют соответствующие измерения, даже если сами числа скрыты. Частота опроса остаётся прежней. Датчики CPU / RAM требуют настроенного модуля датчиков."
                                            Style="{StaticResource Caption}"/>
                             </Border>
-                        </StackPanel>
-                    </ScrollViewer></TabItem>
-                    <TabItem x:Name="LayoutTab" Header="Раскладка"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
-                        <StackPanel>
-                        <Border x:Name="CapsuleLayoutCard" Style="{StaticResource SectionCard}" Margin="0,0,0,14" Visibility="Collapsed"><StackPanel>
-                            <TextBlock Text="Интерактивная раскладка" Style="{StaticResource Section}" Margin="0,0,0,5"/>
-                            <TextBlock Text="Порядок и положение блоков меняются прямо на экране. Откройте «Редактировать HUD…» в меню капсулы или трея." Style="{StaticResource Caption}"/>
-                        </StackPanel></Border>
-                        <Border x:Name="LegacyIslandsCard" Style="{StaticResource SectionCard}" Margin="0,0,0,14"><StackPanel>
-                            <TextBlock Text="Отдельные островки" Style="{StaticResource Section}" Margin="0,0,0,5"/>
-                            <TextBlock Text="Вынесите плеер в своё окно и перетащите его в удобное место." Style="{StaticResource Caption}" Margin="0,0,0,7"/>
-                            <CheckBox x:Name="DetachedMusicCheckBox" Content="Музыка и громкость в отдельном островке" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
-                            <TextBlock Text="Оформление, закрепление и горячие клавиши общие для обоих островков." Style="{StaticResource Caption}" Margin="0,7,0,10"/>
-                            <Button x:Name="ResetMusicPositionButton" Content="Сбросить положение музыки" Click="OnResetMusicPosition" HorizontalAlignment="Left"
-                                    IsEnabled="{Binding IsChecked, ElementName=DetachedMusicCheckBox}" ToolTip="После сохранения музыкальный островок появится рядом с основным."/>
-                        </StackPanel></Border>
-                        <Border x:Name="LegacyOrderCard" Style="{StaticResource SectionCard}"><StackPanel>
-                            <TextBlock Text="Порядок блоков" Style="{StaticResource Section}" Margin="0,0,0,5"/>
-                            <TextBlock Text="Выберите блок и измените его место в HUD." Style="{StaticResource Caption}" Margin="0,0,0,10"/>
-                            <ListBox x:Name="BlockOrderList" Height="108" SelectionChanged="OnOrderSelectionChanged" DisplayMemberPath="Label" AutomationProperties.Name="Порядок блоков HUD"/>
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <Button x:Name="BlockUpButton" Content="↑ Выше" Click="OnBlockUp" Margin="0,0,8,0" AutomationProperties.Name="Переместить блок выше"/>
-                                <Button x:Name="BlockDownButton" Content="↓ Ниже" Click="OnBlockDown" AutomationProperties.Name="Переместить блок ниже"/>
-                            </StackPanel>
-                        </StackPanel></Border>
-                        <Border Style="{StaticResource SectionCard}" Margin="0,12,0,0"><StackPanel>
-                            <TextBlock Text="CPU, GPU и RAM" Style="{StaticResource Section}" Margin="0,0,0,5"/>
-                            <StackPanel x:Name="LegacyMetricOrderControls">
-                            <TextBlock Text="Выберите порядок показателей и их число в строке." Style="{StaticResource Caption}" Margin="0,0,0,7"/>
-                            <ListBox x:Name="MetricOrderList" Height="108" SelectionChanged="OnOrderSelectionChanged" DisplayMemberPath="Label" AutomationProperties.Name="Порядок CPU, GPU и RAM"/>
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <Button x:Name="MetricUpButton" Content="↑ Выше" Click="OnMetricUp" Margin="0,0,8,0" AutomationProperties.Name="Переместить показатель выше"/>
-                                <Button x:Name="MetricDownButton" Content="↓ Ниже" Click="OnMetricDown" AutomationProperties.Name="Переместить показатель ниже"/>
-                            </StackPanel>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
-                                <TextBlock Text="В строке" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                                <RadioButton x:Name="ColumnsOneRadio" Content="1" GroupName="MetricColumns" Checked="OnDraftChanged" AutomationProperties.Name="Один показатель в строке"/>
-                                <RadioButton x:Name="ColumnsTwoRadio" Content="2" GroupName="MetricColumns" Checked="OnDraftChanged" AutomationProperties.Name="Два показателя в строке"/>
-                                <RadioButton x:Name="ColumnsThreeRadio" Content="3" GroupName="MetricColumns" Checked="OnDraftChanged" AutomationProperties.Name="Три показателя в строке"/>
-                            </StackPanel>
-                            <Button x:Name="ResetLayoutButton" Content="Вернуть исходную раскладку" HorizontalAlignment="Left" Click="OnResetLayout" Margin="0,8,0,0"/>
-
-                        </StackPanel></Border>
                         </StackPanel>
                     </ScrollViewer></TabItem>
                     <TabItem x:Name="ComponentsTab" Header="Показатели"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0"><StackPanel>                        <Border Style="{StaticResource SectionCard}" Margin="0,0,0,14"><StackPanel>

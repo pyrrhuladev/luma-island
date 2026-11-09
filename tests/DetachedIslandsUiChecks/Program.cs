@@ -42,6 +42,7 @@ internal static partial class Program
                 await RunPositionLifecycleChecks();
                 await RunProfileChecks();
                 await RunCapsuleEditChecks();
+                await RunAllTilesChecks();
                 await RunCapsuleProfileChecks();
                 Check(preferences.OrderBy(p => p.Key).SequenceEqual(RealPreferences().OrderBy(p => p.Key)),
                     "All actual user preference files remain byte-for-byte unchanged");
@@ -67,18 +68,16 @@ internal static partial class Program
     private static async Task RunDraftChecks()
     {
         var position = new HudIslandPosition(@"\\.\DISPLAY-fixture", .123456789123, .876543219876);
-        var original = AppearanceSettings.Default with { Layout = new(MusicPosition: position) };
+        var original = AppearanceSettings.Default with { Layout = new(DetachedMusic: true, MusicPosition: position) };
         int before = Application.Current.Windows.OfType<MainWindow>().Count();
         var cancelled = NewEditor(original);
         try
         {
-            Check(!Named<CheckBox>(cancelled, "DetachedMusicCheckBox").IsChecked.GetValueOrDefault(),
-                "Old or merged settings open with the separate-islands option disabled");
-            Named<CheckBox>(cancelled, "DetachedMusicCheckBox").IsChecked = true;
-            Check(cancelled.DraftAppearance.Layout.DetachedMusic && cancelled.HasUnsavedChanges,
-                "The separate-islands checkbox changes only the editor draft and dirty indicator");
-            Check(cancelled.DraftAppearance.Layout.MusicPosition == position && !original.Layout.DetachedMusic,
-                "Toggling split mode preserves exact saved coordinates and the supplied immutable settings");
+            Check(cancelled.FindName("LayoutTab") is null && cancelled.FindName("DetachedMusicCheckBox") is null &&
+                  cancelled.FindName("BlockOrderList") is null && cancelled.FindName("MetricOrderList") is null,
+                "Settings omit the old duplicate split and reorder controls");
+            Check(cancelled.DraftAppearance.Layout == original.Layout && !cancelled.HasUnsavedChanges,
+                "Legacy split mode opens unchanged without requiring any removed controls");
             Named<Slider>(cancelled, "TextScaleSlider").Value = 117;
             Check(cancelled.CommitDraft() && cancelled.DraftAppearance.Layout.DetachedMusic &&
                   cancelled.DraftAppearance.Layout.MusicPosition == position,
@@ -99,22 +98,10 @@ internal static partial class Program
                 "The split preview has distinct rendered metrics and music bands with a fully transparent separator");
         }
         finally { cancelled.Close(); }
-        Check(!original.Layout.DetachedMusic && original.Layout.MusicPosition == position,
+        Check(original.Layout.DetachedMusic && original.Layout.MusicPosition == position,
             "Closing an unaccepted settings editor leaves the original split choice and position unchanged");
 
-        var reset = NewEditor(original with { Layout = original.Layout with { DetachedMusic = true } });
-        try
-        {
-            Click(Named<Button>(reset, "ResetMusicPositionButton"));
-            Check(reset.DraftAppearance.Layout.DetachedMusic && reset.DraftAppearance.Layout.MusicPosition is null,
-                "Resetting the music position is a local draft operation that keeps split mode enabled");
-            Check(reset.CommitDraft() && reset.DraftAppearance.Layout.MusicPosition is null && reset.HasUnsavedChanges,
-                "The position reset survives final draft capture and marks the editor dirty");
-            Check(original.Layout.MusicPosition == position, "A position reset cannot mutate the supplied settings record");
-        }
-        finally { reset.Close(); }
-
-        var untouched = NewEditor(original with { Layout = original.Layout with { DetachedMusic = true } });
+        var untouched = NewEditor(original);
         try
         {
             Check(!untouched.HasUnsavedChanges && untouched.CommitDraft() && !untouched.HasUnsavedChanges,
@@ -502,10 +489,13 @@ internal static partial class Program
         Check(Named<TextBlock>(cpuWindow, "CompactCpu").IsVisible && !Named<TextBlock>(window, "CompactCpu").IsVisible &&
               !Named<TextBlock>(cpuWindow, "CompactGpu").IsVisible && window.Components == configured,
             "The CPU presentation has exactly one visible home and keeps the global collector configuration");
+        Check(Named<Border>(window, "CpuChartCard").IsVisible && !Named<Border>(cpuWindow, "CpuChartCard").IsVisible,
+            "Detaching the numeric CPU value leaves the independently movable chart where it was");
+        Call(window, "MoveCapsuleItem", "cpu-chart", cpuId, 1, drop); await Settle();
         Check(!Named<Border>(window, "CpuChartCard").IsVisible && Named<Border>(cpuWindow, "CpuChartCard").IsVisible &&
               Named<System.Windows.Shapes.Path>(cpuWindow, "CpuChartLine").Data is { } history && !history.Bounds.IsEmpty &&
               Named<TextBlock>(cpuWindow, "CpuChartValue").Text == "35%",
-            "Detaching CPU carries its existing chart samples without waiting for the next collector update");
+            "Detaching a chart carries its existing samples without waiting for the next collector update");
 
         Call(window, "MoveCapsuleItem", "gpu", cpuId, 1, drop); await Settle();
         Call(window, "MoveCapsuleItem", "music", HudCapsuleLayout.MainId, 1, drop); await Settle();
@@ -593,7 +583,7 @@ internal static partial class Program
         Call(window, "BeginCapsuleEdit");
         Call(window, "MoveCapsuleItem", "memory", "music", 0, new Point()); await Settle();
         var layout = window.Appearance.Layout.Capsules!;
-        Check(layout.Islands.Single(capsule => capsule.Id == "music") == new HudCapsule("music", "memory,music", musicAnchor) &&
+        Check(layout.Islands.Single(capsule => capsule.Id == "music") == new HudCapsule("music", "memory,music,volume", musicAnchor) &&
               !window.ActivateGameProfile(second) && window.ActiveGameProfileId == first,
             "Moving RAM into the legacy music island keeps its anchor and defers game switching while editing");
         Check(fixture.BaseHashes().SequenceEqual(ordinaryBytes) && Hash(Path.Combine(fixture.Root, "profiles.json")) == profileHash,
@@ -613,6 +603,91 @@ internal static partial class Program
               child.Placement.Settings.YFraction == musicAnchor.YFraction &&
               Named<TextBlock>(child, "CompactMemory").IsVisible && Named<Grid>(child, "CompactMusicRow").IsVisible,
             "Returning to the saved profile restores the mixed RAM and music capsule at its original position");
+    }
+
+    private static async Task RunAllTilesChecks()
+    {
+        var configured = Full with { Charts = true };
+        using var fixture = new Fixture("all-live-tiles", AppearanceSettings.Default, configured);
+        var window = fixture.Window;
+        window.Show(); await Settle();
+        var original = window.CaptureHudSettings();
+        string[] originalBytes = fixture.BaseHashes();
+        var area = window.Placement.CurrentDisplay.WorkArea;
+        var drop = new Point(area.Left + area.Width * .6, area.Top + area.Height * .6);
+
+        Call(window, "BeginCapsuleEdit");
+        string Detach(string item)
+        {
+            Call(window, "MoveCapsuleItem", item, null, 0, drop);
+            return window.Appearance.Layout.Capsules!.Islands.Single(capsule => capsule.Items == item).Id;
+        }
+        MainWindow Island(string id) => CapsuleWindows(window).Single(capsule => capsule.Id == id).Window;
+        string fpsId = Detach("fps"), lowId = Detach("low"), framesId = Detach("frame-time"), fpsChartId = Detach("fps-chart");
+        string timeId = Detach("time"), batteryId = Detach("battery"), dateId = Detach("date"), volumeId = Detach("volume");
+        await Settle();
+
+        Check(Named<StackPanel>(Island(fpsId), "CompactFpsPanel").IsVisible && !Named<StackPanel>(window, "CompactFpsPanel").IsVisible &&
+              Named<StackPanel>(Island(lowId), "CompactLowPanel").IsVisible && !Named<StackPanel>(window, "CompactLowPanel").IsVisible &&
+              Named<Border>(Island(framesId), "FrameTimeCard").IsVisible && !Named<Border>(window, "FrameTimeCard").IsVisible,
+            "FPS, 1% Low and frame time each get their own capsule without duplicate displays");
+        Check(Named<TextBlock>(Island(timeId), "CompactClock").IsVisible && Named<TextBlock>(Island(dateId), "DateLabel").IsVisible &&
+              !Named<TextBlock>(window, "CompactClock").IsVisible && !Named<TextBlock>(window, "DateLabel").IsVisible,
+            "Time and date can move independently of each other");
+        Check(Named<Grid>(Island(volumeId), "CompactVolume").IsVisible && !Named<Grid>(Island(volumeId), "CompactMusicRow").IsVisible &&
+              !Named<Grid>(window, "CompactVolume").IsVisible && Named<Grid>(window, "CompactMusicRow").IsVisible,
+            "The volume slider can move without taking the player along");
+
+        double now = System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
+        window.ApplyFps(new(144, "Fixture", "Fixture", 97, 6.9,
+            [new FrameTimeSample(now - .2, 6.8), new FrameTimeSample(now - .1, 6.9)], StreamId: "all-live-tiles"));
+        window.UpdateClockAndBattery();
+        Call(window, "ApplyBattery", new BatterySnapshot(true, 73, false));
+        await Settle();
+        Check(Named<TextBlock>(Island(fpsId), "CompactFps").Text == "144" &&
+              Named<TextBlock>(Island(lowId), "CompactOnePercentLow").Text == "97" &&
+              Named<TextBlock>(Island(framesId), "FrameTimeValue").Text.Contains("6,9", StringComparison.Ordinal) &&
+              Named<System.Windows.Shapes.Path>(Island(framesId), "FrameTimeLine").Data is { } frameLine && !frameLine.Bounds.IsEmpty,
+            "One incoming frame snapshot updates all three detached frame metrics, including the frame-time graph");
+        Check(Named<Border>(Island(fpsChartId), "FpsChartCard").IsVisible && !Named<Border>(window, "FpsChartCard").IsVisible &&
+              Named<TextBlock>(Island(fpsChartId), "FpsChartValue").Text == "144" &&
+              Named<System.Windows.Shapes.Path>(Island(fpsChartId), "FpsChartLine").Data is { } chart && !chart.Bounds.IsEmpty,
+            "An FPS chart-only capsule uses the shared samples and displays a complete graph");
+        Check(Named<TextBlock>(Island(timeId), "CompactClock").Text != "--:--" &&
+              !string.IsNullOrWhiteSpace(Named<TextBlock>(Island(dateId), "DateLabel").Text) &&
+              Named<TextBlock>(Island(batteryId), "CompactBattery").Text == "73%",
+            "The independent date, clock and battery still display updates from their shared sources");
+        Check(!Named<TextBlock>(window, "CompactBattery").IsVisible,
+            "The shared battery snapshot does not resurrect a battery block in its former capsule");
+
+        var draft = window.Appearance.Layout.Capsules!;
+        Check(fixture.BaseHashes().SequenceEqual(originalBytes), "Moving the additional tiles never writes a live draft to disk");
+        Call(window, "EndCapsuleEdit", true); await Settle();
+        Check(fixture.Appearance.Load().Layout.Capsules == draft && CapsuleWindows(window).Length >= 8,
+            "Done persists separate non-hardware tile and chart assignments");
+
+        Call(window, "BeginCapsuleEdit");
+        Call(window, "ResetCapsuleDraft"); await Settle();
+        Check(CapsuleWindows(window).Length == 1 && window.Appearance.Layout.Capsules == HudCapsuleLayout.FromLegacy(HudLayoutSettings.Default),
+            "Reset in the live editor reunites all tiles in the default arrangement");
+        Check(fixture.Appearance.Load().Layout.Capsules == draft, "Reset remains a reversible draft until Done");
+        Call(window, "EndCapsuleEdit", false); await Settle();
+        Check(window.Appearance.Layout.Capsules == draft && window.CaptureHudSettings().Components == original.Components,
+            "Cancel restores all prior capsule assignments without changing enabled components");
+
+        Call(window, "BeginCapsuleEdit");
+        foreach (string item in draft.Islands[0].GetItems())
+            Call(window, "MoveCapsuleItem", item, volumeId, int.MaxValue, drop);
+        Call(window, "EndCapsuleEdit", true); await Settle();
+        Check(window.Appearance.Layout.Capsules!.Islands[0].Items.Length == 0 &&
+              !Named<Border>(window, "IslandSurface").IsVisible && window.IsHudPresentationVisible,
+            "An empty main capsule disappears while its remaining windows keep the HUD visible");
+        Call(window, "BeginCapsuleEdit"); await Settle();
+        Check(Named<Border>(window, "IslandSurface").IsVisible, "Live editing brings back the empty main drop target");
+        Call(window, "MoveCapsuleItem", "time", HudCapsuleLayout.MainId, 0, drop); await Settle();
+        Check(Named<TextBlock>(window, "CompactClock").IsVisible && CapsuleWindows(window).All(capsule => capsule.Id != timeId),
+            "Dropping a clock into the empty main capsule closes its previous window");
+        Call(window, "EndCapsuleEdit", false); await Settle();
     }
 
     private static object? Call(MainWindow window, string method, params object?[] args) =>

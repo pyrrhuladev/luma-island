@@ -7,7 +7,7 @@ namespace Luma.Island;
 
 public partial class MainWindow
 {
-    private readonly FrameTimeHistory _frameTimeHistory = new();
+    private readonly FrameTimeHistory _frameTimeHistory;
     private FpsSnapshot _lastFrameMetrics = new(null, null, "Ожидание кадров");
     private string? _frameTimeStream;
 
@@ -15,7 +15,12 @@ public partial class MainWindow
     {
         _lastFrameMetrics = snapshot with { Frames = null };
         UpdateFrameMetricLabels();
-        if (!Components.FrameTime) return;
+        if (_islandOwner is null && Components.FrameTime) RecordFrameTime(snapshot);
+        DrawFrameTimeChart();
+    }
+
+    private void RecordFrameTime(FpsSnapshot snapshot)
+    {
         string? stream = snapshot.StreamId ?? snapshot.ProcessName;
         if (!string.Equals(_frameTimeStream, stream, StringComparison.Ordinal))
         {
@@ -29,7 +34,6 @@ public partial class MainWindow
         }
         if (snapshot.Frames is not null)
             foreach (var frame in snapshot.Frames) _frameTimeHistory.Add(frame.TimeSeconds, frame.Milliseconds);
-        DrawFrameTimeChart();
     }
 
     private void UpdateFrameMetricLabels()
@@ -61,8 +65,11 @@ public partial class MainWindow
 
     private void ClearFrameTimeHistory()
     {
-        _frameTimeHistory.Clear();
-        _frameTimeStream = null;
+        if (_islandOwner is null)
+        {
+            _frameTimeHistory.Clear();
+            _frameTimeStream = null;
+        }
         FrameTimeLine.Data = null;
         FrameTimePeak.Text = "до 10 с";
         FrameTimeScale.Text = "0–16 мс";
@@ -70,17 +77,17 @@ public partial class MainWindow
 
     private void OnFrameTimeSizeChanged(object sender, SizeChangedEventArgs args)
     {
-        if (!_closed && Components.FrameTime && args.NewSize.Width > 0) DrawFrameTimeChart();
+        if (!_closed && PresentedComponents.FrameTime && args.NewSize.Width > 0) DrawFrameTimeChart();
     }
 
     private void OnFrameTimeVisibleChanged(object sender, DependencyPropertyChangedEventArgs args)
     {
-        if (!_closed && Components.FrameTime && args.NewValue is true) DrawFrameTimeChart();
+        if (!_closed && PresentedComponents.FrameTime && args.NewValue is true) DrawFrameTimeChart();
     }
 
     private void DrawFrameTimeChart()
     {
-        if (!Components.FrameTime || !FrameTimeCanvas.IsVisible || FrameTimeCanvas.ActualWidth <= 4 || FrameTimeCanvas.ActualHeight <= 4) return;
+        if (!PresentedComponents.FrameTime || !FrameTimeCanvas.IsVisible || FrameTimeCanvas.ActualWidth <= 4 || FrameTimeCanvas.ActualHeight <= 4) return;
         double now = ChartTime(), width = FrameTimeCanvas.ActualWidth - 4, height = FrameTimeCanvas.ActualHeight - 4;
         double peak = _frameTimeHistory.Maximum(now);
         double maximum = FrameTimeHistory.NiceMaximum(peak);

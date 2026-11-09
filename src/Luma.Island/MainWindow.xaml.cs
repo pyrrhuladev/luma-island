@@ -29,7 +29,7 @@ public partial class MainWindow : Window
 
     public MainWindow(MediaService media, SystemService system, PlacementStore? placementStore = null, AppearanceStore? appearanceStore = null,
         ComponentStore? componentStore = null, AutostartService? autostart = null, GameProfileController? profiles = null,
-        MainWindow? islandOwner = null, string? capsuleId = null)
+        MainWindow? islandOwner = null, string? capsuleId = null, string? capsuleItems = null)
     {
         _media = media;
         _system = system;
@@ -38,6 +38,12 @@ public partial class MainWindow : Window
         _profiles = profiles;
         _islandOwner = islandOwner;
         _capsuleId = capsuleId;
+        _capsuleItems = capsuleItems;
+        _cpuHistory = islandOwner?._cpuHistory ?? new MetricHistory();
+        _gpuHistory = islandOwner?._gpuHistory ?? new MetricHistory();
+        _memoryHistory = islandOwner?._memoryHistory ?? new MetricHistory();
+        _fpsHistory = islandOwner?._fpsHistory ?? new MetricHistory();
+        _frameTimeHistory = islandOwner?._frameTimeHistory ?? new FrameTimeHistory();
         InitializeComponent();
         InitializeAppearance(appearanceStore ?? new AppearanceStore());
         InitializeComponents(componentStore ?? new ComponentStore());
@@ -123,9 +129,17 @@ public partial class MainWindow : Window
 
         if (_closed) return;
         DateTime now = DateTime.Now;
+        UpdateClockText(now);
+        if (_islandOwner is not null) return;
+        foreach (var child in _capsuleWindows.Values)
+            if (child.IsVisible) child.UpdateClockText(now);
+        ApplyBattery(Components.Battery ? SystemService.ReadBattery() : new BatterySnapshot(false, -1, false));
+    }
+
+    private void UpdateClockText(DateTime now)
+    {
         CompactClock.Text = now.ToString("HH:mm", _culture);
         DateLabel.Text = now.ToString("ddd, d MMMM", _culture);
-        ApplyBattery(Components.Battery ? SystemService.ReadBattery() : new BatterySnapshot(false, -1, false));
     }
 
     private void OnMediaChanged(MediaSnapshot state)

@@ -114,6 +114,14 @@ public partial class MainWindow
 
     private void OnCapsuleEditDone(object sender, RoutedEventArgs e) => EndCapsuleEdit(save: true);
     private void OnCapsuleEditCancel(object sender, RoutedEventArgs e) => EndCapsuleEdit(save: false);
+    private void OnCapsuleEditReset(object sender, RoutedEventArgs e) => ResetCapsuleDraft();
+
+    private void ResetCapsuleDraft()
+    {
+        if (_capsuleEdit is null) return;
+        CancelCapsuleGesture();
+        ApplyCapsuleDraft(HudCapsuleLayout.FromLegacy(HudLayoutSettings.Default));
+    }
 
     private void EndCapsuleEdit(bool save)
     {

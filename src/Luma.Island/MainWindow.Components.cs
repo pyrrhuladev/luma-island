@@ -9,6 +9,8 @@ public partial class MainWindow
 {
     private ComponentStore _componentStore = null!;
     private bool _batteryVisible;
+    private BatterySnapshot _lastBattery = new(false, -1, false);
+    private bool BatteryAvailable => _lastBattery.HasBattery && !_lastBattery.IsOnAcPower;
     private PerformanceSnapshot _lastPerformance = PerformanceSnapshot.Empty;
     public ComponentSettings Components { get; private set; } = ComponentSettings.Default;
     public event Action<ComponentSettings>? ComponentsChanged;
@@ -27,9 +29,18 @@ public partial class MainWindow
     private double HudMusicHeight => HudMusicContentHeight > 0 ? HudMusicContentHeight + LayoutBlockGap("music") : 0;
     private double HudVolumeHeight => VolumeInThisIsland ? 28 * LayoutGrowth : 0;
     private double HudDateHeight => PresentedComponents.Date ? 19 * LayoutGrowth : 0;
-    private double BaseCollapsedWindowWidth => _capsuleId is not null && !MusicInThisIsland && !VolumeInThisIsland
-        ? Math.Min(408, 68 + LayoutGrowth * Math.Max(LayoutMetricColumns * 100,
-            PresentedComponents.Charts ? Math.Min(2, EnabledChartCount) * 126 : 0)) : 408;
+    private double BaseCollapsedWindowWidth
+    {
+        get
+        {
+            if (_capsuleId is null || MusicInThisIsland) return 408;
+            double header = (PresentedComponents.Fps ? 108 : 0) + (PresentedComponents.OnePercentLow ? 56 : 0)
+                + (PresentedComponents.Time ? 52 : 0) + (_batteryVisible ? 48 : 0);
+            double data = Math.Max(VisibleHardwareCount > 0 ? LayoutMetricColumns * 100 : 0, Math.Min(2, EnabledChartCount) * 126);
+            double footer = PresentedComponents.FrameTime || VolumeInThisIsland ? 208 : PresentedComponents.Date ? 126 : 0;
+            return Math.Min(408, 68 + LayoutGrowth * Math.Max(60, Math.Max(header, Math.Max(data, footer))));
+        }
+    }
     private double CollapsedSurfaceWidth => BaseCollapsedWindowWidth - 32;
     private double BaseCollapsedWindowHeight => 38 + Math.Max(20,
         HudHeaderHeight + HudMetricsHeight + HudMusicHeight + ChartsHeight + LayoutFrameTimeHeight + HudVolumeHeight + HudDateHeight);
@@ -80,6 +91,7 @@ public partial class MainWindow
         CompactFpsPanel.Visibility = Show(PresentedComponents.Fps);
         CompactLowPanel.Visibility = Show(PresentedComponents.OnePercentLow);
         FrameTimeCard.Visibility = Show(PresentedComponents.FrameTime);
+        RefreshBatteryWidget();
         RefreshFrameMetricVisibility();
         RefreshGpuMetric();
         RefreshCpuMemoryMetrics();
@@ -109,18 +121,33 @@ public partial class MainWindow
 
     internal void ApplyBattery(BatterySnapshot battery)
     {
-        bool visible = Components.Battery && battery.HasBattery && !battery.IsOnAcPower;
+        bool wasAvailable = BatteryAvailable;
+        _lastBattery = battery;
+        bool changed = RefreshBatteryWidget();
+        if (changed) RefreshComponentSize();
+        foreach (var child in _capsuleWindows.Values)
+        {
+            if (!child.PresentedComponents.Battery) continue;
+            child._lastBattery = battery;
+            if (!child.RefreshBatteryWidget()) continue;
+            child.RefreshComponentSize();
+            changed = true;
+        }
+        if (!IsCapsuleLayoutActive || !IsLoaded) return;
+        if (wasAvailable != BatteryAvailable) SynchronizeMusicIsland();
+        else if (changed) NotifyPresentationVisibilityChanged();
+    }
+
+    private bool RefreshBatteryWidget()
+    {
+        bool visible = PresentedComponents.Battery && (BatteryAvailable || IsCapsuleLayoutEditing);
         bool changed = _batteryVisible != visible;
         _batteryVisible = visible;
         CompactBattery.Visibility = Show(visible);
-        string percent = battery.Percent >= 0 ? $"{battery.Percent}%" : "—";
-        CompactBattery.Text = percent;
-        CompactBattery.ToolTip = battery.IsCharging ? $"Заряжается · {percent}" : $"Батарея · {percent}";
-        if (changed)
-        {
-            RefreshComponentSize();
-            if (IsCapsuleLayoutActive && IsLoaded) NotifyPresentationVisibilityChanged();
-        }
+        string percent = _lastBattery.Percent >= 0 ? $"{_lastBattery.Percent}%" : "—";
+        CompactBattery.Text = !BatteryAvailable && IsCapsuleLayoutEditing ? "Бат. " + percent : percent;
+        CompactBattery.ToolTip = _lastBattery.IsCharging ? $"Заряжается · {percent}" : $"Батарея · {percent}";
+        return changed;
     }
 
     public void ApplyPerformance(PerformanceSnapshot snapshot)
@@ -142,7 +169,8 @@ public partial class MainWindow
         }
         RecordPerformanceHistory(snapshot);
         foreach (var child in _capsuleWindows.Values)
-            if (child.IsVisible && child.HasHardwareMetrics) child.ApplyPerformanceCore(snapshot, observeAlerts: false);
+            if (child.IsVisible && (child.HasHardwareMetrics || child.PresentsChart("cpu") || child.PresentsChart("gpu") || child.PresentsChart("memory")))
+                child.ApplyPerformanceCore(snapshot, observeAlerts: false);
     }
 
     private void RefreshCpuMemoryMetrics()
@@ -217,6 +245,14 @@ public partial class MainWindow
         if (!Dispatcher.CheckAccess()) { _ = Dispatcher.BeginInvoke(new Action(() => ApplyFps(snapshot))); return; }
         if (_closed) return;
         ApplyAlertFrames(snapshot);
+        ApplyFpsPresentation(snapshot);
+        foreach (var child in _capsuleWindows.Values)
+            if (child.IsVisible && (child.PresentedComponents.Fps || child.PresentedComponents.OnePercentLow ||
+                child.PresentedComponents.FrameTime || child.PresentsChart("fps"))) child.ApplyFpsPresentation(_lastFrameMetrics);
+    }
+
+    private void ApplyFpsPresentation(FpsSnapshot snapshot)
+    {
         ApplyFrameMetrics(snapshot);
         bool valid = snapshot.Fps is >= 0 && double.IsFinite(snapshot.Fps.Value);
         CompactFps.Text = valid ? snapshot.Fps!.Value.ToString("0", _culture) : "—";

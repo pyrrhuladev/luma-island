@@ -20,8 +20,6 @@ public partial class HudEditorWindow : Window
 {
     private readonly Func<AppearanceSettings, ComponentSettings, BitmapSource> _preview;
     private readonly DispatcherTimer _previewTimer;
-    private readonly ObservableCollection<OrderEntry> _blocks = new();
-    private readonly ObservableCollection<OrderEntry> _metrics = new();
     private AppearanceSettings? _renderedAppearance;
     private ComponentSettings? _renderedComponents;
     private bool _ready, _closed;
@@ -69,8 +67,6 @@ public partial class HudEditorWindow : Window
         }
         TargetNameText.Text = _initialTargetName;
         TargetNameText.ToolTip = "Изменения сохранятся здесь: " + TargetNameText.Text;
-        BlockOrderList.ItemsSource = _blocks;
-        MetricOrderList.ItemsSource = _metrics;
         LoadControls();
         _ready = true;
         InitializeSections();
@@ -78,7 +74,6 @@ public partial class HudEditorWindow : Window
         InputBindings.Add(new KeyBinding(ApplicationCommands.Find, Key.F, ModifierKeys.Control));
         CommandBindings.Add(new CommandBinding(ApplicationCommands.Save, OnSave));
         InputBindings.Add(new KeyBinding(ApplicationCommands.Save, Key.S, ModifierKeys.Control));
-        RefreshMoveButtons();
         RenderPreview();
         UpdateResponsiveLayout();
         Closed += OnEditorClosed;
@@ -140,28 +135,11 @@ public partial class HudEditorWindow : Window
 
     private void LoadLayout(HudLayoutSettings layout)
     {
-        var legacy = layout.Capsules is null ? Visibility.Visible : Visibility.Collapsed;
-        LegacyIslandsCard.Visibility = LegacyOrderCard.Visibility = LegacyMetricOrderControls.Visibility = legacy;
-        CapsuleLayoutCard.Visibility = layout.Capsules is null ? Visibility.Collapsed : Visibility.Visible;
         TextScaleSlider.Value = layout.TextScale * 100;
         SpacingSlider.Value = layout.Spacing;
         ColumnsOneRadio.IsChecked = layout.MetricColumns == 1;
         ColumnsTwoRadio.IsChecked = layout.MetricColumns == 2;
         ColumnsThreeRadio.IsChecked = layout.MetricColumns == 3;
-        DetachedMusicCheckBox.IsChecked = layout.DetachedMusic;
-        _blocks.Clear();
-        foreach (string id in layout.BlockOrder.Split(','))
-            _blocks.Add(new OrderEntry(id, id switch
-            {
-                "header" => "FPS, время и батарея",
-                "metrics" => "CPU, GPU и RAM",
-                _ => "Музыка"
-            }));
-        _metrics.Clear();
-        foreach (string id in layout.MetricOrder.Split(','))
-            _metrics.Add(new OrderEntry(id, id switch { "cpu" => "CPU", "gpu" => "GPU", _ => "RAM" }));
-        BlockOrderList.SelectedIndex = 0;
-        MetricOrderList.SelectedIndex = 0;
     }
 
     private void OnDraftChanged(object sender, RoutedEventArgs e)
@@ -177,12 +155,9 @@ public partial class HudEditorWindow : Window
         bool Checked(CheckBox checkBox) => checkBox.IsChecked == true;
         HudLayoutSettings layout = HudLayoutSettings.Normalize(DraftAppearance.Layout with
         {
-            BlockOrder = string.Join(',', _blocks.Select(entry => entry.Id)),
-            MetricOrder = string.Join(',', _metrics.Select(entry => entry.Id)),
             MetricColumns = ColumnsOneRadio.IsChecked == true ? 1 : ColumnsTwoRadio.IsChecked == true ? 2 : 3,
             TextScale = KeepEquivalent(DraftAppearance.Layout.TextScale, TextScaleSlider.Value / 100),
-            Spacing = SpacingSlider.Value,
-            DetachedMusic = Checked(DetachedMusicCheckBox)
+            Spacing = SpacingSlider.Value
         });
         AlertSettings alerts = AlertSettings.Normalize(DraftAppearance.Alerts with
         {
@@ -311,55 +286,6 @@ public partial class HudEditorWindow : Window
             TransparencySlider.Value = percent;
     }
 
-    private void OnOrderSelectionChanged(object sender, SelectionChangedEventArgs e) => RefreshMoveButtons();
-
-    private void RefreshMoveButtons()
-    {
-        if (BlockUpButton is null || MetricUpButton is null) return;
-        BlockUpButton.IsEnabled = BlockOrderList.SelectedIndex > 0;
-        BlockDownButton.IsEnabled = BlockOrderList.SelectedIndex >= 0 && BlockOrderList.SelectedIndex < _blocks.Count - 1;
-        MetricUpButton.IsEnabled = MetricOrderList.SelectedIndex > 0;
-        MetricDownButton.IsEnabled = MetricOrderList.SelectedIndex >= 0 && MetricOrderList.SelectedIndex < _metrics.Count - 1;
-    }
-
-    private void Move(ListBox list, ObservableCollection<OrderEntry> entries, int direction)
-    {
-        int index = list.SelectedIndex, next = index + direction;
-        if (index < 0 || next < 0 || next >= entries.Count) return;
-        entries.Move(index, next);
-        list.SelectedIndex = next;
-        RefreshMoveButtons();
-        if (!_ready || _closed) return;
-        UpdateDraft();
-        SchedulePreview();
-    }
-
-    private void OnBlockUp(object sender, RoutedEventArgs e) => Move(BlockOrderList, _blocks, -1);
-    private void OnBlockDown(object sender, RoutedEventArgs e) => Move(BlockOrderList, _blocks, 1);
-    private void OnMetricUp(object sender, RoutedEventArgs e) => Move(MetricOrderList, _metrics, -1);
-    private void OnMetricDown(object sender, RoutedEventArgs e) => Move(MetricOrderList, _metrics, 1);
-
-    private void OnResetLayout(object sender, RoutedEventArgs e)
-    {
-        _ready = false;
-        DraftAppearance = DraftAppearance with { Layout = HudLayoutSettings.Default };
-        LoadLayout(HudLayoutSettings.Default);
-        _ready = true;
-        RefreshMoveButtons();
-        UpdateDraft();
-        UpdateDirtyStatus();
-        SchedulePreview();
-    }
-
-    private void OnResetMusicPosition(object sender, RoutedEventArgs e)
-    {
-        if (!_ready || _closed) return;
-        UpdateDraft();
-        DraftAppearance = DraftAppearance with { Layout = DraftAppearance.Layout with { MusicPosition = null } };
-        UpdateDirtyStatus();
-        SchedulePreview();
-    }
-
     private void OnEditorClosed(object? sender, EventArgs e)
     {
         _closed = true;
@@ -389,9 +315,7 @@ public partial class HudEditorWindow : Window
     private void InitializeSections()
     {
         RegisterBuiltIn("appearance", "Внешний вид", "Прозрачность стекла, масштаб, текст и расстояния между блоками.",
-            "стекло прозрачность фон размер шрифт интервалы", AppearanceTab);
-        RegisterBuiltIn("layout", "Раскладка", "Отдельные островки, порядок блоков и число показателей в строке.",
-            "порядок музыка заголовок cpu gpu ram строки колонки расположение островок островки раздельные разделить отдельно перетаскивать", LayoutTab);
+            "стекло прозрачность фон размер шрифт интервалы строки колонки раскладка", AppearanceTab);
         RegisterBuiltIn("components", "Показатели", "Выберите, что показывать в HUD, и настройте управление громкостью.",
             "музыка громкость звук ползунок колёсиком прокрутка мышь время дата часы батарея fps фпс low кадр фреймтайм cpu gpu ram процессор видеокарта оперативка озу нагрузка температура память графики", ComponentsTab);
         RegisterBuiltIn("alerts", "Предупреждения", "Тихий индикатор температуры и серий просадок.",
@@ -653,5 +577,4 @@ public partial class HudEditorWindow : Window
         StatusText.ToolTip = details;
     }
 
-    private sealed record OrderEntry(string Id, string Label);
 }

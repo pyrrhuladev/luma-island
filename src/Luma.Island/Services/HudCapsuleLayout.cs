@@ -11,32 +11,50 @@ public sealed record HudCapsule(string Id, string Items, HudIslandPosition? Posi
         ? Items.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
         : [];
 
-    // Each island has one hardware grid. Keep its items together and snap music
-    // to the closer edge of that grid when the pointer is over its middle.
+    // Each visual group occupies one row or grid. Snap unrelated tiles to its edge.
     public int GetInsertionIndex(string item, int insertIndex)
     {
         string[] items = GetItems();
         int index = Math.Clamp(insertIndex, 0, items.Length);
-        int firstMetric = Array.FindIndex(items, key => key != item && HudCapsuleLayout.IsMetric(key));
-        if (firstMetric < 0) return index;
-        int afterMetrics = Array.FindLastIndex(items, key => key != item && HudCapsuleLayout.IsMetric(key)) + 1;
-        if (HudCapsuleLayout.IsMetric(item)) return Math.Clamp(index, firstMetric, afterMetrics);
-        if (index <= firstMetric || index >= afterMetrics) return index;
-        return index - firstMetric <= afterMetrics - index ? firstMetric : afterMetrics;
+        string group = HudCapsuleLayout.Group(item);
+        int first = Array.FindIndex(items, key => key != item && HudCapsuleLayout.Group(key) == group);
+        if (first >= 0)
+        {
+            int after = Array.FindLastIndex(items, key => key != item && HudCapsuleLayout.Group(key) == group) + 1;
+            return Math.Clamp(index, first, after);
+        }
+
+        if (index == 0 || index == items.Length) return index;
+        string adjacentGroup = HudCapsuleLayout.Group(items[index]);
+        if (adjacentGroup != HudCapsuleLayout.Group(items[index - 1])) return index;
+        first = Array.FindIndex(items, key => HudCapsuleLayout.Group(key) == adjacentGroup);
+        int end = Array.FindLastIndex(items, key => HudCapsuleLayout.Group(key) == adjacentGroup) + 1;
+        return index - first <= end - index ? first : end;
     }
 }
 
-/// <summary>One ordered home for each movable block, plus the fixed main header.</summary>
+/// <summary>One ordered home for each HUD tile, with the primary window retained when empty.</summary>
 public sealed record HudCapsuleLayout(ImmutableArray<HudCapsule> Islands)
 {
     public const string MainId = "main";
-    private const string Header = "header";
-    private const string Music = "music";
-    private static readonly string[] Metrics = ["cpu", "gpu", "memory"];
-    private static readonly string[] MovableItems = [.. Metrics, Music];
+    private static readonly string[] HeaderItems = ["fps", "low", "time", "battery"];
+    private static readonly string[] DefaultItems = [.. HeaderItems, "cpu", "gpu", "memory", "music"];
+    private static readonly (string Metric, string Chart)[] Charts =
+        [("cpu", "cpu-chart"), ("gpu", "gpu-chart"), ("memory", "memory-chart"), ("fps", "fps-chart")];
 
     public static bool IsMetric(string item) => item is "cpu" or "gpu" or "memory";
-    public static bool IsMovable(string item) => IsMetric(item) || item == Music;
+    public static bool IsHeader(string item) => item is "fps" or "low" or "time" or "battery";
+    public static bool IsChart(string item) => item is "cpu-chart" or "gpu-chart" or "memory-chart" or "fps-chart";
+    public static bool IsMovable(string item) => IsMetric(item) || IsHeader(item) || IsChart(item) ||
+        item is "music" or "frame-time" or "volume" or "date";
+
+    public static string Group(string item) => item switch
+    {
+        "fps" or "low" or "time" or "battery" => "header",
+        "cpu" or "gpu" or "memory" => "metrics",
+        "cpu-chart" or "gpu-chart" or "memory-chart" or "fps-chart" => "charts",
+        _ => item
+    };
 
     public static HudCapsuleLayout FromLegacy(HudLayoutSettings layout)
     {
@@ -45,13 +63,14 @@ public sealed record HudCapsuleLayout(ImmutableArray<HudCapsule> Islands)
         foreach (string block in settings.BlockOrder.Split(','))
         {
             if (block == "metrics") main.AddRange(settings.MetricOrder.Split(','));
-            else if (block != Music || !settings.DetachedMusic) main.Add(block);
+            else if (block == "header") main.AddRange(HeaderItems);
+            else if (!settings.DetachedMusic) main.Add("music");
         }
 
         var root = new HudCapsule(MainId, string.Join(',', main));
-        return new(settings.DetachedMusic
-            ? [root, new HudCapsule(Music, Music, settings.MusicPosition)]
-            : [root]);
+        return Normalize(new(settings.DetachedMusic
+            ? [root, new HudCapsule("music", "music", settings.MusicPosition)]
+            : [root]));
     }
 
     public static HudCapsuleLayout Normalize(HudCapsuleLayout layout)
@@ -59,27 +78,37 @@ public sealed record HudCapsuleLayout(ImmutableArray<HudCapsule> Islands)
         var islands = layout.Islands.IsDefault ? ImmutableArray<HudCapsule>.Empty : layout.Islands;
         var main = islands.FirstOrDefault(island => CanonicalId(island?.Id) == MainId);
         var usedItems = new HashSet<string>(StringComparer.Ordinal);
-        List<string> mainItems = ReadItems(main, allowHeader: true, usedItems);
-        if (!mainItems.Contains(Header)) mainItems.Insert(0, Header);
-
-        var normalized = ImmutableArray.CreateBuilder<HudCapsule>();
-        normalized.Add(new(MainId, Header));
+        List<string> mainItems = ReadItems(main, expandLegacyHeader: true, usedItems);
+        var accepted = new List<(string Id, List<string> Items, HudIslandPosition? Position)>
+        {
+            (MainId, mainItems, null)
+        };
         var usedIds = new HashSet<string>(StringComparer.Ordinal) { MainId };
         foreach (HudCapsule island in islands)
         {
             string? id = CanonicalId(island?.Id);
             if (id is null || usedIds.Contains(id)) continue;
-            var items = ReadItems(island, allowHeader: false, usedItems);
+            var items = ReadItems(island, expandLegacyHeader: false, usedItems);
             if (items.Count != 0)
             {
                 usedIds.Add(id);
-                normalized.Add(new(id, GroupMetrics(items), HudIslandPosition.Normalize(island!.Position)));
+                accepted.Add((id, items, HudIslandPosition.Normalize(island!.Position)));
             }
         }
 
-        mainItems.AddRange(MovableItems.Where(usedItems.Add));
-        normalized[0] = new(MainId, GroupMetrics(mainItems));
-        var result = new HudCapsuleLayout(normalized.ToImmutable());
+        mainItems.AddRange(DefaultItems.Where(usedItems.Add));
+        var normalized = ImmutableArray.CreateBuilder<HudCapsule>(accepted.Count);
+        foreach (var (id, items, position) in accepted)
+        {
+            // Older layouts implicitly drew mini charts and volume with their owners.
+            foreach (var (metric, chart) in Charts)
+                if (items.Contains(metric) && usedItems.Add(chart)) items.Add(chart);
+            if (id == MainId && usedItems.Add("frame-time")) items.Add("frame-time");
+            if (items.Contains("music") && usedItems.Add("volume")) items.Add("volume");
+            if (id == MainId && usedItems.Add("date")) items.Add("date");
+            normalized.Add(new(id, string.Join(',', items.GroupBy(Group).SelectMany(group => group)), position));
+        }
+        var result = new HudCapsuleLayout(normalized.MoveToImmutable());
         return layout.Equals(result) ? layout : result;
     }
 
@@ -117,7 +146,7 @@ public sealed record HudCapsuleLayout(ImmutableArray<HudCapsule> Islands)
         var targetItems = target.GetItems().ToList();
         targetItems.Insert(index, item);
         var reassigned = Islands.SetItem(targetIndex, target with { Items = string.Join(',', targetItems) });
-        return new(sourceItems.Count == 0
+        return new(sourceItems.Count == 0 && source.Id != MainId
             ? reassigned.RemoveAt(sourceIndex)
             : reassigned.SetItem(sourceIndex, source with { Items = string.Join(',', sourceItems) }));
     }
@@ -156,25 +185,16 @@ public sealed record HudCapsuleLayout(ImmutableArray<HudCapsule> Islands)
         return -1;
     }
 
-    private static List<string> ReadItems(HudCapsule? island, bool allowHeader, HashSet<string> used)
+    private static List<string> ReadItems(HudCapsule? island, bool expandLegacyHeader, HashSet<string> used)
     {
         var items = new List<string>();
         foreach (string raw in island?.GetItems() ?? [])
         {
             string item = raw.ToLowerInvariant();
-            if ((IsMovable(item) || allowHeader && item == Header) && used.Add(item)) items.Add(item);
+            if (expandLegacyHeader && item == "header") items.AddRange(HeaderItems.Where(used.Add));
+            else if (IsMovable(item) && used.Add(item)) items.Add(item);
         }
         return items;
-    }
-
-    private static string GroupMetrics(List<string> items)
-    {
-        int first = items.FindIndex(IsMetric);
-        if (first < 0) return string.Join(',', items);
-        string[] metrics = items.Where(IsMetric).ToArray();
-        items.RemoveAll(IsMetric);
-        items.InsertRange(first, metrics);
-        return string.Join(',', items);
     }
 
     private static string? CanonicalId(string? value)

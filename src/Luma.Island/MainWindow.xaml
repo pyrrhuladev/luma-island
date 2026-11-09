@@ -139,11 +139,11 @@
                         </Grid.RowDefinitions>
                         <Grid x:Name="HudHeader" UseLayoutRounding="False">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition x:Name="CompactFrameColumn" Width="*"/>
                                 <ColumnDefinition x:Name="CompactClockColumn" Width="Auto"/>
                                 <ColumnDefinition x:Name="CompactBatteryColumn" Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <StackPanel x:Name="CompactFrameStats" Orientation="Horizontal" VerticalAlignment="Center">
                             <StackPanel x:Name="CompactFpsPanel" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
                                 <TextBlock x:Name="CompactFps" Text="—" FontSize="34" FontWeight="SemiBold" Typography.NumeralAlignment="Tabular"
                                            Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center"/>
@@ -328,7 +328,9 @@
                         Style="{StaticResource QuietButton}" Click="OnCapsuleEditDone"/>
                 <Button DockPanel.Dock="Right" Content="Отмена" Width="62" Height="25"
                         Style="{StaticResource QuietButton}" Click="OnCapsuleEditCancel"/>
-                <TextBlock Text="Перетащите блок или ручку капсулы" Foreground="#D9E9E5" FontSize="11"
+                <Button DockPanel.Dock="Right" Content="Сброс" Width="56" Height="25" ToolTip="Собрать блоки в одну капсулу в исходном порядке"
+                        AutomationProperties.Name="Сбросить раскладку" Style="{StaticResource QuietButton}" Click="OnCapsuleEditReset"/>
+                <TextBlock Text="Перетащите блок" Foreground="#D9E9E5" FontSize="11"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
             </DockPanel>
         </Border>

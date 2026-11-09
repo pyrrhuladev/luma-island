@@ -48,10 +48,13 @@ public partial class MainWindow
 
     private string? CapsuleItemAt(Point origin)
     {
-        foreach (var tile in CapsuleMetricTiles())
-            if (tile.Bounds.Contains(origin)) return tile.Id;
-        if (CapsuleElementBounds(CompactMusicRow).Contains(origin) || CapsuleElementBounds(CompactVolume).Contains(origin))
-            return "music";
+        var owner = _islandOwner ?? this;
+        if (owner.CapsuleDraft is not { } draft) return null;
+        string id = _capsuleId ?? HudCapsuleLayout.MainId;
+        var capsule = draft.Islands.FirstOrDefault(candidate => candidate.Id == id);
+        if (capsule is null) return null;
+        foreach (string item in capsule.GetItems())
+            if (CapsuleWidgetBounds(item).Contains(origin)) return item;
         return null;
     }
 
@@ -134,51 +137,73 @@ public partial class MainWindow
             var local = window.IslandSurface.PointFromScreen(screenPoint);
             if (!new Rect(window.IslandSurface.RenderSize).Contains(local)) continue;
             var capsule = draft.Islands.FirstOrDefault(candidate => candidate.Id == id);
-            if (capsule is not null) return window.CapsuleInsertion(id, capsule.GetItems(), item, local);
+            if (capsule is not null) return window.CapsuleInsertion(capsule, item, local);
         }
         return null;
     }
 
-    private CapsuleDropTarget CapsuleInsertion(string id, string[] items, string item, Point local)
+    private CapsuleDropTarget CapsuleInsertion(HudCapsule capsule, string item, Point local)
     {
-        Rect header = CapsuleElementBounds(HudHeader);
-        Rect metrics = CapsuleElementBounds(CompactPerformance);
-        Rect music = CapsuleElementBounds(CompactMusicRow);
-        if (music.IsEmpty) music = CapsuleElementBounds(CompactVolume);
+        string[] items = capsule.GetItems();
+        string group = HudCapsuleLayout.Group(item);
+        CapsuleDropTarget At(int index, Rect marker) => new(capsule.Id, this, capsule.GetInsertionIndex(item, index), marker);
 
-        int firstMetric = Array.FindIndex(items, HudCapsuleLayout.IsMetric);
-        int lastMetric = Array.FindLastIndex(items, HudCapsuleLayout.IsMetric);
-        if (HudCapsuleLayout.IsMetric(item) && firstMetric >= 0 && !metrics.IsEmpty)
+        // A group occupies one row or grid. Drop between its arranged tiles if
+        // the destination already holds other members of that group.
+        int first = Array.FindIndex(items, key => HudCapsuleLayout.Group(key) == group);
+        int last = Array.FindLastIndex(items, key => HudCapsuleLayout.Group(key) == group);
+        if (group != item && first >= 0 && (first != last || items[first] != item) &&
+            CapsuleElementBounds(PresentedWidgetGroup(group)) is { IsEmpty: false } groupBounds)
         {
-            if (metrics.Contains(local))
+            if (groupBounds.Contains(local))
             {
-                var closest = CapsuleMetricTiles().OrderBy(tile => (CapsuleCenter(tile.Bounds) - local).LengthSquared).FirstOrDefault();
-                int index = Array.IndexOf(items, closest.Id);
-                if (index >= 0)
+                Rect closest = Rect.Empty;
+                int closestIndex = -1;
+                double closestDistance = double.PositiveInfinity;
+                for (int index = first; index <= last; index++)
                 {
-                    bool after = local.X >= CapsuleCenter(closest.Bounds).X;
-                    double x = after ? closest.Bounds.Right : closest.Bounds.Left;
-                    return new CapsuleDropTarget(id, this, index + (after ? 1 : 0),
-                        new Rect(x - 1, closest.Bounds.Top + 1, 2, Math.Max(1, closest.Bounds.Height - 2)));
+                    Rect bounds = CapsuleWidgetBounds(items[index]);
+                    if (bounds.IsEmpty) continue;
+                    double distance = (CapsuleCenter(bounds) - local).LengthSquared;
+                    if (distance >= closestDistance) continue;
+                    closest = bounds;
+                    closestIndex = index;
+                    closestDistance = distance;
+                }
+                if (closestIndex >= 0)
+                {
+                    bool after = local.X >= CapsuleCenter(closest).X;
+                    double x = after ? closest.Right : closest.Left;
+                    return At(closestIndex + (after ? 1 : 0),
+                        new Rect(x - 1, closest.Top + 1, 2, Math.Max(1, closest.Height - 2)));
                 }
             }
-            bool below = local.Y >= CapsuleCenter(metrics).Y;
-            return new CapsuleDropTarget(id, this, below ? lastMetric + 1 : firstMetric, CapsuleRowMarker(metrics, below));
+            bool below = local.Y >= CapsuleCenter(groupBounds).Y;
+            return At(below ? last + 1 : first, CapsuleRowMarker(groupBounds, below));
         }
 
-        var rows = new List<(Rect Bounds, int First, int Last)>(3);
-        int headerIndex = Array.IndexOf(items, "header"), musicIndex = Array.IndexOf(items, "music");
-        if (!header.IsEmpty && headerIndex >= 0) rows.Add((header, headerIndex, headerIndex));
-        if (!metrics.IsEmpty && firstMetric >= 0) rows.Add((metrics, firstMetric, lastMetric));
-        if (!music.IsEmpty && musicIndex >= 0) rows.Add((music, musicIndex, musicIndex));
-        if (rows.Count == 0) return new CapsuleDropTarget(id, this, items.Length, Rect.Empty);
+        // Standalone widgets and newly introduced groups can move between rows.
+        // Keep invisible rows in the model, but skip their absent geometry.
+        var rows = new List<(Rect Bounds, int First, int Last)>();
+        for (int start = 0; start < items.Length;)
+        {
+            string row = HudCapsuleLayout.Group(items[start]);
+            int end = start + 1;
+            while (end < items.Length && HudCapsuleLayout.Group(items[end]) == row) end++;
+            Rect bounds = CapsuleElementBounds(PresentedWidgetGroup(row));
+            if (!bounds.IsEmpty) rows.Add((bounds, start, end - 1));
+            start = end;
+        }
+        if (rows.Count == 0) return At(items.Length, Rect.Empty);
 
-        rows.Sort((first, second) => first.Bounds.Top.CompareTo(second.Bounds.Top));
+        int rawIndex = rows[^1].Last + 1;
         foreach (var row in rows)
-            if (local.Y < CapsuleCenter(row.Bounds).Y)
-                return new CapsuleDropTarget(id, this, row.First, CapsuleRowMarker(row.Bounds, below: false));
-        var last = rows[^1];
-        return new CapsuleDropTarget(id, this, last.Last + 1, CapsuleRowMarker(last.Bounds, below: true));
+            if (local.Y < CapsuleCenter(row.Bounds).Y) { rawIndex = row.First; break; }
+        int insertIndex = capsule.GetInsertionIndex(item, rawIndex);
+        foreach (var row in rows)
+            if (insertIndex <= row.First)
+                return new(capsule.Id, this, insertIndex, CapsuleRowMarker(row.Bounds, below: false));
+        return new(capsule.Id, this, insertIndex, CapsuleRowMarker(rows[^1].Bounds, below: true));
     }
 
     private Rect CapsuleRowMarker(Rect row, bool below)
@@ -187,16 +212,21 @@ public partial class MainWindow
         return new Rect(10, y, Math.Max(1, IslandSurface.ActualWidth - 20), 2);
     }
 
-    private IEnumerable<(string? Id, Rect Bounds)> CapsuleMetricTiles()
+    private Rect CapsuleWidgetBounds(string item)
     {
-        if (!CompactPerformance.IsVisible || CompactPerformance.ActualWidth <= 0) yield break;
-        GeneralTransform transform = CompactPerformance.TransformToAncestor(IslandSurface);
-        foreach (var (id, metric) in new[] { ("cpu", CompactCpu), ("gpu", CompactGpu), ("memory", CompactMemory) })
-            if (metric.IsVisible && LayoutInformation.GetLayoutSlot(metric) is { IsEmpty: false } slot)
-                yield return (id, transform.TransformBounds(slot));
+        FrameworkElement? element = PresentedWidget(item);
+        Rect visible = CapsuleElementBounds(element);
+        string group = HudCapsuleLayout.Group(item);
+        if (visible.IsEmpty || group == item || element is null ||
+            VisualTreeHelper.GetParent(element) is not FrameworkElement parent) return visible;
+
+        Rect slot = LayoutInformation.GetLayoutSlot(element);
+        if (slot.IsEmpty || slot.Width <= 0 || slot.Height <= 0) return visible;
+        Rect groupBounds = CapsuleElementBounds(PresentedWidgetGroup(group));
+        return Rect.Intersect(parent.TransformToAncestor(IslandSurface).TransformBounds(slot), groupBounds);
     }
 
-    private Rect CapsuleElementBounds(FrameworkElement element) => element.IsVisible && element.ActualWidth > 0 && element.ActualHeight > 0
+    private Rect CapsuleElementBounds(FrameworkElement? element) => element is { IsVisible: true, ActualWidth: > 0, ActualHeight: > 0 }
         ? element.TransformToAncestor(IslandSurface).TransformBounds(new Rect(element.RenderSize)) : Rect.Empty;
 
     private static Point CapsuleCenter(Rect bounds) => new(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2);
@@ -206,7 +236,13 @@ public partial class MainWindow
         string text = item switch
         {
             "cpu" => CompactCpu.Text, "gpu" => CompactGpu.Text, "memory" => CompactMemory.Text,
-            _ => string.IsNullOrWhiteSpace(CompactTitle.Text) ? "Музыка и звук" : CompactTitle.Text
+            "music" => string.IsNullOrWhiteSpace(CompactTitle.Text) ? "Музыка" : CompactTitle.Text,
+            "fps" => CompactFps.Text + " FPS", "low" => "1% Low · " + CompactOnePercentLow.Text,
+            "time" => CompactClock.Text, "battery" => "Батарея · " + CompactBattery.Text,
+            "frame-time" => "Время кадра · " + FrameTimeValue.Text,
+            "volume" => "Громкость · " + VolumeLabel.Text, "date" => DateLabel.Text,
+            "cpu-chart" => "График CPU", "gpu-chart" => "График GPU", "memory-chart" => "График RAM",
+            "fps-chart" => "График FPS", _ => item
         };
         var preview = new Window
         {
