@@ -28,7 +28,6 @@ internal static class Program
     private static readonly MethodInfo ApplyMedia = typeof(MainWindow).GetMethod("OnMediaChanged", BindingFlags.Instance | BindingFlags.NonPublic)!;
     private static string Output = null!;
     private static int Opened, Closed;
-    private static bool ExercisedNativeAnimation;
 
     [STAThread]
     private static int Main(string[] args)
@@ -54,8 +53,7 @@ internal static class Program
                 {
                     passed = failure is null && Opened == Closed, checks = Checks.Count, completedChecks = Checks,
                     version = assembly.GetName().Version?.ToString(), assemblySha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(assembly.Location))),
-                    windowsOpened = Opened, windowsClosed = Closed, animationPolicyEnabled = SystemParameters.ClientAreaAnimation,
-                    exercisedNativeAnimation = ExercisedNativeAnimation, geometry = Geometry, captures = Captures,
+                    windowsOpened = Opened, windowsClosed = Closed, geometry = Geometry, captures = Captures,
                     dpiScope = "Native HWND placement at the current monitor DPI; text/layout and RenderTargetBitmap at 96/144/192 DPI. No display scaling settings changed.",
                     isolation = "No App startup, SMTC initialization, FPS/performance collectors, audio commands, autostart writes or real preference writes. Geometry windows have Opacity=0; captures are offscreen.",
                     failure
@@ -98,7 +96,7 @@ internal static class Program
             Check(window.CollapsedWindowWidth == 408 && Surface(window).Width == 376, "Default density retains the 408/376 DIP widths");
             double normalBasicHeight = Surface(window).Height;
             MenuItem menu = window.CreateAppearanceMenu();
-            var compactItem = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Компактная капсула"));
+            var compactItem = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Плотная раскладка"));
             Check(compactItem.IsCheckable && !compactItem.IsChecked, "Appearance menu exposes an unchecked compact checkbox");
             compactItem.IsChecked = true;
             compactItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent, compactItem));
@@ -121,7 +119,7 @@ internal static class Program
             window.Show();
             await Settle(window);
             Check(window.Appearance.Compact && window.Width == 352, "A recreated native window restores compact mode from isolated preferences");
-            Check(window.CreateAppearanceMenu().Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Компактная капсула")).IsChecked,
+            Check(window.CreateAppearanceMenu().Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Плотная раскладка")).IsChecked,
                 "The compact checkbox is checked after window recreation");
             window.SetCompactMode(false);
             InjectMedia(window, "Synthetic fixture track", "Synthetic artist");
@@ -143,14 +141,13 @@ internal static class Program
                 window.Placement.SetPreset(preset);
                 await Settle(window);
                 var saved = window.Placement.Settings;
-                for (int cycle = 0; cycle < 2; cycle++)
-                {
-                    await Toggle(window);
-                    CheckState(window, true, preset + " expanded " + cycle);
-                    await Toggle(window);
-                    CheckState(window, false, preset + " collapsed " + cycle);
-                    Check(window.Placement.Settings == saved, "Animation never rewrites preset coordinates: " + preset + "/" + cycle);
-                }
+                window.SetCompactMode(false);
+                await Settle(window);
+                CheckState(window, preset + " comfortable density");
+                window.SetCompactMode(true);
+                await Settle(window);
+                CheckState(window, preset + " compact density");
+                Check(window.Placement.Settings == saved, "Changing density preserves the saved preset: " + preset);
             }
             window.Placement.SetLocked(false);
             double scale = DisplayService.GetWindowScale(window);
@@ -164,45 +161,32 @@ internal static class Program
             var custom = window.Placement.Settings;
             for (int cycle = 0; cycle < 2; cycle++)
             {
-                await Toggle(window); CheckState(window, true, "Custom expanded " + cycle);
-                await Toggle(window); CheckState(window, false, "Custom collapsed " + cycle);
+                window.SetComponents(Metrics with { Charts = true });
+                await Settle(window); CheckState(window, "Custom with charts " + cycle);
+                window.SetComponents(Metrics);
+                await Settle(window); CheckState(window, "Custom without charts " + cycle);
                 Check(window.Placement.Settings == custom, "Custom fractions do not accumulate drift: " + cycle);
             }
-            window.ToggleExpanded(); await Task.Delay(35);
-            ExercisedNativeAnimation |= ReadPrivate<bool>(window, "_animating");
-            window.ToggleExpanded(); await Task.Delay(25);
-            window.ToggleExpanded(); await window.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
-            await Settle(window); CheckState(window, true, "Rapid three-toggle expanded endpoint");
-            await Toggle(window); CheckState(window, false, "Rapid-toggle return endpoint");
-
-            window.ToggleExpanded(); await Task.Delay(35); window.SetCompactMode(false);
-            await Settle(window); CheckState(window, true, "Density change during expansion finishes at full expanded dimensions");
-            await Toggle(window); CheckState(window, false, "Noncompact collapse after interrupted expansion");
-            window.ToggleExpanded(); await Task.Delay(35); window.SetCompactMode(true);
-            await Settle(window); CheckState(window, true, "Compact density change during expansion keeps the full expanded width");
-            window.ToggleExpanded(); await Task.Delay(35); window.SetCompactMode(false);
-            await Settle(window); CheckState(window, false, "Density change during collapse freezes at the correct noncompact endpoint");
-            window.SetCompactMode(true); CheckState(window, false, "Compact endpoint restored after interrupted transitions");
-            Check(window.Placement.Settings == custom, "Interrupted transitions preserve custom placement settings");
 
             // Freeze native placement while rendering normal-opacity content offscreen.
             window.Placement.BeginDrag();
             DisplayService.MoveWindow(window, -30000, -30000);
             window.Opacity = 1;
             InjectMedia(window, "Synthetic fixture track", "Synthetic artist"); InjectMetrics(window);
-            foreach (bool expanded in new[] { false, true })
+            foreach (bool compact in new[] { true, false })
             {
-                if (expanded) await Toggle(window);
+                window.SetCompactMode(compact);
                 await Settle(window);
                 foreach (double outputScale in new[] { 1d, 1.5, 2d })
                 {
-                    CheckTextBounds(window, expanded ? "ExpandedPerformance" : "CompactPerformance", outputScale);
+                    CheckTextBounds(window, "CompactPerformance", outputScale);
                     var bitmap = Render(window, outputScale);
-                    Check(bitmap.PixelWidth == (int)Math.Ceiling(window.Width * outputScale) && bitmap.PixelHeight == (int)Math.Ceiling(window.Height * outputScale), "Complete render bounds: " + expanded + "/" + outputScale);
-                    Check(HasVisiblePixels(bitmap), "WPF capture contains visible pixels: " + expanded + "/" + outputScale);
-                    string file = (expanded ? "expanded" : "compact") + "-" + (outputScale * 100).ToString("0", CultureInfo.InvariantCulture) + ".png";
+                    Check(bitmap.PixelWidth == (int)Math.Ceiling(window.Width * outputScale) && bitmap.PixelHeight == (int)Math.Ceiling(window.Height * outputScale), "Complete render bounds: " + compact + "/" + outputScale);
+                    Check(HasVisiblePixels(bitmap), "WPF capture contains visible pixels: " + compact + "/" + outputScale);
+                    string mode = compact ? "compact" : "normal";
+                    string file = mode + "-" + (outputScale * 100).ToString("0", CultureInfo.InvariantCulture) + ".png";
                     Save(bitmap, Path.Combine(Output, file));
-                    Captures.Add(new { mode = expanded ? "expanded" : "compact", dpi = outputScale * 96, bitmap.PixelWidth, bitmap.PixelHeight, file });
+                    Captures.Add(new { mode, dpi = outputScale * 96, bitmap.PixelWidth, bitmap.PixelHeight, file });
                 }
                 Check(DisplayService.GetWindowBounds(window).Right < 0, "Capture HWND stays offscreen");
                 Check(GetForegroundWindow() != new WindowInteropHelper(window).Handle, "Test HWND never owns foreground focus");
@@ -215,10 +199,10 @@ internal static class Program
         finally { window.Opacity = 0; window.Close(); }
     }
 
-    private static void CheckState(MainWindow window, bool expanded, string label)
+    private static void CheckState(MainWindow window, string label)
     {
-        double width = expanded ? 408 : window.Appearance.Compact ? 352 : 408;
-        double height = expanded ? window.ExpandedWindowHeight : window.CollapsedWindowHeight;
+        double width = window.Appearance.Compact ? 352 : 408;
+        double height = window.CollapsedWindowHeight;
         double scale = DisplayService.GetWindowScale(window);
         Rect expected = PlacementMath.Bounds(window.Placement.CurrentDisplay.WorkArea, new Size(width * scale, height * scale), PlacementMath.Fractions(window.Placement.Settings), 8 * scale);
         Rect actual = DisplayService.GetWindowBounds(window);
@@ -226,11 +210,9 @@ internal static class Program
         Check(Near(actual, expected, 1.1), label + ": native rectangle equals target without X/Y drift");
         Check(Near(desired, expected, .01), label + ": DesiredBounds uses the supplied target width");
         Check(Math.Abs(window.Width - width) < .01 && Math.Abs(window.Height - height) < .01, label + ": final host DIP size");
-        Check(Math.Abs(Surface(window).Width - (expanded ? 384 : window.Appearance.Compact ? 320 : 376)) < .01, label + ": final surface width");
-        var offset = (TranslateTransform)Surface(window).RenderTransform;
-        Check(Math.Abs(offset.X) < .01 && Math.Abs(offset.Y) < .01 && !offset.HasAnimatedProperties, label + ": both animated offsets are cleared");
-        Check(!ReadPrivate<bool>(window, "_animating"), label + ": no transition remains active");
-        Geometry.Add(new { label, scale, actual = Rectangle(actual), expected = Rectangle(expected), compact = window.Appearance.Compact, expanded });
+        Check(Math.Abs(Surface(window).Width - (window.Appearance.Compact ? 320 : 376)) < .01, label + ": final surface width");
+        Check(((FrameworkElement)window.FindName("CompactView")).IsVisible, label + ": the HUD is available at this density");
+        Geometry.Add(new { label, scale, actual = Rectangle(actual), expected = Rectangle(expected), compact = window.Appearance.Compact });
     }
     private static async Task CheckQuietHud(MainWindow window)
     {
@@ -244,8 +226,8 @@ internal static class Program
             InjectMedia(window, "Synthetic fixture track", "Synthetic artist");
             InjectMetrics(window);
             await Settle(window);
-            Check(Text(window, "CompactFps").Text == "999" && Text(window, "ExpandedFps").Text == "999 FPS" &&
-                Text(window, "CompactFpsUnit").Text == "FPS", "Quiet HUD splits headline FPS value and unit without changing the expanded metric: " + compact);
+            Check(Text(window, "CompactFps").Text == "999" && Text(window, "CompactFpsUnit").Text == "FPS",
+                "Quiet HUD splits headline FPS value and unit: " + compact);
             Check(Text(window, "CompactFps").FontSize >= 2 * Text(window, "CompactCpu").FontSize &&
                 !metrics.Children.Contains(Text(window, "CompactFps")), "FPS remains a separate prominent headline: " + compact);
             Rect fpsBounds = hero.TransformToAncestor(Surface(window)).TransformBounds(new Rect(new Point(), hero.RenderSize));
@@ -272,7 +254,7 @@ internal static class Program
                 !Text(window, "CompactCpu").IsVisible && !Text(window, "CompactGpu").IsVisible && !Text(window, "CompactMemory").IsVisible,
                 "FPS-only mode removes the unused hardware row: " + compact);
             window.ApplyFps(new FpsSnapshot(null, null, "Synthetic unavailable source"));
-            Check(Text(window, "CompactFps").Text == "—" && Text(window, "ExpandedFps").Text.Contains('—') &&
+            Check(Text(window, "CompactFps").Text == "—" &&
                 Text(window, "CompactFps").ToolTip is string reason && reason.Contains("Synthetic unavailable source", StringComparison.Ordinal),
                 "Unavailable headline FPS shows a dash and its real source status: " + compact);
         }
@@ -334,7 +316,6 @@ internal static class Program
     }
     private static async Task CaptureQuietHud(MainWindow window)
     {
-        if (((FrameworkElement)window.FindName("ExpandedView")).Visibility == Visibility.Visible) await Toggle(window);
         window.SetComponents(ComponentSettings.Default with
         {
             Battery = false, Cpu = true, Gpu = true, Memory = true, Fps = true, Charts = true,
@@ -347,7 +328,7 @@ internal static class Program
         window.ApplyPerformance(new PerformanceSnapshot(18, 65, 42, 28862180229, 68719476736, 61, "Synthetic fixture",
             58, "ok", 41, "ok"));
         window.ApplyFps(new FpsSnapshot(184, "Synthetic game", "Synthetic fixture"));
-        Text(window, "CompactClock").Text = Text(window, "ExpandedClock").Text = "21:48";
+        Text(window, "CompactClock").Text = "21:48";
         Text(window, "DateLabel").Text = "4 ноября";
         foreach (bool compact in new[] { false, true })
         {
@@ -357,9 +338,6 @@ internal static class Program
             Save(Render(window, 2), Path.Combine(Output, file));
             Captures.Add(new { mode = compact ? "quiet-hud-compact" : "quiet-hud-normal", demonstrationData = true, backgroundTransparency = 60, file });
         }
-        await Toggle(window);
-        Save(Render(window, 2), Path.Combine(Output, "quiet-hud-expanded.png"));
-        Captures.Add(new { mode = "quiet-hud-expanded", demonstrationData = true, backgroundTransparency = 60, file = "quiet-hud-expanded.png" });
         Check(DisplayService.GetWindowBounds(window).Right < 0, "All Quiet HUD demonstration captures remain offscreen");
     }
     private static void CheckTextBounds(MainWindow window, string panelName, double scale)
@@ -383,7 +361,7 @@ internal static class Program
     {
         window.ApplyPerformance(new PerformanceSnapshot(100, 100, 100, 34359738368, 34359738368, 99, "Synthetic fixture"));
         window.ApplyFps(new FpsSnapshot(999, "Synthetic fixture", "Synthetic fixture"));
-        Text(window, "CompactClock").Text = Text(window, "ExpandedClock").Text = "21:48";
+        Text(window, "CompactClock").Text = "21:48";
     }
     private static void InjectMedia(MainWindow window, string title, string artist)
     {
@@ -391,9 +369,7 @@ internal static class Program
         bitmap.Freeze();
         ApplyMedia.Invoke(window, new object[] { new MediaSnapshot(title, artist, true, true, false, false, false, bitmap) });
     }
-    private static async Task Toggle(MainWindow window) { window.ToggleExpanded(); await window.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3)); await Settle(window); }
     private static async Task Settle(MainWindow window) => await window.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ApplicationIdle);
-    private static T ReadPrivate<T>(MainWindow window, string name) => (T)typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
     private static Border Surface(MainWindow window) => (Border)window.FindName("IslandSurface");
     private static TextBlock Text(MainWindow window, string name) => (TextBlock)window.FindName(name);
     private static bool Near(Rect actual, Rect expected, double tolerance) => Math.Abs(actual.X - expected.X) <= tolerance && Math.Abs(actual.Y - expected.Y) <= tolerance && Math.Abs(actual.Width - expected.Width) <= tolerance && Math.Abs(actual.Height - expected.Height) <= tolerance;

@@ -117,7 +117,8 @@ internal static class Program
             Check(window.Appearance.ClickThrough, "All save paths keep the global input preference");
 
             var menu = ((Border)window.FindName("IslandSurface")).ContextMenu;
-            Check(menu.Items.OfType<MenuItem>().Count() == 5 && menu.Items.Count == 6, "Actual HUD quick menu contains exactly five actions and one separator");
+            Check(menu.Items.OfType<MenuItem>().Count() == 4 && menu.Items.Count == 5 && menu.Items[3] is Separator,
+                "Actual HUD quick menu contains four actions and one separator");
             Check(menu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "Настройки…")), "Unified settings are discoverable from the actual quick menu");
         }
         finally

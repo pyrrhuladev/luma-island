@@ -143,7 +143,7 @@ internal static class Program
             IntPtr hwnd = new WindowInteropHelper(window).Handle;
             int pixels = AppIcon.TrayPixelSize(hwnd);
             Check(pixels is >= 16 and <= 64, "Tray size follows Explorer DPI with an owner-window fallback");
-            tray = new TrayService(window, () => { }, () => { }, () => { });
+            tray = new TrayService(window, () => { }, () => { });
             ShellRegistered = tray.IsRegistered;
             var iconField = typeof(TrayService).GetField("_icon", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var icon = (AppIcon)iconField.GetValue(tray)!;

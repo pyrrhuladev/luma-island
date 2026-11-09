@@ -42,15 +42,12 @@ public partial class App
             await SignalAsync("game-preflight", false, false, "game-ready");
             foreach (var phase in new (string Name, bool Counters, bool Charts, int Warmup)[]
                 { ("off-before", false, false, 4), ("counters-on", true, false, 6),
-                  ("charts-expanded", true, true, 4), ("off-after", false, false, 4) })
+                  ("charts-on", true, true, 4), ("off-after", false, false, 4) })
             {
                 await SignalAsync(phase.Name, false, false, "configure");
                 _island.SetComponents(ComponentSettings.Default with { Cpu = phase.Counters, Gpu = phase.Counters,
                     Memory = phase.Counters, Fps = phase.Counters, Charts = phase.Charts });
                 if (!phase.Counters) await _fps!.Completion.WaitAsync(TimeSpan.FromSeconds(15));
-                bool expanded = (_island.FindName("ExpandedView") as FrameworkElement)?.Visibility == Visibility.Visible;
-                if (expanded != phase.Charts) _island.ToggleExpanded();
-                await _island.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
                 await SignalAsync(phase.Name, false, false, "warmup");
                 await Task.Delay(TimeSpan.FromSeconds(phase.Warmup));
                 await SignalAsync(phase.Name, true, false, "measure");
@@ -67,17 +64,14 @@ public partial class App
 
         // Render preview artifacts only after every measured interval has ended.
         _island.SetComponents(ComponentSettings.Default with { Cpu = true, Gpu = true, Memory = true, Fps = true, Charts = true });
-        bool isExpanded = (_island.FindName("ExpandedView") as FrameworkElement)?.Visibility == Visibility.Visible;
-        if (!isExpanded) _island.ToggleExpanded();
-        await _island.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
         await Task.Delay(TimeSpan.FromSeconds(12));
-        SavePreview(_island.CapturePreview(), Path.Combine(directory, "charts-expanded.png"));
+        SavePreview(_island.CapturePreview(), Path.Combine(directory, "charts-on.png"));
         _island.SetAppearance(IslandAppearance.Glass, .25);
         await Dispatcher.InvokeAsync(_island.UpdateLayout);
         SavePreview(_island.CapturePreview(), Path.Combine(directory, "charts-transparent.png"));
-        _island.ToggleExpanded();
-        await _island.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
-        SavePreview(_island.CapturePreview(), Path.Combine(directory, "counters-collapsed.png"));
+        _island.SetComponents(_island.Components with { Charts = false });
+        await Dispatcher.InvokeAsync(_island.UpdateLayout);
+        SavePreview(_island.CapturePreview(), Path.Combine(directory, "counters-on.png"));
         _island.SetComponents(ComponentSettings.Default);
         await _fps!.Completion.WaitAsync(TimeSpan.FromSeconds(15));
 

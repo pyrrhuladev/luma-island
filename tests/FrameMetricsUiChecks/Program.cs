@@ -84,14 +84,12 @@ internal static class Program
                 !Named<TextBlock>(window, "CompactFps").IsVisible,
                 "Low-only mode keeps its own visible HUD value without showing average FPS");
             window.ApplyFps(Snapshot(184, 123, 5.4));
-            Check(Named<TextBlock>(window, "CompactOnePercentLow").Text == "123" &&
-                Normalize(Named<TextBlock>(window, "ExpandedOnePercentLow").Text).Contains("1%Low123", StringComparison.Ordinal),
-                "A real low metric value is formatted separately in compact and expanded views");
+            Check(Named<TextBlock>(window, "CompactOnePercentLow").Text == "123",
+                "The 1% Low label formats the actual low metric");
             foreach (double? missing in new double?[] { null, double.NaN, double.PositiveInfinity, -1 })
             {
                 window.ApplyFps(Snapshot(184, missing, null, frames: null, lowStatus: "Fixture low unavailable"));
-                Check(Named<TextBlock>(window, "CompactOnePercentLow").Text.Contains('—') &&
-                    Named<TextBlock>(window, "ExpandedOnePercentLow").Text.Contains('—'),
+                Check(Named<TextBlock>(window, "CompactOnePercentLow").Text.Contains('—'),
                     "Missing/invalid low never reuses the available average FPS: " + missing);
             }
 
@@ -101,16 +99,17 @@ internal static class Program
             frameToggle.IsChecked = true; Click(frameToggle); await Settle();
             Check(window.Components.FrameTime && components.Load().FrameTime && !window.Components.Charts && !window.Components.Fps && !window.Components.OnePercentLow,
                 "The frame-time checkbox persists without enabling FPS, 1% Low or load charts");
-            Check(Named<FrameworkElement>(window, "FrameTimeCard").Visibility == Visibility.Visible && window.ChartsHeight == 0 &&
+            Check(Named<FrameworkElement>(window, "FrameTimeCard").IsVisible && window.ChartsHeight == 0 &&
                 Named<FrameworkElement>(window, "ChartsPanel").Visibility == Visibility.Collapsed,
                 "The separate frame-time card does not depend on the CPU/GPU/RAM chart switch");
-            Check(Named<RowDefinition>(window, "FrameTimeRow").Height.Value >= 90, "The expanded layout reserves a full frame-time chart row");
+            Check(Named<RowDefinition>(window, "FrameTimeRow").ActualHeight > 0 &&
+                Named<Canvas>(window, "FrameTimeCanvas").ActualHeight > 4,
+                "The compact HUD allocates visible space to the frame-time plot");
             window.SetComponents(Empty with { Music = true, FrameTime = true });
             window.ApplyFps(Snapshot(null, null, 5.4)); await Settle();
-            Check(Named<TextBlock>(window, "CompactFrameTime").IsVisible && Named<TextBlock>(window, "CompactFrameTime").ActualHeight > 10,
-                "Music plus frame time keeps the collapsed milliseconds label in a visible header when FPS, Low, time and battery are off");
+            Check(Named<TextBlock>(window, "FrameTimeValue").IsVisible && Named<TextBlock>(window, "FrameTimeValue").ActualHeight > 10,
+                "Music and frame time are visible together with FPS, Low, time and battery turned off");
             window.SetComponents(Empty with { FrameTime = true });
-            window.ToggleExpanded(); await Transition(window); await Settle();
             window.ApplyFps(Snapshot(184, null, 5.4, SpikeFrames(), "stream-A")); await Settle();
             Check(Normalize(Named<TextBlock>(window, "FrameTimeValue").Text).Contains("5,4мс", StringComparison.Ordinal) ||
                 Normalize(Named<TextBlock>(window, "FrameTimeValue").Text).Contains("5.4мс", StringComparison.Ordinal),
@@ -141,7 +140,7 @@ internal static class Program
                     Cpu = true, Gpu = true, Memory = true, CpuTemperature = true, GpuTemperature = true, MemoryTemperature = true, Charts = true });
                 window.ApplyPerformance(new PerformanceSnapshot(58, 78, 42, 1, 2, 61, "Fixture", 58, "Fixture", 41, "Fixture"));
                 window.ApplyFps(Snapshot(184, 123, 5.4, SpikeFrames(), "layout-stream")); await Settle();
-                CheckInside(Named<FrameworkElement>(window, "FrameTimeCard"), Named<FrameworkElement>(window, "IslandSurface"), "Expanded frame-time card fits all-component HUD: " + compact + "/" + scale);
+                CheckInside(Named<FrameworkElement>(window, "FrameTimeCard"), Named<FrameworkElement>(window, "IslandSurface"), "Frame-time card fits the all-component HUD: " + compact + "/" + scale);
                 var line = Named<ShapePath>(window, "FrameTimeLine");
                 var canvas = Named<Canvas>(window, "FrameTimeCanvas");
                 Check(line.Data is Geometry data && data.Bounds.Left >= -2 && data.Bounds.Top >= -2 &&
@@ -150,19 +149,15 @@ internal static class Program
                 foreach (double dpiScale in new[] { 1d, 2d })
                 {
                     var bitmap = Render(window, dpiScale);
-                    Check(bitmap.PixelWidth > 0 && bitmap.PixelHeight > 0, "Expanded frame metrics render at native and double DPI: " + compact + "/" + scale + "/" + dpiScale);
+                    Check(bitmap.PixelWidth > 0 && bitmap.PixelHeight > 0, "Frame metrics render at native and double DPI: " + compact + "/" + scale + "/" + dpiScale);
                 }
-                if (compact && scale == 1) Save(Render(window, 2), Path.Combine(Output, "frame-metrics-expanded.png"));
-                window.ToggleExpanded(); await Transition(window); await Settle();
-                CheckInside(Named<FrameworkElement>(window, "CompactLowPanel"), Named<FrameworkElement>(window, "IslandSurface"), "Collapsed 1% Low fits the HUD surface: " + compact + "/" + scale);
+                CheckInside(Named<FrameworkElement>(window, "CompactLowPanel"), Named<FrameworkElement>(window, "IslandSurface"), "1% Low fits the HUD surface: " + compact + "/" + scale);
                 CheckNonOverlapping(Named<FrameworkElement>(window, "CompactLowPanel"), Named<FrameworkElement>(window, "CompactClock"), Named<FrameworkElement>(window, "IslandSurface"),
                     "Low and clock do not overlap: " + compact + "/" + scale);
                 if (compact && scale == 1) Save(Render(window, 2), Path.Combine(Output, "frame-metrics-compact.png"));
-                window.ToggleExpanded(); await Transition(window); await Settle();
             }
             window.SetComponents(Empty);
             Check(Named<FrameworkElement>(window, "CompactLowPanel").Visibility == Visibility.Collapsed &&
-                Named<FrameworkElement>(window, "ExpandedOnePercentLow").Visibility == Visibility.Collapsed &&
                 Named<FrameworkElement>(window, "FrameTimeCard").Visibility == Visibility.Collapsed && Named<RowDefinition>(window, "FrameTimeRow").Height.Value == 0,
                 "Disabling both new metrics removes their controls and reserved chart row");
             Check(Named<ShapePath>(window, "FrameTimeLine").Data is null, "Disabling frame time clears its retained plot geometry");
@@ -247,7 +242,6 @@ internal static class Program
     private static T Named<T>(MainWindow window, string name) where T : class => window.FindName(name) as T ?? throw new InvalidOperationException("Missing element: " + name);
     private static string Normalize(string value) => value.Replace(" ", "", StringComparison.Ordinal).Replace("\u00a0", "", StringComparison.Ordinal);
     private static async Task Settle() => await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-    private static async Task Transition(MainWindow window) => await window.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
     private static void Click(MenuItem item) => item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent, item));
     private static BitmapSource Render(MainWindow window, double dpiScale)
     {

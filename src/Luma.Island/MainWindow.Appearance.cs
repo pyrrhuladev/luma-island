@@ -26,7 +26,6 @@ public partial class MainWindow
     public void SetAppearance(IslandAppearance mode, double? opacity = null)
     {
         VerifyAccess();
-        CompleteTransition();
         Appearance = AppearanceStore.Normalize(Appearance with { Mode = mode, GlassOpacity = opacity ?? Appearance.GlassOpacity });
         ApplyAppearance();
         SaveAppearance();
@@ -129,7 +128,7 @@ public partial class MainWindow
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateTransparencyControl());
             menu.Items.Add(new Separator());
-            var compact = new MenuItem { Header = "Компактная капсула", IsCheckable = true, IsChecked = Appearance.Compact };
+            var compact = new MenuItem { Header = "Плотная раскладка", IsCheckable = true, IsChecked = Appearance.Compact };
             compact.Click += (_, _) => SetCompactMode(compact.IsChecked);
             menu.Items.Add(compact);
             menu.Items.Add(new Separator());
@@ -186,7 +185,6 @@ public partial class MainWindow
         Label();
         slider.ValueChanged += (_, _) =>
         {
-            CompleteTransition();
             Appearance = AppearanceStore.Normalize(Appearance with { Scale = Math.Round(slider.Value) / 100 });
             ApplyHudScale(); Label();
         };

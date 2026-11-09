@@ -441,7 +441,7 @@
                         </StackPanel></Border>
                         <Border Style="{StaticResource SectionCard}"><StackPanel>
                             <TextBlock Text="Размер и плотность" Style="{StaticResource Section}" Margin="0,0,0,6"/>
-                            <CheckBox x:Name="CompactCheckBox" Content="Компактная капсула" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
+                            <CheckBox x:Name="CompactCheckBox" Content="Плотная раскладка" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
                             <Grid Margin="0,9,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="Масштаб всего HUD"/>
                                 <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=ScaleSlider, StringFormat={}{0:0}%}" Foreground="#BEEBD6"/>
@@ -525,7 +525,7 @@
                         </StackPanel></Border>
                         <Border Style="{StaticResource SectionCard}"><StackPanel>
                             <TextBlock Text="Порядок блоков" Style="{StaticResource Section}" Margin="0,0,0,5"/>
-                            <TextBlock Text="Выберите блок и измените его место в свёрнутом HUD." Style="{StaticResource Caption}" Margin="0,0,0,10"/>
+                            <TextBlock Text="Выберите блок и измените его место в HUD." Style="{StaticResource Caption}" Margin="0,0,0,10"/>
                             <ListBox x:Name="BlockOrderList" Height="108" SelectionChanged="OnOrderSelectionChanged" DisplayMemberPath="Label" AutomationProperties.Name="Порядок блоков HUD"/>
                             <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                 <Button x:Name="BlockUpButton" Content="↑ Выше" Click="OnBlockUp" Margin="0,0,8,0" AutomationProperties.Name="Переместить блок выше"/>
@@ -553,7 +553,7 @@
                     </ScrollViewer></TabItem>
                     <TabItem x:Name="ComponentsTab" Header="Показатели"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0"><StackPanel>                        <Border Style="{StaticResource SectionCard}" Margin="0,0,0,14"><StackPanel>
                             <TextBlock Text="Игра и плавность" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                            <TextBlock Text="Кадры, просадки и графики в раскрытой панели." Style="{StaticResource Caption}" Margin="0,0,0,9"/>
+                            <TextBlock Text="Кадры, просадки и мини-графики в HUD." Style="{StaticResource Caption}" Margin="0,0,0,9"/>
                             <UniformGrid Columns="2"><CheckBox x:Name="FpsCheckBox" Content="FPS" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
 <CheckBox x:Name="LowCheckBox" Content="1% Low" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
 <CheckBox x:Name="FrameTimeCheckBox" Content="Время кадра" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>

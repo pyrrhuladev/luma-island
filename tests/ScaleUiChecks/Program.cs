@@ -97,33 +97,31 @@ internal static class Program
                         window.Placement.SetPreset(preset);
                         var saved = window.Placement.Settings;
                         await Settle(window);
-                        CheckState(window, false, compact + "/" + requested + "/" + preset + "/collapsed");
-                        await Toggle(window);
-                        CheckState(window, true, compact + "/" + requested + "/" + preset + "/expanded");
-                        await Toggle(window);
-                        CheckState(window, false, compact + "/" + requested + "/" + preset + "/restored");
-                        Check(window.Placement.Settings == saved, "Scaled expansion preserves the saved anchor: " + compact + "/" + requested + "/" + preset);
+                        CheckState(window, compact + "/" + requested + "/" + preset + "/charts");
+                        window.SetComponents(metrics with { Charts = false });
+                        await Settle(window);
+                        CheckState(window, compact + "/" + requested + "/" + preset + "/no charts");
+                        window.SetComponents(metrics);
+                        await Settle(window);
+                        CheckState(window, compact + "/" + requested + "/" + preset + "/restored");
+                        Check(window.Placement.Settings == saved, "Changing scaled content preserves the saved anchor: " + compact + "/" + requested + "/" + preset);
                     }
                 }
             }
             window.SetHudScale(1.5);
-            window.ToggleExpanded();
-            await Task.Delay(30);
             window.SetHudScale(.75);
             await Settle(window);
-            CheckState(window, true, "Changing scale during expansion settles at the new scale");
-            window.ToggleExpanded();
-            await Task.Delay(30);
+            CheckState(window, "Successive scale edits settle at the latest request");
             window.SetHudScale(1.25);
             await Settle(window);
-            CheckState(window, false, "Changing scale during collapse settles at the new scale");
+            CheckState(window, "Final scale before closing");
             var savedAppearance = window.Appearance;
             window.Close();
             window = Create();
             window.Show(); await Settle(window);
             Check(window.Appearance == savedAppearance && window.HudScale == 1.25,
                 "Window recreation restores the requested scale with all other appearance values");
-            CheckState(window, false, "Recreated scaled window");
+            CheckState(window, "Recreated scaled window");
             CheckSyntheticFit();
 
             // Keep normal-opacity captures offscreen and prevent placement from moving them onscreen.
@@ -132,9 +130,9 @@ internal static class Program
             window.Opacity = 1;
             window.ApplyPerformance(new PerformanceSnapshot(42, 65, 37, 1, 2, 61, "Fixture", 54, "ok", 43, "ok"));
             window.ApplyFps(new FpsSnapshot(184, "Fixture", "Fixture"));
-            foreach (bool expanded in new[] { false, true })
+            foreach (bool compact in new[] { true, false })
             {
-                if (expanded) await Toggle(window);
+                window.SetCompactMode(compact);
                 foreach (double requested in new[] { .75, 1.5 })
                 {
                     window.SetHudScale(requested); await Settle(window);
@@ -145,11 +143,11 @@ internal static class Program
                         image.Render(window);
                         Check(image.PixelWidth == (int)Math.Ceiling(window.Width * outputScale) &&
                             image.PixelHeight == (int)Math.Ceiling(window.Height * outputScale),
-                            "Scaled render bounds at HUD/DPI " + requested + "/" + outputScale + "/expanded=" + expanded);
+                            "Scaled render bounds at HUD/DPI " + requested + "/" + outputScale + "/compact=" + compact);
                         if (requested == 1.5 && outputScale == 2)
                         {
                             var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(image));
-                            using var file = File.Create(Path.Combine(Output, expanded ? "scale-expanded.png" : "scale-compact.png")); encoder.Save(file);
+                            using var file = File.Create(Path.Combine(Output, compact ? "scale-compact.png" : "scale-normal.png")); encoder.Save(file);
                         }
                     }
                 }
@@ -159,12 +157,12 @@ internal static class Program
         finally { window.Opacity = 0; window.Close(); }
     }
 
-    private static void CheckState(MainWindow window, bool expanded, string label)
+    private static void CheckState(MainWindow window, string label)
     {
         double effective = window.EffectiveHudScale;
         Check(effective > 0 && effective <= window.HudScale + .000001, label + ": effective scale respects saved request");
-        double expectedWidth = (expanded ? 408 : window.Appearance.Compact ? 352 : 408) * effective;
-        double expectedHeight = expanded ? window.ExpandedWindowHeight : window.CollapsedWindowHeight;
+        double expectedWidth = (window.Appearance.Compact ? 352 : 408) * effective;
+        double expectedHeight = window.CollapsedWindowHeight;
         Check(Math.Abs(window.Width - expectedWidth) < .01 && Math.Abs(window.Height - expectedHeight) < .01,
             label + $": host dimensions scale while base control geometry stays unchanged; actual={window.Width}x{window.Height}, expected={expectedWidth}x{expectedHeight}, effective={effective}");
         var root = (FrameworkElement)window.Content;
@@ -185,8 +183,8 @@ internal static class Program
         Rect work = window.Placement.CurrentDisplay.WorkArea;
         Check(actual.Left >= work.Left - 1 && actual.Top >= work.Top - 1 && actual.Right <= work.Right + 1 && actual.Bottom <= work.Bottom + 1,
             label + ": auto-fit keeps the complete window inside the current monitor work area");
-        Check(!((TranslateTransform)surface.RenderTransform).HasAnimatedProperties,
-            label + ": no animation offsets remain after scaling or expansion");
+        Check(((FrameworkElement)window.FindName("CompactView")).IsVisible,
+            label + ": the HUD remains available at the requested scale");
         Geometry.Add(new { label, requested = window.HudScale, effective, dpi, actual.X, actual.Y, actual.Width, actual.Height });
     }
 
@@ -196,14 +194,13 @@ internal static class Program
         double Apply(double requested, Rect area, double dpi) => (double)fit.Invoke(null, new object[] { requested, new Size(408, 612), area, dpi })!;
         double capped = Apply(1.5, new Rect(0, 0, 800, 600), 1);
         Check(Math.Abs(capped - 584d / 612) < .000001 && capped * 612 <= 584,
-            "A short monitor caps 150% to a size that fits the largest expanded layout");
+            "A short monitor caps 150% to a size that fits tall HUD content");
         Check(Math.Abs(capped - Apply(1.5, new Rect(-1600, -1200, 1600, 1200), 2)) < .000001,
             "Equivalent physical work areas at 100% and 200% monitor DPI yield identical HUD auto-fit");
         Check(Apply(.75, new Rect(0, 0, 3840, 2160), 1) == .75,
             "A large display never enlarges a smaller requested scale");
     }
 
-    private static async Task Toggle(MainWindow window) { window.ToggleExpanded(); await window.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3)); await Settle(window); }
     private static async Task Settle(MainWindow window) => await window.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ApplicationIdle);
     private static void Check(bool passed, string name) { if (!passed) throw new InvalidOperationException("FAIL: " + name); Checks.Add(name); }
     private static Dictionary<string, string?> Preferences()

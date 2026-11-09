@@ -55,34 +55,13 @@
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.34"/>
                             </Trigger>
-                            <Trigger Property="Tag" Value="capsule">
-                                <Setter TargetName="ButtonSurface" Property="CornerRadius"
-                                        Value="{Binding CornerRadius, RelativeSource={RelativeSource AncestorType=Border}}"/>
-                            </Trigger>
-                            <Trigger Property="Tag" Value="accent">
-                                <Setter TargetName="ButtonSurface" Property="CornerRadius" Value="22"/>
-                            </Trigger>
-                            <MultiTrigger>
-                                <MultiTrigger.Conditions>
-                                    <Condition Property="Tag" Value="accent"/>
-                                    <Condition Property="IsMouseOver" Value="True"/>
-                                </MultiTrigger.Conditions>
-                                <Setter TargetName="ButtonSurface" Property="Background" Value="#BDF2DE"/>
-                            </MultiTrigger>
-                            <MultiTrigger>
-                                <MultiTrigger.Conditions>
-                                    <Condition Property="Tag" Value="accent"/>
-                                    <Condition Property="IsPressed" Value="True"/>
-                                </MultiTrigger.Conditions>
-                                <Setter TargetName="ButtonSurface" Property="Background" Value="#8BCDAD"/>
-                            </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
         <Style x:Key="VolumeSlider" TargetType="Slider">
-            <Setter Property="Height" Value="30"/>
+            <Setter Property="Height" Value="22"/>
             <Setter Property="Minimum" Value="0"/>
             <Setter Property="Maximum" Value="100"/>
             <Setter Property="SmallChange" Value="1"/>
@@ -91,7 +70,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
-                        <Grid VerticalAlignment="Center" Height="30">
+                        <Grid VerticalAlignment="Center" Height="22">
                             <Track x:Name="PART_Track" Minimum="{TemplateBinding Minimum}"
                                    Maximum="{TemplateBinding Maximum}" Value="{TemplateBinding Value}"
                                    IsDirectionReversed="False">
@@ -105,7 +84,7 @@
                                     </RepeatButton>
                                 </Track.DecreaseRepeatButton>
                                 <Track.Thumb>
-                                    <Thumb Width="11" Height="28" Cursor="Hand">
+                                    <Thumb Width="11" Height="22" Cursor="Hand">
                                         <Thumb.Template>
                                             <ControlTemplate TargetType="Thumb">
                                                 <Ellipse Width="11" Height="11" Fill="#ECF8F3"/>
@@ -138,10 +117,9 @@
     <Grid>
         <Border x:Name="IslandSurface" Width="376" Height="56" VerticalAlignment="Top"
                 Margin="12" Background="{DynamicResource SurfaceFill}" BorderBrush="{DynamicResource SurfaceStroke}" BorderThickness="1"
-                CornerRadius="16" ClipToBounds="True">
+                CornerRadius="16" ClipToBounds="True" PreviewMouseLeftButtonDown="OnSurfacePointerDown">
             <Border.ContextMenu>
                 <ContextMenu>
-                    <MenuItem Header="Показать / свернуть" Click="OnToggleExpanded"/>
                     <Separator/>
                     <MenuItem Header="Выход" Click="OnExit"/>
                 </ContextMenu>
@@ -156,24 +134,22 @@
                         </LinearGradientBrush>
                     </Border.Background>
                 </Border>
-                <Grid x:Name="CompactView" Margin="13,6"
-                      AutomationProperties.Name="Раскрыть Luma Island">
+                <Grid x:Name="CompactView" Margin="13,6" AutomationProperties.Name="Luma Island">
                     <Grid x:Name="CompactContentGrid" Width="348">
                         <Grid.RowDefinitions>
                             <RowDefinition x:Name="HudHeaderRow" Height="24"/>
                             <RowDefinition x:Name="HudMetricsRow" Height="0"/>
                             <RowDefinition x:Name="HudMusicRow" Height="44"/>
+                            <RowDefinition x:Name="ChartsRow" Height="0"/>
+                            <RowDefinition x:Name="FrameTimeRow" Height="0"/>
+                            <RowDefinition x:Name="VolumeRow" Height="0"/>
+                            <RowDefinition x:Name="FooterRow" Height="0"/>
                         </Grid.RowDefinitions>
-                        <Button x:Name="CompactExpandButton" Grid.RowSpan="3" Margin="-13,-6"
-                                Click="OnCompactExpand" PreviewMouseLeftButtonDown="OnCompactPointerDown"
-                                PreviewMouseMove="OnCompactPointerMove" Style="{StaticResource QuietButton}" Tag="capsule"
-                                AutomationProperties.Name="Раскрыть Luma Island"/>
-                        <Grid x:Name="HudHeader" IsHitTestVisible="False">
+                        <Grid x:Name="HudHeader" UseLayoutRounding="False">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition x:Name="CompactClockColumn" Width="Auto"/>
                                 <ColumnDefinition x:Name="CompactBatteryColumn" Width="Auto"/>
-                                <ColumnDefinition x:Name="CompactArrowColumn" Width="16"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <StackPanel x:Name="CompactFpsPanel" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
@@ -187,17 +163,13 @@
                                 <TextBlock x:Name="CompactOnePercentLow" Text="—" FontSize="18" FontWeight="SemiBold"
                                            Typography.NumeralAlignment="Tabular" Foreground="{DynamicResource TextPrimary}"/>
                             </StackPanel>
-                            <TextBlock x:Name="CompactFrameTime" Text="Кадр —" FontSize="14" Visibility="Collapsed"
-                                       Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center"/>
                             </StackPanel>
                             <TextBlock x:Name="CompactClock" Grid.Column="1" Text="--:--" FontSize="13" Margin="6,0,8,0"
                                        Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                             <TextBlock x:Name="CompactBattery" Grid.Column="2" Text="—" FontSize="11" Margin="4,0,8,0"
                                        Foreground="{DynamicResource Muted}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                            <Path Grid.Column="3" Data="M 1,1 L 5,5 L 9,1" Stroke="{DynamicResource Muted}" StrokeThickness="1.4"
-                                  Width="10" Height="6" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                         </Grid>
-                        <UniformGrid x:Name="CompactPerformance" IsHitTestVisible="False" Grid.Row="1" Columns="3"
+                        <UniformGrid x:Name="CompactPerformance" Grid.Row="1" Columns="3"
                                      Height="28" Margin="0,6,0,6" Visibility="Collapsed">
                             <TextBlock x:Name="CompactCpu" FontSize="12" Foreground="{DynamicResource TextSecondary}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" LineHeight="16" Visibility="Collapsed"/>
@@ -228,202 +200,122 @@
                                 <TextBlock x:Name="CompactArtist" Text="Системный плеер" FontSize="11" Foreground="{DynamicResource Muted}"
                                            Margin="0,1,0,0" TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
-                            <StackPanel x:Name="CompactPlaybackControls" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
-                                    Visibility="{Binding Visibility, ElementName=ExpandedPlaybackControls}">
+                            <StackPanel x:Name="CompactPlaybackControls" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                             <Button x:Name="CompactPreviousButton" Width="24" Height="28" Style="{StaticResource QuietButton}"
-                                    IsEnabled="{Binding IsEnabled, ElementName=PreviousButton}" Click="OnPrevious"
+                                    IsEnabled="False" Click="OnPrevious"
                                     AutomationProperties.Name="Предыдущий трек" ToolTip="Предыдущий трек">
                                 <Path Data="M 1,1 L 1,13 M 13,1 L 4,7 L 13,13 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                       Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Width="10" Height="11" Stretch="Uniform"/>
                             </Button>
                             <Button x:Name="CompactPlayButton" Width="24" Height="28" Style="{StaticResource QuietButton}" Foreground="{StaticResource Mint}"
-                                    IsEnabled="{Binding IsEnabled, ElementName=PlayButton}" Click="OnTogglePlayback"
-                                    AutomationProperties.Name="{Binding Path=(AutomationProperties.Name), ElementName=PlayButton}" ToolTip="Воспроизвести / пауза">
-                                <Path x:Name="CompactPlayIcon" Data="{Binding Data, ElementName=PlayIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                    IsEnabled="False" Click="OnTogglePlayback"
+                                    AutomationProperties.Name="Воспроизвести" ToolTip="Воспроизвести / пауза">
+                                <Path x:Name="CompactPlayIcon" Data="M 2,1 L 2,15 L 13,8 Z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                       Width="10" Height="12" Stretch="Uniform"/>
                             </Button>
                             <Button x:Name="CompactNextButton" Width="24" Height="28" Style="{StaticResource QuietButton}"
-                                    IsEnabled="{Binding IsEnabled, ElementName=NextButton}" Click="OnNext"
+                                    IsEnabled="False" Click="OnNext"
                                     AutomationProperties.Name="Следующий трек" ToolTip="Следующий трек">
                                 <Path Data="M 13,1 L 13,13 M 1,1 L 10,7 L 1,13 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                       Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Width="10" Height="11" Stretch="Uniform"/>
                             </Button>
                             </StackPanel>
                         </Grid>
+                        <Grid x:Name="ChartsPanel" Grid.Row="3" Margin="0,3" Visibility="Collapsed" IsVisibleChanged="OnChartsVisibleChanged">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="64"/><RowDefinition x:Name="ChartGapRow" Height="6"/>
+                                <RowDefinition x:Name="ChartSecondRow" Height="64"/>
+                            </Grid.RowDefinitions>
+                            <Border x:Name="CpuChartCard" Grid.Row="0" Grid.Column="0" CornerRadius="9" Background="#18000000" Padding="9,4" Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.RowDefinitions><RowDefinition Height="19"/><RowDefinition Height="*"/><RowDefinition Height="13"/></Grid.RowDefinitions>
+                                    <TextBlock Text="CPU" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                                    <TextBlock x:Name="CpuChartValue" Text="—" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right" Foreground="{DynamicResource TextPrimary}"/>
+                                    <Canvas x:Name="CpuChartCanvas" Grid.Row="1" ClipToBounds="True" SizeChanged="OnChartSizeChanged">
+                                        <Path x:Name="CpuChartGrid" Stroke="{DynamicResource Subtle}" Opacity="0.18" StrokeThickness="0.6"/>
+                                        <Path x:Name="CpuChartLine" Stroke="{StaticResource Mint}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                    </Canvas>
+                                    <TextBlock x:Name="CpuChartScale" Grid.Row="2" Text="0–100%" FontSize="10" Foreground="{DynamicResource Subtle}"/>
+                                    <TextBlock Grid.Row="2" Text="до 2 мин" FontSize="10" HorizontalAlignment="Right" Foreground="{DynamicResource Subtle}"/>
+                                </Grid>
+                            </Border>
+                            <Border x:Name="GpuChartCard" Grid.Row="0" Grid.Column="2" CornerRadius="9" Background="#18000000" Padding="9,4" Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.RowDefinitions><RowDefinition Height="19"/><RowDefinition Height="*"/><RowDefinition Height="13"/></Grid.RowDefinitions>
+                                    <TextBlock Text="GPU" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                                    <TextBlock x:Name="GpuChartValue" Text="—" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right" Foreground="{DynamicResource TextPrimary}"/>
+                                    <Canvas x:Name="GpuChartCanvas" Grid.Row="1" ClipToBounds="True" SizeChanged="OnChartSizeChanged">
+                                        <Path x:Name="GpuChartGrid" Stroke="{DynamicResource Subtle}" Opacity="0.18" StrokeThickness="0.6"/>
+                                        <Path x:Name="GpuChartLine" Stroke="{StaticResource Mint}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                    </Canvas>
+                                    <TextBlock Grid.Row="2" Text="0–100%" FontSize="10" Foreground="{DynamicResource Subtle}"/>
+                                    <TextBlock Grid.Row="2" Text="до 2 мин" FontSize="10" HorizontalAlignment="Right" Foreground="{DynamicResource Subtle}"/>
+                                </Grid>
+                            </Border>
+                            <Border x:Name="MemoryChartCard" Grid.Row="2" Grid.Column="0" CornerRadius="9" Background="#18000000" Padding="9,4" Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.RowDefinitions><RowDefinition Height="19"/><RowDefinition Height="*"/><RowDefinition Height="13"/></Grid.RowDefinitions>
+                                    <TextBlock Text="RAM" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                                    <TextBlock x:Name="MemoryChartValue" Text="—" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right" Foreground="{DynamicResource TextPrimary}"/>
+                                    <Canvas x:Name="MemoryChartCanvas" Grid.Row="1" ClipToBounds="True" SizeChanged="OnChartSizeChanged">
+                                        <Path x:Name="MemoryChartGrid" Stroke="{DynamicResource Subtle}" Opacity="0.18" StrokeThickness="0.6"/>
+                                        <Path x:Name="MemoryChartLine" Stroke="{StaticResource Mint}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                    </Canvas>
+                                    <TextBlock Grid.Row="2" Text="0–100%" FontSize="10" Foreground="{DynamicResource Subtle}"/>
+                                    <TextBlock Grid.Row="2" Text="до 2 мин" FontSize="10" HorizontalAlignment="Right" Foreground="{DynamicResource Subtle}"/>
+                                </Grid>
+                            </Border>
+                            <Border x:Name="FpsChartCard" Grid.Row="2" Grid.Column="2" CornerRadius="9" Background="#18000000" Padding="9,4" Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.RowDefinitions><RowDefinition Height="19"/><RowDefinition Height="*"/><RowDefinition Height="13"/></Grid.RowDefinitions>
+                                    <TextBlock Text="FPS" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                                    <TextBlock x:Name="FpsChartValue" Text="—" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right" Foreground="{StaticResource Mint}"/>
+                                    <Canvas x:Name="FpsChartCanvas" Grid.Row="1" ClipToBounds="True" SizeChanged="OnChartSizeChanged">
+                                        <Path x:Name="FpsChartGrid" Stroke="{DynamicResource Subtle}" Opacity="0.18" StrokeThickness="0.6"/>
+                                        <Path x:Name="FpsChartLine" Stroke="{StaticResource Mint}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                    </Canvas>
+                                    <TextBlock x:Name="FpsChartScale" Grid.Row="2" Text="0–60 FPS" FontSize="10" Foreground="{DynamicResource Subtle}"/>
+                                    <TextBlock Grid.Row="2" Text="до 2 мин" FontSize="10" HorizontalAlignment="Right" Foreground="{DynamicResource Subtle}"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                        <Border x:Name="FrameTimeCard" Grid.Row="4" Margin="0,3" CornerRadius="9" Background="#18000000" Padding="9,4" Visibility="Collapsed"
+                                IsVisibleChanged="OnFrameTimeVisibleChanged">
+                            <Grid>
+                                <Grid.RowDefinitions><RowDefinition Height="19"/><RowDefinition Height="*"/><RowDefinition Height="13"/></Grid.RowDefinitions>
+                                <TextBlock Text="Время кадра" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                                <TextBlock x:Name="FrameTimeValue" Text="—" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right" Foreground="{DynamicResource TextPrimary}"/>
+                                <Canvas x:Name="FrameTimeCanvas" Grid.Row="1" ClipToBounds="True" SizeChanged="OnFrameTimeSizeChanged">
+                                    <Path x:Name="FrameTimeGrid" Stroke="{DynamicResource Subtle}" Opacity="0.18" StrokeThickness="0.6"/>
+                                    <Path x:Name="FrameTimeLine" Stroke="{StaticResource Mint}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                </Canvas>
+                                <TextBlock x:Name="FrameTimeScale" Grid.Row="2" Text="0–16 мс" FontSize="10" Foreground="{DynamicResource Subtle}"/>
+                                <TextBlock x:Name="FrameTimePeak" Grid.Row="2" Text="до 10 с" FontSize="10" HorizontalAlignment="Right" Foreground="{DynamicResource Subtle}"/>
+                            </Grid>
+                        </Border>
+                        <Grid x:Name="CompactVolume" Grid.Row="5" Margin="0,1,0,1" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="30"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="38"/>
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="MuteButton" Width="24" Height="22" Style="{StaticResource QuietButton}"
+                                    Click="OnMute" AutomationProperties.Name="Выключить звук" ToolTip="Включить / выключить звук">
+                                <TextBlock x:Name="VolumeIcon" Text="&#xE767;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+                            </Button>
+                            <Slider x:Name="VolumeControl" Grid.Column="1" Margin="6,0,6,0" Style="{StaticResource VolumeSlider}"
+                                    ValueChanged="OnVolumeChanged" AutomationProperties.Name="Системная громкость"/>
+                            <TextBlock x:Name="VolumeLabel" Grid.Column="2" Text="—" FontSize="11" Foreground="{DynamicResource Muted}"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock x:Name="DateLabel" Grid.Row="6" Margin="1,2,1,0" FontSize="11"
+                                   Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Visibility="Collapsed"/>
                     </Grid>
                 </Grid>
 
-                <Grid x:Name="ExpandedView" Visibility="Collapsed" Opacity="0" Margin="18,10,18,13">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="29"/>
-                        <RowDefinition x:Name="MusicInfoRow" Height="78"/>
-                        <RowDefinition x:Name="MusicControlsRow" Height="52"/>
-                        <RowDefinition x:Name="VolumeRow" Height="34"/>
-                        <RowDefinition x:Name="PerformanceRow" Height="0"/>
-                        <RowDefinition x:Name="ChartsRow" Height="0"/>
-                        <RowDefinition x:Name="FrameTimeRow" Height="0"/>
-                        <RowDefinition x:Name="FooterRow" Height="26"/>
-                    </Grid.RowDefinitions>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="29"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Background="Transparent"
-                                    MouseLeftButtonDown="OnDragHeader">
-                            <TextBlock x:Name="ExpandedSectionLabel" Text="Управление" FontSize="11" Foreground="{DynamicResource Muted}"/>
-                            <TextBlock x:Name="ExpandedOnePercentLow" Text="1% Low —" FontSize="12" Visibility="Collapsed" Foreground="{StaticResource Mint}"/>
-                        </StackPanel>
-                        <TextBlock x:Name="ExpandedClock" Grid.Column="1" Text="--:--" FontSize="12"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}" Margin="0,0,7,0"/>
-                        <Button Grid.Column="2" Width="28" Height="28" Style="{StaticResource QuietButton}"
-                                Click="OnToggleExpanded" AutomationProperties.Name="Свернуть Luma Island" ToolTip="Свернуть">
-                            <Path Data="M 1,5 L 5,1 L 9,5" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                  StrokeThickness="1.5" Width="10" Height="6"/>
-                        </Button>
-                    </Grid>
-                    <Grid x:Name="ExpandedMusicInfo" Grid.Row="1" Margin="0,9,0,5">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="64"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Border Width="62" Height="62" CornerRadius="15" Background="{DynamicResource AlbumSurface}" ClipToBounds="True">
-                            <Grid>
-                                <TextBlock x:Name="ExpandedFallback" Text="&#xE8D6;" FontFamily="Segoe MDL2 Assets" FontSize="25"
-                                           Foreground="{StaticResource Mint}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Image x:Name="ExpandedArtwork" Width="62" Height="62" Stretch="UniformToFill"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
-                                    <Image.Clip><RectangleGeometry Rect="0,0,62,62" RadiusX="15" RadiusY="15"/></Image.Clip>
-                                </Image>
-                            </Grid>
-                        </Border>
-                        <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
-                            <TextBlock x:Name="ExpandedTitle" Text="Откройте музыку" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="ExpandedArtist" Text="Плеер появится здесь" FontSize="12" Foreground="{DynamicResource Muted}"
-                                       Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
-                    </Grid>
-                    <StackPanel x:Name="ExpandedPlaybackControls" Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Button x:Name="PreviousButton" Width="43" Height="39" Margin="0,0,12,0" IsEnabled="False"
-                                Style="{StaticResource QuietButton}" Click="OnPrevious" AutomationProperties.Name="Предыдущий трек" ToolTip="Предыдущий трек">
-                            <Path Data="M 1,1 L 1,13 M 13,1 L 4,7 L 13,13 Z" Stroke="{DynamicResource TextSecondary}" Fill="{DynamicResource TextSecondary}" StrokeThickness="1.5" Width="14" Height="14"/>
-                        </Button>
-                        <Button x:Name="PlayButton" Width="44" Height="44" IsEnabled="False" Background="{StaticResource Mint}" Tag="accent"
-                                Style="{StaticResource QuietButton}" Click="OnTogglePlayback" AutomationProperties.Name="Воспроизвести" ToolTip="Воспроизвести / пауза">
-                            <Path x:Name="PlayIcon" Data="M 2,1 L 2,15 L 13,8 Z" Fill="#14241E" Width="15" Height="16"/>
-                        </Button>
-                        <Button x:Name="NextButton" Width="43" Height="39" Margin="12,0,0,0" IsEnabled="False"
-                                Style="{StaticResource QuietButton}" Click="OnNext" AutomationProperties.Name="Следующий трек" ToolTip="Следующий трек">
-                            <Path Data="M 13,1 L 13,13 M 1,1 L 10,7 L 1,13 Z" Stroke="{DynamicResource TextSecondary}" Fill="{DynamicResource TextSecondary}" StrokeThickness="1.5" Width="14" Height="14"/>
-                        </Button>
-                    </StackPanel>
-                    <Grid x:Name="ExpandedVolume" Grid.Row="3" Margin="0,2,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="30"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="38"/>
-                        </Grid.ColumnDefinitions>
-                        <Button x:Name="MuteButton" Width="28" Height="28" Style="{StaticResource QuietButton}"
-                                Click="OnMute" AutomationProperties.Name="Выключить звук" ToolTip="Включить / выключить звук">
-                            <TextBlock x:Name="VolumeIcon" Text="&#xE767;" FontFamily="Segoe MDL2 Assets" FontSize="15"/>
-                        </Button>
-                        <Slider x:Name="VolumeControl" Grid.Column="1" Margin="10,0,5,0" Style="{StaticResource VolumeSlider}"
-                                ValueChanged="OnVolumeChanged" AutomationProperties.Name="Системная громкость"/>
-                        <TextBlock x:Name="VolumeLabel" Grid.Column="2" Text="—" FontSize="11" Foreground="{DynamicResource Muted}"
-                                   HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                    </Grid>
-                    <StackPanel x:Name="ExpandedPerformance" Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center"
-                                VerticalAlignment="Center" Visibility="Collapsed">
-                        <TextBlock x:Name="ExpandedCpu" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" TextAlignment="Center" LineHeight="16" Margin="0,0,12,0"/>
-                        <TextBlock x:Name="ExpandedGpu" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" TextAlignment="Center" LineHeight="16" Margin="0,0,12,0"/>
-                        <TextBlock x:Name="ExpandedMemory" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" TextAlignment="Center" LineHeight="16" Margin="0,0,12,0"/>
-                        <TextBlock x:Name="ExpandedFps" FontSize="11" Foreground="{StaticResource Mint}" VerticalAlignment="Center"/>
-                    </StackPanel>
-                    <Grid x:Name="ChartsPanel" Grid.Row="5" Margin="0,4,0,4" Visibility="Collapsed" IsVisibleChanged="OnChartsVisibleChanged">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="90"/><RowDefinition x:Name="ChartGapRow" Height="8"/>
-                            <RowDefinition x:Name="ChartSecondRow" Height="90"/>
-                        </Grid.RowDefinitions>
-                        <Border x:Name="CpuChartCard" Grid.Row="0" Grid.Column="0" CornerRadius="12" Background="#18000000" Padding="10,7" Visibility="Collapsed">
-                            <Grid>
-                                <Grid.RowDefinitions><RowDefinition Height="19"/><RowDefinition Height="*"/><RowDefinition Height="13"/></Grid.RowDefinitions>
-                                <TextBlock Text="CPU" FontSize="11" Foreground="{DynamicResource Muted}"/>
-                                <TextBlock x:Name="CpuChartValue" Text="—" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right" Foreground="{DynamicResource TextPrimary}"/>
-                                <Canvas x:Name="CpuChartCanvas" Grid.Row="1" ClipToBounds="True" SizeChanged="OnChartSizeChanged">
-                                    <Path x:Name="CpuChartGrid" Stroke="{DynamicResource Subtle}" Opacity="0.18" StrokeThickness="0.6"/>
-                                    <Path x:Name="CpuChartLine" Stroke="{StaticResource Mint}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
-                                </Canvas>
-                                <TextBlock x:Name="CpuChartScale" Grid.Row="2" Text="0–100%" FontSize="10" Foreground="{DynamicResource Subtle}"/>
-                                <TextBlock Grid.Row="2" Text="до 2 мин" FontSize="10" HorizontalAlignment="Right" Foreground="{DynamicResource Subtle}"/>
-                            </Grid>
-                        </Border>
-                        <Border x:Name="GpuChartCard" Grid.Row="0" Grid.Column="2" CornerRadius="12" Background="#18000000" Padding="10,7" Visibility="Collapsed">
-                            <Grid>
-                                <Grid.RowDefinitions><RowDefinition Height="19"/><RowDefinition Height="*"/><RowDefinition Height="13"/></Grid.RowDefinitions>
-                                <TextBlock Text="GPU" FontSize="11" Foreground="{DynamicResource Muted}"/>
-                                <TextBlock x:Name="GpuChartValue" Text="—" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right" Foreground="{DynamicResource TextPrimary}"/>
-                                <Canvas x:Name="GpuChartCanvas" Grid.Row="1" ClipToBounds="True" SizeChanged="OnChartSizeChanged">
-                                    <Path x:Name="GpuChartGrid" Stroke="{DynamicResource Subtle}" Opacity="0.18" StrokeThickness="0.6"/>
-                                    <Path x:Name="GpuChartLine" Stroke="{StaticResource Mint}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
-                                </Canvas>
-                                <TextBlock Grid.Row="2" Text="0–100%" FontSize="10" Foreground="{DynamicResource Subtle}"/>
-                                <TextBlock Grid.Row="2" Text="до 2 мин" FontSize="10" HorizontalAlignment="Right" Foreground="{DynamicResource Subtle}"/>
-                            </Grid>
-                        </Border>
-                        <Border x:Name="MemoryChartCard" Grid.Row="2" Grid.Column="0" CornerRadius="12" Background="#18000000" Padding="10,7" Visibility="Collapsed">
-                            <Grid>
-                                <Grid.RowDefinitions><RowDefinition Height="19"/><RowDefinition Height="*"/><RowDefinition Height="13"/></Grid.RowDefinitions>
-                                <TextBlock Text="RAM" FontSize="11" Foreground="{DynamicResource Muted}"/>
-                                <TextBlock x:Name="MemoryChartValue" Text="—" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right" Foreground="{DynamicResource TextPrimary}"/>
-                                <Canvas x:Name="MemoryChartCanvas" Grid.Row="1" ClipToBounds="True" SizeChanged="OnChartSizeChanged">
-                                    <Path x:Name="MemoryChartGrid" Stroke="{DynamicResource Subtle}" Opacity="0.18" StrokeThickness="0.6"/>
-                                    <Path x:Name="MemoryChartLine" Stroke="{StaticResource Mint}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
-                                </Canvas>
-                                <TextBlock Grid.Row="2" Text="0–100%" FontSize="10" Foreground="{DynamicResource Subtle}"/>
-                                <TextBlock Grid.Row="2" Text="до 2 мин" FontSize="10" HorizontalAlignment="Right" Foreground="{DynamicResource Subtle}"/>
-                            </Grid>
-                        </Border>
-                        <Border x:Name="FpsChartCard" Grid.Row="2" Grid.Column="2" CornerRadius="12" Background="#18000000" Padding="10,7" Visibility="Collapsed">
-                            <Grid>
-                                <Grid.RowDefinitions><RowDefinition Height="19"/><RowDefinition Height="*"/><RowDefinition Height="13"/></Grid.RowDefinitions>
-                                <TextBlock Text="FPS" FontSize="11" Foreground="{DynamicResource Muted}"/>
-                                <TextBlock x:Name="FpsChartValue" Text="—" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right" Foreground="{StaticResource Mint}"/>
-                                <Canvas x:Name="FpsChartCanvas" Grid.Row="1" ClipToBounds="True" SizeChanged="OnChartSizeChanged">
-                                    <Path x:Name="FpsChartGrid" Stroke="{DynamicResource Subtle}" Opacity="0.18" StrokeThickness="0.6"/>
-                                    <Path x:Name="FpsChartLine" Stroke="{StaticResource Mint}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
-                                </Canvas>
-                                <TextBlock x:Name="FpsChartScale" Grid.Row="2" Text="0–60 FPS" FontSize="10" Foreground="{DynamicResource Subtle}"/>
-                                <TextBlock Grid.Row="2" Text="до 2 мин" FontSize="10" HorizontalAlignment="Right" Foreground="{DynamicResource Subtle}"/>
-                            </Grid>
-                        </Border>
-                    </Grid>
-                    <Border x:Name="FrameTimeCard" Grid.Row="6" Margin="0,4,0,4" CornerRadius="12" Background="#18000000" Padding="10,7" Visibility="Collapsed"
-                            IsVisibleChanged="OnFrameTimeVisibleChanged">
-                        <Grid>
-                            <Grid.RowDefinitions><RowDefinition Height="19"/><RowDefinition Height="*"/><RowDefinition Height="13"/></Grid.RowDefinitions>
-                            <TextBlock Text="Время кадра" FontSize="11" Foreground="{DynamicResource Muted}"/>
-                            <TextBlock x:Name="FrameTimeValue" Text="—" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right" Foreground="{DynamicResource TextPrimary}"/>
-                            <Canvas x:Name="FrameTimeCanvas" Grid.Row="1" ClipToBounds="True" SizeChanged="OnFrameTimeSizeChanged">
-                                <Path x:Name="FrameTimeGrid" Stroke="{DynamicResource Subtle}" Opacity="0.18" StrokeThickness="0.6"/>
-                                <Path x:Name="FrameTimeLine" Stroke="{StaticResource Mint}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
-                            </Canvas>
-                            <TextBlock x:Name="FrameTimeScale" Grid.Row="2" Text="0–16 мс" FontSize="10" Foreground="{DynamicResource Subtle}"/>
-                            <TextBlock x:Name="FrameTimePeak" Grid.Row="2" Text="до 10 с" FontSize="10" HorizontalAlignment="Right" Foreground="{DynamicResource Subtle}"/>
-                        </Grid>
-                    </Border>
-                    <Grid Grid.Row="7" Margin="1,7,1,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="DateLabel" FontSize="11" Foreground="{DynamicResource Subtle}" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="BatteryLabel" Grid.Column="1" FontSize="11" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
-                    </Grid>
-                </Grid>
                 <Ellipse x:Name="QuietAlertIndicator" Width="7" Height="7" HorizontalAlignment="Right"
                          VerticalAlignment="Top" Margin="0,8,10,0" Fill="#F3BE64" Visibility="Collapsed"
                          AutomationProperties.Name="Предупреждение HUD"/>

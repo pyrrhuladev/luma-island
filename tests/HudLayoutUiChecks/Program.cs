@@ -66,8 +66,9 @@ internal static class Program
             Check(window.Appearance.Layout == HudLayoutSettings.Default, "Old appearance files retain original HUD arrangement");
             Check(Text(window, "CompactFps").FontSize == 34 && Text(window, "CompactCpu").FontSize == 12,
                 "Default normal fonts retain their exact pre-editor sizes");
-            Check(((UniformGrid)window.FindName("CompactPerformance")).Columns == 3 && Math.Abs(window.CollapsedWindowHeight - 186) < .01,
-                "Default normal hardware geometry and host height are unchanged");
+            Check(((UniformGrid)window.FindName("CompactPerformance")).Columns == 3 &&
+                ((FrameworkElement)window.FindName("CompactView")).IsVisible && window.FindName("ExpandedView") is null,
+                "Default hardware geometry uses three columns in the single HUD view");
 
             string[] blockOrders = ["header,metrics,music", "header,music,metrics", "metrics,header,music", "metrics,music,header", "music,header,metrics", "music,metrics,header"];
             string[] metricOrders = ["cpu,gpu,memory", "cpu,memory,gpu", "gpu,cpu,memory", "gpu,memory,cpu", "memory,cpu,gpu", "memory,gpu,cpu"];
@@ -95,17 +96,20 @@ internal static class Program
                         var performance = (UniformGrid)window.FindName("CompactPerformance");
                         Check(performance.Columns == columns && performance.ActualHeight > 0, "Hardware row count follows column choice");
                         foreach (string name in new[] { "CompactCpu", "CompactGpu", "CompactMemory" }) CheckText(Text(window, name), performance);
-                        foreach (string name in new[] { "HudHeader", "CompactPerformance", "CompactMusicRow" })
-                            Check(Inside(Bounds((FrameworkElement)window.FindName(name), (FrameworkElement)window.FindName("IslandSurface")), ((FrameworkElement)window.FindName("IslandSurface")).RenderSize), "Custom group remains inside the capsule: " + name);
+                        var surface = (FrameworkElement)window.FindName("IslandSurface");
+                        foreach (string name in new[] { "HudHeader", "CompactPerformance", "CompactMusicRow", "CompactVolume", "DateLabel", "FrameTimeCard" })
+                        {
+                            var group = (FrameworkElement)window.FindName(name);
+                            Check(group.IsVisible && Inside(Bounds(group, surface), surface.RenderSize),
+                                "Visible group fits inside the HUD: " + name);
+                        }
                         double font = Text(window, "CompactCpu").FontSize;
                         window.SetComponents(All); window.SetHudScale(values.Scale); await Settle(window);
                         Check(Math.Abs(Text(window, "CompactCpu").FontSize - font) < .001, "Repeated component and scale application never compounds font scale");
-                        window.ToggleExpanded(); await window.WaitForTransitionAsync(); await Settle(window);
-                        foreach (string name in new[] { "ExpandedCpu", "ExpandedGpu", "ExpandedMemory", "ExpandedFps" }) CheckText(Text(window, name), (FrameworkElement)window.FindName("ExpandedPerformance"));
+                        CheckText(Text(window, "CompactFps"), (FrameworkElement)window.FindName("HudHeader"));
                         Check(window.Height <= window.Placement.CurrentDisplay.WorkArea.Height / DisplayService.GetWindowScale(window) + 1,
-                            "Custom expanded height fits the monitor without changing saved user scale");
+                            "Custom HUD height fits the monitor without changing saved user scale");
                         if (compact && columns == 2 && values.Text > 1) Save(MainWindow.RenderHudPreview(window.Appearance, All), "layout-custom.png");
-                        window.ToggleExpanded(); await window.WaitForTransitionAsync(); await Settle(window);
                     }
             foreach (var subset in new[]
             {
@@ -118,22 +122,21 @@ internal static class Program
                 {
                     window.SetHudLayout(new(MetricOrder: "memory,gpu,cpu", MetricColumns: columns, TextScale: 1.3, Spacing: 12));
                     window.SetComponents(subset); Inject(window); await Settle(window);
-                    window.ToggleExpanded(); await window.WaitForTransitionAsync(); await Settle(window);
-                    var band = (FrameworkElement)window.FindName("ExpandedPerformance");
-                    foreach (string name in new[] { "ExpandedCpu", "ExpandedGpu", "ExpandedMemory", "ExpandedFps" })
+                    var band = (FrameworkElement)window.FindName("CompactPerformance");
+                    foreach (string name in new[] { "CompactCpu", "CompactGpu", "CompactMemory" })
                         if (Text(window, name).Visibility == Visibility.Visible) CheckText(Text(window, name), band);
-                    var expanded = (Grid)window.FindName("ExpandedView");
-                    Rect bandBounds = Bounds(band, expanded);
-                    double top = expanded.RowDefinitions.Take(4).Sum(row => row.ActualHeight);
-                    Check(bandBounds.Top >= top - 1 && bandBounds.Bottom <= top + expanded.RowDefinitions[4].ActualHeight + 1,
-                        "Custom visible-only wrap fills its allocated band without hidden slots or overflow");
+                    var grid = (Grid)window.FindName("CompactContentGrid");
+                    int row = Grid.GetRow(band);
+                    Rect bandBounds = Bounds(band, grid);
+                    double top = grid.RowDefinitions.Take(row).Sum(definition => definition.ActualHeight);
+                    Check(bandBounds.Top >= top - 1 && bandBounds.Bottom <= top + grid.RowDefinitions[row].ActualHeight + 1,
+                        "Visible hardware cells fit their allocated row in the reordered HUD");
                     if (subset.Charts)
                         foreach (string name in new[] { "MemoryChartValue", "FpsChartValue", "FpsChartScale" })
                             CheckText(Text(window, name), (FrameworkElement)Text(window, name).Parent);
                     if (subset.FrameTime)
                         foreach (string name in new[] { "FrameTimeValue", "FrameTimeScale", "FrameTimePeak" })
                             CheckText(Text(window, name), (FrameworkElement)Text(window, name).Parent);
-                    window.ToggleExpanded(); await window.WaitForTransitionAsync(); await Settle(window);
                 }
             window.SetHudLayout(new(MetricColumns: 1));
             window.SetComponents(All with { Cpu = false, CpuTemperature = false, Gpu = false, GpuTemperature = false, Memory = false, MemoryTemperature = false });

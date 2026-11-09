@@ -135,18 +135,15 @@ internal static class Program
                 await Settle();
                 Check(indicator.Visibility == Visibility.Visible && indicator.Width == 7 && indicator.Height == 7,
                     "The alert stays one small seven-DIP dot: " + compact + "/" + scale);
-                Inside(window, indicator, "Collapsed dot stays inside the translucent HUD: " + compact + "/" + scale);
+                Inside(window, indicator, "Warning dot stays inside the translucent HUD: " + compact + "/" + scale);
                 Check(window.Appearance.GlassOpacity == .15 && indicator.Opacity == 1,
                     "The background transparency setting does not fade the warning: " + compact + "/" + scale);
-                window.ToggleExpanded(); await window.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3)); await Settle();
-                Inside(window, indicator, "Expanded dot stays inside the translucent HUD: " + compact + "/" + scale);
                 if (compact && scale == 1)
                 {
                     var snapshot = RenderOffscreen(window);
                     var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(snapshot));
                     using var output = File.Create(System.IO.Path.Combine(Output, "quiet-alert.png")); encoder.Save(output);
                 }
-                window.ToggleExpanded(); await window.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
             }
             window.SetAlertSettings(settings with { Enabled = false });
             Check(indicator.Visibility == Visibility.Collapsed && !window.AlertView.Active && !appearance.Load().Alerts.Enabled,

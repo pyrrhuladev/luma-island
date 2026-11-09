@@ -85,15 +85,14 @@ internal static class Program
             DisplayService.MoveWindow(window, -30000, -30000);
             var compact = (UniformGrid)window.FindName("CompactPerformance");
             var compactGpu = Text(window, "CompactGpu");
-            var expandedGpu = Text(window, "ExpandedGpu");
 
             window.SetComponents(Empty with { GpuTemperature = true, Charts = true });
             window.ApplyPerformance(Snapshot(54));
             await SettleAsync(window);
             Check(window.HasPerformance && compact.Columns == 1 && VisibleTextCount(compact) == 1,
                 "Temperature-only mode has exactly one GPU column");
-            Check(Normalize(compactGpu.Text) == "GPU54°C" && Normalize(expandedGpu.Text) == "GPU54°C",
-                "Temperature-only labels show GPU 54 °C without a percentage");
+            Check(Normalize(compactGpu.Text) == "GPU54°C",
+                "The temperature-only label shows GPU 54 °C without a percentage");
             Check(window.ChartsHeight == 0 && ((Border)window.FindName("GpuChartCard")).Visibility == Visibility.Collapsed,
                 "Temperature-only mode never creates a GPU percentage chart");
 
@@ -101,17 +100,17 @@ internal static class Program
             {
                 window.ApplyPerformance(Snapshot(missing, "fixture sensor unavailable"));
                 Check(compactGpu.Text.Contains('—') && compactGpu.Text.Contains("°C", StringComparison.Ordinal) &&
-                    expandedGpu.ToolTip is string reason && reason.Contains("fixture sensor unavailable", StringComparison.Ordinal),
+                    compactGpu.ToolTip is string reason && reason.Contains("fixture sensor unavailable", StringComparison.Ordinal),
                     "Missing/invalid temperature shows an em dash and source explanation");
             }
 
             window.SetComponents(Empty with { Gpu = true });
-            double collapsedLoadHeight = window.CollapsedWindowHeight, expandedLoadHeight = window.ExpandedWindowHeight;
+            double loadHeight = window.CollapsedWindowHeight;
             window.SetComponents(Empty with { Gpu = true, GpuTemperature = true });
             window.ApplyPerformance(Snapshot(54));
-            Check(window.CollapsedWindowHeight == collapsedLoadHeight + 16 && window.ExpandedWindowHeight == expandedLoadHeight + 16,
-                "Combining GPU load and temperature adds sixteen DIP to both modes");
-            Check(compactGpu.Text.Contains('\n') && expandedGpu.Text.Contains('\n') &&
+            Check(window.CollapsedWindowHeight > loadHeight,
+                "The hardware band grows to fit both GPU readings");
+            Check(compactGpu.Text.Contains('\n') &&
                 Normalize(compactGpu.Text) == "GPU72%54°C", "GPU load and temperature occupy two lines");
 
             window.SetComponents(Empty);
@@ -128,30 +127,27 @@ internal static class Program
             window.SetComponents(all);
             window.ApplyPerformance(Snapshot(54));
             window.ApplyFps(new FpsSnapshot(144, "Test fixture", "Synthetic UI fixture"));
-            Text(window, "CompactClock").Text = Text(window, "ExpandedClock").Text = "21:48";
+            Text(window, "CompactClock").Text = "21:48";
             await SettleAsync(window);
             Check(compact.Columns == 3 && VisibleTextCount(compact) == 3 &&
                 ((FrameworkElement)window.FindName("CompactFpsPanel")).Visibility == Visibility.Visible,
                 "Three hardware columns and a separate FPS headline remain visible with GPU temperature");
-            foreach (double scale in new[] { 1d, 1.5, 2d })
+            Check(((FrameworkElement)window.FindName("GpuChartCard")).IsVisible,
+                "GPU load history is visible in the same HUD as the temperature");
+            foreach (bool dense in new[] { false, true })
             {
-                CheckLabels(window, "CompactPerformance", scale);
-                BitmapSource bitmap = Render(window, scale);
-                Check(bitmap.PixelWidth == (int)Math.Ceiling(window.Width * scale) && bitmap.PixelHeight == (int)Math.Ceiling(window.Height * scale),
-                    $"Collapsed render has complete bounds at {scale * 100:0}% DPI");
-                DpiChecks.Add(new { mode = "collapsed", dpi = scale * 96, width = bitmap.PixelWidth, height = bitmap.PixelHeight, clipped = false });
-                if (scale == 2) Save(bitmap, Path.Combine(Output, "gpu-temperature-compact.png"));
-            }
-            window.ToggleExpanded();
-            await window.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
-            await SettleAsync(window);
-            foreach (double scale in new[] { 1d, 1.5, 2d })
-            {
-                CheckLabels(window, "ExpandedPerformance", scale);
-                BitmapSource bitmap = Render(window, scale);
-                Check(bitmap.PixelHeight == (int)Math.Ceiling(window.Height * scale), $"Expanded render has complete bounds at {scale * 100:0}% DPI");
-                DpiChecks.Add(new { mode = "expanded", dpi = scale * 96, width = bitmap.PixelWidth, height = bitmap.PixelHeight, clipped = false });
-                if (scale == 2) Save(bitmap, Path.Combine(Output, "gpu-temperature-expanded.png"));
+                window.SetCompactMode(dense);
+                await SettleAsync(window);
+                foreach (double scale in new[] { 1d, 1.5, 2d })
+                {
+                    CheckLabels(window, "CompactPerformance", scale);
+                    BitmapSource bitmap = Render(window, scale);
+                    Check(bitmap.PixelWidth == (int)Math.Ceiling(window.Width * scale) &&
+                        bitmap.PixelHeight == (int)Math.Ceiling(window.Height * scale),
+                        $"HUD render has complete bounds at {scale * 100:0}% DPI in dense={dense}");
+                    DpiChecks.Add(new { dense, dpi = scale * 96, width = bitmap.PixelWidth, height = bitmap.PixelHeight, clipped = false });
+                    if (scale == 2 && dense) Save(bitmap, Path.Combine(Output, "gpu-temperature-compact.png"));
+                }
             }
             Check(DisplayService.GetWindowBounds(window).X < -10000, "The temporary UI stayed outside the desktop");
         }

@@ -13,7 +13,6 @@ public partial class MainWindow
     {
         VerifyAccess();
         if (Appearance.Compact == enabled) return;
-        CompleteTransition();
         Appearance = Appearance with { Compact = enabled };
         ApplyComponentVisibility();
         OnMediaChanged(_lastMedia ?? _media.Current);
@@ -24,7 +23,6 @@ public partial class MainWindow
     {
         bool compact = Appearance.Compact;
         CompactView.Margin = new Thickness(13, compact ? 5 : 6, 13, compact ? 5 : 6);
-        CompactExpandButton.Margin = new Thickness(-13, compact ? -5 : -6, -13, compact ? -5 : -6);
         CompactContentGrid.Width = compact ? 292 : 348;
         CompactArtworkFrame.Width = CompactArtworkFrame.Height = CompactArtwork.Width = CompactArtwork.Height = compact ? 24 : 29;
         CompactArtworkFrame.CornerRadius = new CornerRadius(compact ? 7 : 9);
@@ -37,7 +35,6 @@ public partial class MainWindow
         CompactClock.Margin = compact ? new Thickness(3, 0, 5, 0) : new Thickness(6, 0, 8, 0);
         CompactBattery.FontSize = compact ? 10 : 11;
         CompactBattery.Margin = compact ? new Thickness(2, 0, 5, 0) : new Thickness(4, 0, 8, 0);
-        CompactArrowColumn.Width = new GridLength(compact ? 14 : 16);
         foreach (var button in new[] { CompactPreviousButton, CompactPlayButton, CompactNextButton })
         {
             button.Width = compact ? 22 : 24;
@@ -54,8 +51,7 @@ public partial class MainWindow
 
     private void UpdateSurfaceRounding()
     {
-        bool compact = Appearance.Compact && !_expanded;
-        double radius = _expanded ? 20 : compact ? 14 : 16;
+        double radius = Appearance.Compact ? 14 : 16;
         IslandSurface.CornerRadius = new CornerRadius(radius);
         GlassSheen.CornerRadius = new CornerRadius(radius - 1);
     }

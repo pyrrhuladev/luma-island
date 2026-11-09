@@ -77,19 +77,19 @@ internal static class Program
         {
             new WindowInteropHelper(window).EnsureHandle();
             window.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, window));
-            window.Placement.BeginDrag();
-            DisplayService.MoveWindow(window, -30000, -30000);
             window.Show();
             await Settle(window);
+            CheckDragTargets(window);
+            window.Placement.BeginDrag();
             DisplayService.MoveWindow(window, -30000, -30000);
-            var expand = Named<Button>(window, "CompactExpandButton");
+            await Settle(window);
             var previous = Named<Button>(window, "CompactPreviousButton");
             var play = Named<Button>(window, "CompactPlayButton");
             var next = Named<Button>(window, "CompactNextButton");
             var controls = Named<StackPanel>(window, "CompactPlaybackControls");
-            foreach (Button button in new[] { expand, previous, play, next })
+            foreach (Button button in new[] { previous, play, next })
             {
-                Check(!Ancestors(button).OfType<Button>().Any(), button.Name + " has no ancestor Button, preventing click bubbling into expand");
+                Check(!Ancestors(button).OfType<Button>().Any(), button.Name + " owns an independent control");
                 Check(!string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)), button.Name + " has an accessible name");
                 Check(button.Focusable && button.FocusVisualStyle is not null, button.Name + " retains a keyboard focus visual");
                 button.ApplyTemplate();
@@ -107,16 +107,17 @@ internal static class Program
                 Check(play.IsEnabled == (hasSession && canToggle) && previous.IsEnabled == (hasSession && canPrevious) && next.IsEnabled == (hasSession && canNext),
                     "All collapsed transport buttons honor exact session capabilities: " + flags);
             }
+            var playGlyph = Named<System.Windows.Shapes.Path>(window, "CompactPlayIcon").Data.ToString();
             Inject(window, new MediaSnapshot("Night Drive · synthetic preview", "Synthetic artist", true, true, true, true, true, null));
             await Settle(window);
-            Check(Named<System.Windows.Shapes.Path>(window, "CompactPlayIcon").Data.ToString() == Named<System.Windows.Shapes.Path>(window, "PlayIcon").Data.ToString(),
-                "Collapsed pause glyph follows the expanded playback state");
-            Check(AutomationProperties.GetName(play) == AutomationProperties.GetName(Named<Button>(window, "PlayButton")) && AutomationProperties.GetName(play) == "Пауза",
-                "The collapsed accessible play action follows the actual pause state");
+            Check(Named<System.Windows.Shapes.Path>(window, "CompactPlayIcon").Data.ToString() != playGlyph,
+                "The transport glyph changes from play to pause with the session state");
+            Check(AutomationProperties.GetName(play) == "Пауза",
+                "The accessible play action follows the pause state");
             typeof(MainWindow).GetField("_busy", Private)!.SetValue(window, true);
             typeof(MainWindow).GetMethod("UpdateMediaAvailability", Private)!.Invoke(window, null);
             await Settle(window);
-            Check(!play.IsEnabled && !previous.IsEnabled && !next.IsEnabled, "An in-flight media command disables both transport rows");
+            Check(!play.IsEnabled && !previous.IsEnabled && !next.IsEnabled, "An in-flight media command disables transport");
             typeof(MainWindow).GetField("_busy", Private)!.SetValue(window, false);
             typeof(MainWindow).GetMethod("UpdateMediaAvailability", Private)!.Invoke(window, null);
 
@@ -165,19 +166,37 @@ internal static class Program
             await Settle(window);
             Check(controls.Visibility == Visibility.Visible, "Re-enabling music restores transport controls");
 
-            typeof(MainWindow).GetField("_dragged", Private)!.SetValue(window, true);
-            expand.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, expand));
-            Check(!(bool)typeof(MainWindow).GetField("_expanded", Private)!.GetValue(window)! && !(bool)typeof(MainWindow).GetField("_dragged", Private)!.GetValue(window)!,
-                "A completed drag consumes the next expansion click");
-            expand.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, expand));
-            await window.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
-            Check((bool)typeof(MainWindow).GetField("_expanded", Private)!.GetValue(window)!, "The dedicated expansion target still opens the full panel");
+            Check(window.FindName("CompactExpandButton") is null && window.FindName("ExpandedView") is null &&
+                  Named<Grid>(window, "CompactView").IsVisible,
+                "Music is presented in a single available view");
+            Check(Named<FrameworkElement>(window, "CompactVolume").IsVisible && Named<Slider>(window, "VolumeControl").IsVisible &&
+                  Named<Button>(window, "MuteButton").IsVisible,
+                "Volume and mute are available alongside the transport");
             Check(media.Current == MediaSnapshot.Empty && typeof(MediaService).GetField("_initialization", Private)!.GetValue(media) is null,
                 "Synthetic UI updates never initialize or change the real media session");
         }
         finally { window.Opacity = 0; window.Close(); }
         Check(closed, "The offscreen window closed cleanly");
         Check(preferences.OrderBy(x => x.Key).SequenceEqual(RealPreferences().OrderBy(x => x.Key)), "Real user preferences are unchanged");
+    }
+
+    private static void CheckDragTargets(MainWindow window)
+    {
+        var canDrag = typeof(MainWindow).GetMethod("CanStartSurfaceDrag", Private)!;
+        bool Allowed(DependencyObject source) => (bool)canDrag.Invoke(window, new object[] { source })!;
+        var surface = Named<Border>(window, "IslandSurface");
+        Check(Allowed(surface) && Allowed(Named<Grid>(window, "CompactMusicRow")),
+            "The capsule background and music area are drag origins");
+        Check(!Allowed(Named<Button>(window, "CompactPlayButton")) &&
+              !Allowed(Named<Button>(window, "MuteButton")) && !Allowed(Named<Slider>(window, "VolumeControl")),
+            "Playback and volume inputs do not initiate a window drag");
+        Check(!Allowed(new Border()), "A visual outside the capsule cannot initiate a drag");
+        window.Placement.SetLocked(true);
+        Check(!Allowed(surface), "The placement lock blocks dragging the background");
+        window.Placement.SetLocked(false);
+        window.InitializeInputRecovery(true, true);
+        Check(window.SetClickThrough(true) && !Allowed(surface), "Click-through mode blocks dragging the background");
+        Check(window.SetClickThrough(false) && Allowed(surface), "Interactive recovery restores dragging");
     }
 
     private static T Named<T>(MainWindow window, string name) where T : FrameworkElement => (T)window.FindName(name);

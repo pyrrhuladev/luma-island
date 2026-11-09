@@ -14,7 +14,6 @@ public partial class MainWindow
     private MenuItem? _trayVisibilityMenu;
     private HwndSource? _visibilitySource;
     public bool TrayHotkeyAvailable { get; private set; } = true;
-    internal bool IsHudExpanded => _expanded;
 
     private void InitializeTrayVisibility()
     {
@@ -22,11 +21,6 @@ public partial class MainWindow
         var menu = IslandSurface.ContextMenu;
         _trayVisibilityMenu = new MenuItem();
         _trayVisibilityMenu.Click += (_, _) => ToggleTrayVisibility();
-        if (menu.Items[0] is MenuItem expanded)
-        {
-            QuickMenuTheme.UpdateExpansion(expanded, _expanded);
-            menu.Opened += (_, _) => QuickMenuTheme.UpdateExpansion(expanded, _expanded);
-        }
         if (menu.Items[menu.Items.Count - 1] is MenuItem exit) QuickMenuTheme.SetIcon(exit, QuickMenuIcon.Exit);
         menu.Items.Insert(0, _trayVisibilityMenu);
         IsVisibleChanged += OnTrayVisibilityChanged;
@@ -56,7 +50,6 @@ public partial class MainWindow
         VerifyAccess();
         if (_islandOwner is not null) { _islandOwner.HideToTray(); return; }
         if (_closed) return;
-        CompleteTransition();
         IslandSurface.ContextMenu.IsOpen = false;
         Hide(); // Keep the HWND, hotkey registration and native notification icon alive.
         RefreshTrayVisibilityMenu();
@@ -67,7 +60,6 @@ public partial class MainWindow
         VerifyAccess();
         if (_islandOwner is not null) { _islandOwner.RestoreFromTray(); return; }
         if (_closed) return;
-        CompleteTransition();
         IslandSurface.ContextMenu.IsOpen = false;
         if (WindowState != WindowState.Normal) WindowState = WindowState.Normal;
         if (!IsVisible) Show();

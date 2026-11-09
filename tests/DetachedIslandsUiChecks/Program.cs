@@ -149,10 +149,9 @@ internal static class Program
         Check(window.Components == Full && window.Placement.Settings == primaryPlacement,
             "Splitting preserves the configured component selection and primary position");
         Check(Named<Grid>(window, "CompactMusicRow").Visibility == Visibility.Collapsed &&
-              Named<FrameworkElement>(window, "ExpandedMusicInfo").Visibility == Visibility.Collapsed &&
-              Named<FrameworkElement>(window, "ExpandedPlaybackControls").Visibility == Visibility.Collapsed &&
-              Named<FrameworkElement>(window, "ExpandedVolume").Visibility == Visibility.Collapsed,
-            "The metrics island omits music, transport controls and volume in both views");
+              !Named<StackPanel>(window, "CompactPlaybackControls").IsVisible &&
+              Named<FrameworkElement>(window, "CompactVolume").Visibility == Visibility.Collapsed,
+            "The metrics island leaves transport and volume to the detached music island");
         Check(Named<UniformGrid>(window, "CompactPerformance").Visibility == Visibility.Visible &&
               Named<TextBlock>(window, "CompactCpu").Visibility == Visibility.Visible &&
               Named<TextBlock>(window, "CompactGpu").Visibility == Visibility.Visible &&
@@ -168,14 +167,15 @@ internal static class Program
             "Both native presentations remain tool windows excluded from Alt+Tab");
 
         var menu = Named<Border>(child, "IslandSurface").ContextMenu;
-        Check(menu.Items.OfType<MenuItem>().Count() == 5 && menu.Items.Count == 6 &&
-              menu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "Настройки…")),
-            "The detached quick menu retains the same five discoverable actions and one separator");
+        Check(menu.Items.Count == 5 && menu.Items[3] is Separator &&
+              menu.Items.OfType<MenuItem>().Select(item => (string)item.Header)
+                .SequenceEqual(new[] { "Скрыть в трей", "Пропускать клики в игру", "Настройки…", "Выход" }),
+            "The detached quick menu offers the same four actions as the main HUD");
         foreach (string name in new[] { "CompactPreviousButton", "CompactPlayButton", "CompactNextButton" })
         {
             var button = Named<Button>(child, name);
             Check(!Ancestors(button).OfType<Button>().Any() && !string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)),
-                "Detached transport has no enclosing expand button and retains an accessible name: " + name);
+                "Detached transport is independently clickable and accessible: " + name);
         }
 
         BitmapSource firstArtwork = Artwork(Colors.SeaGreen), secondArtwork = Artwork(Colors.OrangeRed);
@@ -187,13 +187,12 @@ internal static class Program
         Publish(fixture.Media, new("Вторая композиция", "Другой исполнитель", false, true, true, true, true, null));
         await Settle();
         Check(Named<TextBlock>(child, "CompactTitle").Text == "Вторая композиция" &&
-              Named<Image>(child, "CompactArtwork").Source is null && Named<Image>(child, "ExpandedArtwork").Source is null,
-            "A track transition immediately clears old compact and expanded covers");
+              Named<Image>(child, "CompactArtwork").Source is null,
+            "A track change immediately clears the old cover");
         Publish(fixture.Media, new("Вторая композиция", "Другой исполнитель", true, true, true, true, true, secondArtwork));
         await Settle();
-        Check(ReferenceEquals(Named<Image>(child, "CompactArtwork").Source, secondArtwork) &&
-              ReferenceEquals(Named<Image>(child, "ExpandedArtwork").Source, secondArtwork),
-            "A later cover notification updates both detached views");
+        Check(ReferenceEquals(Named<Image>(child, "CompactArtwork").Source, secondArtwork),
+            "A later cover notification updates the detached music island");
         Check(AutomationProperties.GetName(Named<Button>(child, "CompactPlayButton")) == "Пауза" &&
               Named<Button>(child, "CompactPreviousButton").IsEnabled && Named<Button>(child, "CompactNextButton").IsEnabled,
             "Detached transport state follows the same synthetic session capabilities");
@@ -234,21 +233,19 @@ internal static class Program
         window.ApplyFps(new(144, "Пример", "Демонстрационные данные", 120, 6.9));
         await Settle();
         CaptureComposition(window, child, "detached-islands.png");
-        Click(Named<Button>(child, "CompactExpandButton")); await child.WaitForTransitionAsync(); await Settle();
-        Check(Named<Grid>(child, "ExpandedView").Visibility == Visibility.Visible &&
-              Named<Grid>(window, "ExpandedView").Visibility == Visibility.Collapsed,
-            "Expanding the music island leaves the metrics island independently collapsed");
-        Check(Named<FrameworkElement>(child, "ExpandedMusicInfo").Visibility == Visibility.Visible &&
-              Named<FrameworkElement>(child, "ExpandedVolume").Visibility == Visibility.Visible,
-            "The detached expanded view retains its full player and volume controls");
-        CaptureComposition(window, child, "detached-islands-expanded.png");
+        Check(Named<Grid>(child, "CompactView").IsVisible && Named<Grid>(window, "CompactView").IsVisible,
+            "Both islands display their compact content at once");
+        Check(Named<FrameworkElement>(child, "CompactVolume").IsVisible &&
+              Named<Slider>(child, "VolumeControl").IsVisible &&
+              child.FindName("ExpandedView") is null && child.FindName("CompactExpandButton") is null,
+            "Detached volume is available alongside compact transport in the single view");
 
         window.InitializeInputRecovery(true, true);
         Check(window.SetClickThrough(true) && window.IsClickThrough && child.IsClickThrough &&
               (Style(window) & InputMask) == InputMask && (Style(child) & InputMask) == InputMask,
             "One input-mode action enables native click-through on both islands");
-        Check(Named<Grid>(child, "ExpandedView").Visibility == Visibility.Collapsed,
-            "Click-through collapses the detached expanded player before blocking input");
+        Check(Named<Grid>(child, "CompactView").IsVisible && Named<Slider>(child, "VolumeControl").IsVisible,
+            "Click-through keeps the detached music presentation visible");
         Check(window.SetClickThrough(false) && !window.IsClickThrough && !child.IsClickThrough &&
               (Style(window) & InputMask) == 0 && (Style(child) & InputMask) == 0,
             "One recovery action restores native interaction to both islands");
@@ -303,9 +300,9 @@ internal static class Program
         var volumeOnly = RequireMusicIsland(window);
         Check(volumeOnly.IsVisible && !volumeOnly.Components.Music && volumeOnly.Components.Volume,
             "A volume-only configuration still has an independently accessible island");
-        volumeOnly.ToggleExpanded(); await volumeOnly.WaitForTransitionAsync(); await Settle();
-        Check(Named<FrameworkElement>(volumeOnly, "ExpandedVolume").Visibility == Visibility.Visible,
-            "A volume-only island can expand to its existing volume control");
+        Check(Named<FrameworkElement>(volumeOnly, "CompactVolume").IsVisible &&
+              !Named<Grid>(volumeOnly, "CompactMusicRow").IsVisible,
+            "A volume-only island displays its control immediately");
 
         window.SetComponents(new(Music: true, Volume: true, Time: false, Date: false, Battery: false)); await Settle();
         Check(window.IsHudPresentationVisible && RequireMusicIsland(window).IsVisible,

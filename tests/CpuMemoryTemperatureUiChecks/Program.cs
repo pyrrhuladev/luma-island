@@ -112,35 +112,32 @@ internal static class Program
             foreach (bool compact in new[] { false, true })
             {
                 window.SetCompactMode(compact);
-                foreach (bool expanded in new[] { false, true })
+                foreach (var item in cases)
                 {
-                    if (expanded) { window.ToggleExpanded(); await window.WaitForTransitionAsync(); }
-                    foreach (var item in cases)
-                    {
-                        window.SetComponents(item.Settings);
-                        window.ApplyPerformance(Snapshot(68, 41));
-                        window.ApplyFps(new FpsSnapshot(144, "Synthetic", "Fixture"));
-                        await Settle(window);
-                        var panel = (UniformGrid)window.FindName("CompactPerformance");
-                        bool chartsValid = item.Settings.Cpu || item.Settings.Memory || item.Settings.Gpu || item.Settings.Fps || window.ChartsHeight == 0;
-                        Check(window.HasPerformance && panel.Columns == item.Columns && Normalize(Text(window, "CompactCpu").Text) == item.Cpu &&
-                            Normalize(Text(window, "ExpandedCpu").Text) == item.Cpu && Normalize(Text(window, "CompactMemory").Text) == item.Ram &&
-                            Normalize(Text(window, "ExpandedMemory").Text) == item.Ram && chartsValid,
-                            $"{item.Name} keeps labels, columns and chart semantics in compact={compact} expanded={expanded}");
-                    }
-                    // Worst-case labels exercise the three-digit values in every metric column.
-                    window.ApplyPerformance(Snapshot(150, 125) with { CpuPercent = 100, GpuPercent = 100, MemoryPercent = 100, GpuTemperatureCelsius = 150 });
+                    window.SetComponents(item.Settings);
+                    window.ApplyPerformance(Snapshot(68, 41));
+                    window.ApplyFps(new FpsSnapshot(144, "Synthetic", "Fixture"));
                     await Settle(window);
-                    foreach (double scale in new[] { 1d, 1.5, 2d })
-                    {
-                        string panel = expanded ? "ExpandedPerformance" : "CompactPerformance";
-                        BitmapSource bitmap = Render(window, scale);
-                        Check(LabelsFit(window, panel, scale) && bitmap.PixelWidth == (int)Math.Ceiling(window.Width * scale) &&
-                            bitmap.PixelHeight == (int)Math.Ceiling(window.Height * scale),
-                            $"Worst-case CPU/RAM/GPU labels fit at {scale * 100:0}% in compact={compact} expanded={expanded}");
-                        if (scale == 2 && compact) Save(bitmap, Path.Combine(Output, expanded ? "temperatures-expanded.png" : "temperatures-compact.png"));
-                    }
-                    if (expanded) { window.ToggleExpanded(); await window.WaitForTransitionAsync(); }
+                    var panel = (UniformGrid)window.FindName("CompactPerformance");
+                    bool expectCharts = item.Settings.Charts &&
+                        (item.Settings.Cpu || item.Settings.Memory || item.Settings.Gpu || item.Settings.Fps);
+                    Check(window.HasPerformance && panel.Columns == item.Columns &&
+                        Normalize(Text(window, "CompactCpu").Text) == item.Cpu &&
+                        Normalize(Text(window, "CompactMemory").Text) == item.Ram &&
+                        ((FrameworkElement)window.FindName("ChartsPanel")).IsVisible == expectCharts &&
+                        (window.ChartsHeight > 0) == expectCharts,
+                        $"{item.Name} keeps labels, columns and chart visibility in dense={compact}");
+                }
+                // Worst-case labels exercise the three-digit values in every metric column.
+                window.ApplyPerformance(Snapshot(150, 125) with { CpuPercent = 100, GpuPercent = 100, MemoryPercent = 100, GpuTemperatureCelsius = 150 });
+                await Settle(window);
+                foreach (double scale in new[] { 1d, 1.5, 2d })
+                {
+                    BitmapSource bitmap = Render(window, scale);
+                    Check(LabelsFit(window, "CompactPerformance", scale) && bitmap.PixelWidth == (int)Math.Ceiling(window.Width * scale) &&
+                        bitmap.PixelHeight == (int)Math.Ceiling(window.Height * scale),
+                        $"Worst-case CPU/RAM/GPU labels fit at {scale * 100:0}% in dense={compact}");
+                    if (scale == 2 && compact) Save(bitmap, Path.Combine(Output, "temperatures-compact.png"));
                 }
             }
             window.SetComponents(Empty with { CpuTemperature = true, MemoryTemperature = true });
@@ -152,8 +149,7 @@ internal static class Program
             {
                 window.ApplyPerformance(Snapshot(68, 41));
                 window.ApplyPerformance(Snapshot(invalid.Cpu, invalid.Ram) with { CpuTemperatureStatus = "unavailable", MemoryTemperatureStatus = "unavailable" });
-                Check(Text(window, "CompactCpu").Text.Contains('—') && Text(window, "CompactMemory").Text.Contains('—') &&
-                    Text(window, "ExpandedCpu").Text.Contains('—') && Text(window, "ExpandedMemory").Text.Contains('—'),
+                Check(Text(window, "CompactCpu").Text.Contains('—') && Text(window, "CompactMemory").Text.Contains('—'),
                     "A missing or invalid sample clears both previously valid temperatures");
             }
             window.ApplyPerformance(Snapshot(-1, -1));
@@ -175,10 +171,10 @@ internal static class Program
             var cpuHistory = (MetricHistory)typeof(MainWindow).GetField("_cpuHistory", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
             var samples = (IEnumerable<MetricHistory.Sample>)typeof(MetricHistory).GetField("_samples", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(cpuHistory)!;
             string scaleLabel = Text(window, "CpuChartScale").Text;
-            Check(Normalize(Text(window, "CompactCpu").Text) == "CPU145%" && Normalize(Text(window, "ExpandedCpu").Text) == "CPU145%" &&
+            Check(Normalize(Text(window, "CompactCpu").Text) == "CPU145%" &&
                 Text(window, "CpuChartValue").Text == "145%" && double.TryParse(scaleLabel.Split('–').Last().TrimEnd('%'), NumberStyles.Number,
                     CultureInfo.InvariantCulture, out double maximum) && maximum >= 145,
-                "Boost-aware CPU utility above 100 remains visible in both labels and the dynamically scaled chart");
+                "Boost-aware CPU utility above 100 remains visible in the HUD label and dynamically scaled chart");
             Check(samples.Last().Value == 145 && cpuHistory.Maximum(Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency) == 145,
                 "The actual CPU history retains 145 instead of clamping it to 100");
             Check(Text(window, "CompactCpu").ToolTip is string utilityTip && utilityTip.Contains("Processor Utility", StringComparison.Ordinal) &&
@@ -187,7 +183,7 @@ internal static class Program
             Check(Text(window, "CompactCpu").Text.Contains('—') && Text(window, "CpuChartValue").Text == "—" && samples.Last().Value is null,
                 "An invalid next CPU sample clears the displayed reading and records an explicit history gap");
             window.ApplyPerformance(Snapshot(68, 41) with { CpuPercent = 29, CpuUsageSource = CpuUsageReader.BusySource });
-            Check(Text(window, "ExpandedCpu").ToolTip is string fallbackTip && fallbackTip.Contains("Резерв", StringComparison.OrdinalIgnoreCase) &&
+            Check(Text(window, "CompactCpu").ToolTip is string fallbackTip && fallbackTip.Contains("Резерв", StringComparison.OrdinalIgnoreCase) &&
                 fallbackTip.Contains("без учёта Turbo Boost", StringComparison.Ordinal), "The busy-time fallback tooltip explains its lower value and missing frequency weighting");
             var setup = new SensorSetupWindow();
             Check(!setup.IsVisible && new WindowInteropHelper(setup).Handle == IntPtr.Zero,

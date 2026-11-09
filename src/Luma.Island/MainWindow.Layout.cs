@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Luma.Island.Services;
@@ -11,7 +10,6 @@ public partial class MainWindow
 {
     private readonly Dictionary<TextBlock, double> _layoutBaseFonts = new();
     private bool _layoutFontsCaptured;
-    private WrapPanel? _expandedMetricWrap;
     private string? _appliedBlockOrder, _appliedMetricOrder;
     private (int Fps, int Low, bool Clock, bool Battery, bool Compact, double TextScale)? _headerFitKey;
     private HudLayoutSettings LayoutSettings => Appearance.Layout ?? HudLayoutSettings.Default;
@@ -25,14 +23,7 @@ public partial class MainWindow
     private double CompactMetricCellHeight => ((Appearance.Compact ? 20 : 28) + TemperatureRowHeight) * LayoutGrowth;
     private double CompactMetricGridHeight => LayoutMetricRows == 0 ? 0
         : CompactMetricCellHeight * LayoutMetricRows + LayoutSpacing * (LayoutMetricRows - 1);
-    private bool ExpandedMetricsWrap => LayoutSettings.MetricColumns < 3 || LayoutTextScale > 1 || LayoutSpacing > 6;
-    private int ExpandedMetricRows => !HasInlinePerformance ? 0 : !ExpandedMetricsWrap ? 1
-        : (VisibleHardwareCount + (Components.Fps ? 1 : 0) + LayoutSettings.MetricColumns - 1) / LayoutSettings.MetricColumns;
-    private double ExpandedMetricBandHeight => ExpandedMetricRows == 0 ? 0
-        : (32 + TemperatureRowHeight) * LayoutGrowth * ExpandedMetricRows
-            + LayoutSpacing * (ExpandedMetricsWrap ? ExpandedMetricRows : ExpandedMetricRows - 1);
-    private double LayoutChartsHeight => ChartsHeight <= 0 ? 0 : ChartsHeight + (LayoutGrowth - 1) * 32 * (EnabledChartCount <= 2 ? 1 : 2);
-    private double LayoutFrameTimeHeight => Components.FrameTime ? 96 + (LayoutGrowth - 1) * 32 : 0;
+    private double LayoutFrameTimeHeight => Components.FrameTime ? 72 + (LayoutGrowth - 1) * 32 : 0;
 
     private double LayoutBlockGap(string block)
     {
@@ -52,7 +43,6 @@ public partial class MainWindow
         if (_closed) return;
         var normalized = HudLayoutSettings.Normalize(layout);
         if (Appearance.Layout == normalized) return;
-        CompleteTransition();
         Appearance = Appearance with { Layout = normalized };
         ApplyComponentVisibility();
         OnMediaChanged(_lastMedia ?? _media.Current);
@@ -61,7 +51,7 @@ public partial class MainWindow
 
     private void ApplyHudLayout()
     {
-        if (CompactContentGrid is null || ExpandedView is null) return;
+        if (CompactContentGrid is null) return;
         var layout = HudLayoutSettings.Normalize(Appearance.Layout);
         if (!_layoutFontsCaptured && Content is not null) { CaptureLayoutFonts(Content); _layoutFontsCaptured = true; }
         foreach (var item in _layoutBaseFonts) item.Key.FontSize = item.Value * layout.TextScale;
@@ -72,7 +62,6 @@ public partial class MainWindow
         CompactFps.FontSize = (Appearance.Compact ? 28 : 34) * layout.TextScale;
         CompactOnePercentLow.FontSize = (Components.Fps ? Appearance.Compact ? 16 : 18 : Appearance.Compact ? 20 : 24) * layout.TextScale;
         CompactCpu.LineHeight = CompactGpu.LineHeight = CompactMemory.LineHeight = (Appearance.Compact ? 14 : 16) * layout.TextScale;
-        ExpandedCpu.LineHeight = ExpandedGpu.LineHeight = ExpandedMemory.LineHeight = 16 * layout.TextScale;
 
         if (_appliedBlockOrder != layout.BlockOrder)
         {
@@ -88,6 +77,10 @@ public partial class MainWindow
                 Grid.SetRow(entry.Block, CompactContentGrid.RowDefinitions.Count);
                 CompactContentGrid.RowDefinitions.Add(entry.Row);
             }
+            CompactContentGrid.RowDefinitions.Add(ChartsRow);
+            CompactContentGrid.RowDefinitions.Add(FrameTimeRow);
+            CompactContentGrid.RowDefinitions.Add(VolumeRow);
+            CompactContentGrid.RowDefinitions.Add(FooterRow);
             _appliedBlockOrder = layout.BlockOrder;
         }
         if (_appliedMetricOrder != layout.MetricOrder)
@@ -112,49 +105,15 @@ public partial class MainWindow
                 row > 0 ? layout.Spacing / 2 : 0, Math.Max(0, layout.Spacing - 6) / 2,
                 row < LayoutMetricRows - 1 ? layout.Spacing / 2 : 0);
         }
-        ArrangeExpandedMetrics(layout);
-        MusicInfoRow.Height = new GridLength(MusicInThisIsland ? 78 * LayoutGrowth : 0);
-        PerformanceRow.Height = new GridLength(ExpandedMetricBandHeight);
-        ChartsRow.Height = new GridLength(LayoutChartsHeight);
+        ChartsRow.Height = new GridLength(ChartsHeight);
         FrameTimeRow.Height = new GridLength(LayoutFrameTimeHeight);
-        FooterRow.Height = new GridLength(Components.Date || _batteryVisible ? 26 * LayoutGrowth : 0);
+        VolumeRow.Height = new GridLength(HudVolumeHeight);
+        FooterRow.Height = new GridLength(HudDateHeight);
         ResizeChartTextRows(layout.TextScale);
         FitHeaderText(force: true);
     }
 
     private TextBlock CompactMetric(string key) => key switch { "cpu" => CompactCpu, "gpu" => CompactGpu, _ => CompactMemory };
-    private TextBlock ExpandedMetric(string key) => key switch { "cpu" => ExpandedCpu, "gpu" => ExpandedGpu, _ => ExpandedMemory };
-
-    private void ArrangeExpandedMetrics(HudLayoutSettings layout)
-    {
-        var ordered = layout.MetricOrder.Split(',').Select(ExpandedMetric).Append(ExpandedFps).ToArray();
-        bool wrap = ExpandedMetricsWrap;
-        var displayed = wrap ? ordered.Where(text => text.Visibility == Visibility.Visible).ToArray() : ordered;
-        bool same = wrap
-            ? _expandedMetricWrap is not null && ExpandedPerformance.Children.Count == 1 && ExpandedPerformance.Children[0] == _expandedMetricWrap
-                && _expandedMetricWrap.Children.Cast<UIElement>().SequenceEqual(displayed)
-            : ExpandedPerformance.Children.Cast<UIElement>().SequenceEqual(displayed);
-        if (!same)
-        {
-            _expandedMetricWrap?.Children.Clear();
-            ExpandedPerformance.Children.Clear();
-            if (wrap)
-            {
-                _expandedMetricWrap ??= new WrapPanel { Width = 346, HorizontalAlignment = HorizontalAlignment.Center };
-                foreach (var text in displayed) _expandedMetricWrap.Children.Add(text);
-                ExpandedPerformance.Children.Add(_expandedMetricWrap);
-            }
-            else foreach (var text in ordered) ExpandedPerformance.Children.Add(text);
-        }
-        if (wrap && _expandedMetricWrap is not null)
-        {
-            _expandedMetricWrap.ItemWidth = 346d / layout.MetricColumns;
-            _expandedMetricWrap.ItemHeight = (32 + TemperatureRowHeight) * LayoutGrowth + layout.Spacing;
-        }
-        foreach (var text in ordered)
-            text.Margin = wrap ? new Thickness(0, 0, 0, layout.Spacing)
-                : new Thickness(0, 0, text == ExpandedFps ? 0 : 12 * layout.Spacing / 6, 0);
-    }
 
     // Tabular FPS numerals only change width when their digit count changes. Avoid new
     // measurements on every frame update, while keeping large user fonts inside the capsule.
@@ -175,7 +134,7 @@ public partial class MainWindow
             element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             return element.DesiredSize.Width;
         }
-        double right = CompactArrowColumn.Width.Value;
+        double right = 0;
         if (Components.Time) right += Width(CompactClock);
         if (_batteryVisible) right += Width(CompactBattery);
         double needed = (Components.Fps ? Width(CompactFpsPanel) : 0) + (Components.OnePercentLow ? Width(CompactLowPanel) : 0);
@@ -203,8 +162,8 @@ public partial class MainWindow
             grid.RowDefinitions[0].Height = new GridLength(19 * Math.Max(1, scale));
             grid.RowDefinitions[2].Height = new GridLength(13 * Math.Max(1, scale));
         }
-        ChartSecondRow.Height = new GridLength(EnabledChartCount <= 2 ? 0 : 90 + (LayoutGrowth - 1) * 32);
-        if (ChartsPanel.RowDefinitions.Count > 0)
-            ChartsPanel.RowDefinitions[0].Height = new GridLength(90 + (LayoutGrowth - 1) * 32);
+        ChartGapRow.Height = new GridLength(EnabledChartCount <= 2 ? 0 : 6);
+        ChartSecondRow.Height = new GridLength(EnabledChartCount <= 2 ? 0 : ChartCardHeight);
+        ChartsPanel.RowDefinitions[0].Height = new GridLength(ChartCardHeight);
     }
 }

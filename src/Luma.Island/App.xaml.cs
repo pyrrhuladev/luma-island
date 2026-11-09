@@ -181,10 +181,7 @@ public partial class App : System.Windows.Application
     private void CreateTray()
     {
         var island = _island ?? throw new InvalidOperationException("HUD is not initialized.");
-        _tray = new TrayService(island, ToggleVisible, () =>
-        {
-            island.RestoreForInteraction(); island.ToggleExpanded();
-        }, () => Shutdown(), showVisible: island.RestoreForInteraction,
+        _tray = new TrayService(island, ToggleVisible, () => Shutdown(), showVisible: island.RestoreForInteraction,
             inputMenuFactory: island.CreateInputMenuItem, hudEditorMenuFactory: island.CreateSettingsMenuItem);
         _tray.RegistrationChanged += OnTrayRegistrationChanged;
         _island.InputModeChanged += OnInputModeChanged;
@@ -229,12 +226,7 @@ public partial class App : System.Windows.Application
         try { await _media.InitializeAsync(); } catch (Exception ex) { errors.Add(ex.ToString()); }
         _system!.RefreshVolume();
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
-        SavePreview(_island!.CapturePreview(), Path.Combine(directory, "collapsed.png"));
-        _island.ToggleExpanded();
-        await _island.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
-        SavePreview(_island.CapturePreview(), Path.Combine(directory, "expanded.png"));
-        _island.ToggleExpanded();
-        await _island.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
+        SavePreview(_island!.CapturePreview(), Path.Combine(directory, "compact.png"));
         _island.UpdateClockAndBattery();
         string initialAppearance = _island.Appearance.Mode.ToString();
         var appearanceChecks = await AppearanceVerification.RunAsync(_island, directory, errors);
@@ -249,26 +241,13 @@ public partial class App : System.Windows.Application
         var savedPlacement = _island.Placement.Settings;
         for (int cycle = 0; cycle < 12; cycle++)
         {
-            _island.ToggleExpanded();
-            await _island.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
-            _island.ToggleExpanded();
-            await _island.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
+            _island.HideToTray();
+            _island.RestoreFromTray();
             var after = DisplayService.GetWindowBounds(_island);
             if (Math.Abs(after.X - expectedBottom.X) > 1 || Math.Abs(after.Y - expectedBottom.Y) > 1)
-                errors.Add($"Положение сместилось после раскрытия {cycle}: expected={expectedBottom}, actual={after}, height={_island.Height}");
+                errors.Add($"Положение сместилось после возврата из трея {cycle}: expected={expectedBottom}, actual={after}");
         }
-        if (_island.Placement.Settings != savedPlacement) errors.Add("Анимация изменила сохранённую позицию.");
-        _island.ToggleExpanded();
-        await Task.Delay(30);
-        _island.ToggleExpanded();
-        await Task.Delay(30);
-        _island.ToggleExpanded();
-        await _island.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
-        _island.ToggleExpanded();
-        await _island.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
-        var rapidBounds = DisplayService.GetWindowBounds(_island);
-        if (Math.Abs(rapidBounds.X - expectedBottom.X) > 1 || Math.Abs(rapidBounds.Y - expectedBottom.Y) > 1)
-            errors.Add("Быстрое переключение изменило положение.");
+        if (_island.Placement.Settings != savedPlacement) errors.Add("Возврат из трея изменил сохранённую позицию.");
         _island.Placement.BeginDrag();
         _island.Placement.EndDrag();
         if (_island.Placement.Settings != savedPlacement) errors.Add("Щелчок без перемещения заменил готовую позицию.");
@@ -298,7 +277,7 @@ public partial class App : System.Windows.Application
             initialAppearance, appearanceChecks,
             componentChecks,
             positionChecks = new { restoredPosition, initialPlacement, current = persistedPlacement, cycles = 12,
-                rapidToggle = true, customDrag = true, menuItems = menu.Items.Count },
+                customDrag = true, menuItems = menu.Items.Count },
             battery,
             renderWidth = _island.ActualWidth, renderHeight = _island.ActualHeight,
             processCount = Process.GetProcessesByName("Luma.Island").Length,

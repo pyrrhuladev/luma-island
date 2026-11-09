@@ -99,8 +99,7 @@ internal static class Program
             await Settle();
             var surface = Named<Border>(window, "IslandSurface");
             var capsuleItem = surface.ContextMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Пропускать клики в игру"));
-            tray = new TrayService(window, window.ToggleTrayVisibility,
-                () => { window.RestoreForInteraction(); window.ToggleExpanded(); }, () => { },
+            tray = new TrayService(window, window.ToggleTrayVisibility, () => { },
                 showVisible: window.RestoreForInteraction, inputMenuFactory: window.CreateInputMenuItem);
             var trayMenu = (ContextMenu)typeof(TrayService).GetField("_menu", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(tray)!;
             var trayItem = trayMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Пропускать клики в игру"));
@@ -125,10 +124,10 @@ internal static class Program
             Check(capsuleItem.IsChecked && trayItem.IsChecked && beforeRecovery.IsChecked && notifications.Last(),
                 "All input menu instances and the mode event reflect the actual applied state");
             Check(appearance.Load() == (initial with { ClickThrough = true }), "Enabling persists the input preference while preserving all existing appearance fields");
-            SameBounds(bounds, DisplayService.GetWindowBounds(window), "Native input-mode changes preserve collapsed geometry");
+            SameBounds(bounds, DisplayService.GetWindowBounds(window), "Native input-mode changes preserve compact geometry");
             Check(window.Placement.Settings == savedPlacement && window.Components == savedComponents,
                 "Input mode does not rewrite position or component choices");
-            Check(Named<Button>(window, "CompactPlayButton").Focusable && Named<Button>(window, "CompactExpandButton").IsHitTestVisible && window.IsEnabled,
+            Check(Named<Button>(window, "CompactPlayButton").Focusable && surface.IsHitTestVisible && window.IsEnabled,
                 "The mode uses native routing rather than disabling the WPF controls needed after unlocking");
             foreach (bool compact in new[] { false, true })
                 foreach (IslandAppearance mode in Enum.GetValues<IslandAppearance>())
@@ -147,11 +146,10 @@ internal static class Program
             SetWindowLongPtr(hwnd, -20, new IntPtr(Style(hwnd) | InputMask));
             Check(!window.IsClickThrough && (Style(hwnd) & InputMask) == InputMask && window.SetClickThrough(false) &&
                 (Style(hwnd) & InputMask) == 0, "Explicit unlock clears leftover native bits even when the managed mode is already interactive");
-            window.ToggleExpanded();
-            await window.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
-            Check(Named<Grid>(window, "ExpandedView").Visibility == Visibility.Visible, "Expanded controls are available while interactive");
-            Check(window.SetClickThrough(true) && Named<Grid>(window, "ExpandedView").Visibility == Visibility.Collapsed &&
-                Math.Abs(window.Height - window.CollapsedWindowHeight) < .01, "Enabling over an expanded panel finishes its transition and immediately collapses it");
+            Rect beforeInputChange = DisplayService.GetWindowBounds(window);
+            Check(window.SetClickThrough(true) && Named<Grid>(window, "CompactView").IsVisible,
+                "Enabling click-through keeps the current compact view visible");
+            SameBounds(beforeInputChange, DisplayService.GetWindowBounds(window), "Enabling click-through leaves the compact layout in place");
             window.HideToTray();
             window.RestoreFromTray();
             Check(window.IsVisible && window.IsClickThrough && (Style(hwnd) & InputMask) == InputMask,

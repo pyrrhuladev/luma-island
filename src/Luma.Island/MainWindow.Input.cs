@@ -74,12 +74,10 @@ public partial class MainWindow
         // Explicit recovery clears native bits even if an earlier native rollback failed.
         if (changed || !enabled)
         {
-            CompleteTransition();
             if (enabled)
             {
                 PrepareMusicIslandForClickThrough();
                 IslandSurface.ContextMenu.IsOpen = false;
-                if (_expanded) { ToggleExpanded(); CompleteTransition(); }
                 // Release only this UI thread's captures; never activate or synthesize input to the game.
                 if (Mouse.Captured is DependencyObject captured && Window.GetWindow(captured) == this) Mouse.Capture(null);
                 if (IsKeyboardFocusWithin) Keyboard.ClearFocus();

@@ -36,19 +36,14 @@ public partial class App
         _island!.WindowState = WindowState.Normal;
         _island.Show();
         _island.SetAppearance(IslandAppearance.Glass, .76);
-        if (_island.Height > _island.CollapsedWindowHeight + 1) _island.ToggleExpanded();
-        await _island.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
 
         try
         {
             foreach (var scenario in new (string Name, bool On, bool Charts, int Warmup)[]
-                { ("off-before", false, false, 4), ("counters-on", true, false, 6), ("charts-expanded", true, true, 4), ("off-after", false, false, 4) })
+                { ("off-before", false, false, 4), ("counters-on", true, false, 6), ("charts-on", true, true, 4), ("off-after", false, false, 4) })
             {
                 _island.SetComponents(ComponentSettings.Default with
                     { Cpu = scenario.On, Gpu = scenario.On, Memory = scenario.On, Fps = scenario.On, Charts = scenario.Charts });
-                bool expanded = (_island.FindName("ExpandedView") as FrameworkElement)?.Visibility == Visibility.Visible;
-                if (expanded != scenario.Charts) _island.ToggleExpanded();
-                await _island.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
                 if (!scenario.On)
                 {
                     try { await _fps!.Completion.WaitAsync(TimeSpan.FromSeconds(15)); }
@@ -174,7 +169,7 @@ public partial class App
             {
                 schemaVersion = 1, startedUtc, finishedUtc = DateTimeOffset.UtcNow, logicalProcessors = Environment.ProcessorCount,
                 sampleIntervalSeconds = 1, measurementSecondsPerScenario = 20, initialHelperPids = initialHelperPids.Order().ToArray(),
-                configuration = new { appearance = "Glass", opacity = .76, window = "collapsed except charts-expanded", baseline = ComponentSettings.Default,
+                configuration = new { appearance = "Glass", opacity = .76, window = "compact HUD", baseline = ComponentSettings.Default,
                     enabled = ComponentSettings.Default with { Cpu = true, Gpu = true, Memory = true, Fps = true } },
                 baselineAttributionCondition = initialHelperPids.Count == 0 ? "No matching companions were observed at entry." : "Matching companions pre-existed. Their baseline is measured too; exclusive ownership and causation are not established.",
                 unknownCpuProcesses = samples.SelectMany(s => s.Processes).Where(p => !p.CpuPercentOfMachine.HasValue).Select(p => new { p.Pid, p.Name, p.StartUtc }).Distinct().ToArray(),

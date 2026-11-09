@@ -13,13 +13,11 @@ public partial class MainWindow
     private double _hudMonitorScale = 1;
     public double HudScale => Appearance.Scale;
     public double EffectiveHudScale => _effectiveHudScale;
-    public double ExpandedWindowWidth => ScaledHudDimension(408);
 
     public void SetHudScale(double scale)
     {
         VerifyAccess();
         if (_closed) return;
-        CompleteTransition();
         Appearance = AppearanceStore.Normalize(Appearance with { Scale = scale });
         ApplyHudScale();
         SynchronizeMusicIsland();
@@ -47,8 +45,8 @@ public partial class MainWindow
     {
         double effective = HudScale;
         if (_hudDisplay is not null)
-            effective = FitScale(HudScale, new Size(Math.Max(408, BaseCollapsedWindowWidth),
-                Math.Max(BaseExpandedWindowHeight, BaseCollapsedWindowHeight)), _hudDisplay.WorkArea, _hudMonitorScale);
+            effective = FitScale(HudScale, new Size(BaseCollapsedWindowWidth, BaseCollapsedWindowHeight),
+                _hudDisplay.WorkArea, _hudMonitorScale);
         if (_hudScaleInstalled && Math.Abs(effective - _effectiveHudScale) < .000001) return false;
         _effectiveHudScale = effective;
         _hudScaleInstalled = true;
@@ -70,7 +68,7 @@ public partial class MainWindow
         if (!double.IsFinite(monitorScale) || monitorScale <= 0) monitorScale = 1;
         double widthLimit = Math.Max(1, workArea.Width / monitorScale - 16) / maximumBaseSize.Width;
         double heightLimit = Math.Max(1, workArea.Height / monitorScale - 16) / maximumBaseSize.Height;
-        // Keep the saved preference; the same effective scale fits collapsed and expanded states.
+        // Fit the visible HUD to the current display without changing the saved preference.
         return Math.Max(.01, Math.Min(requested, Math.Min(widthLimit, heightLimit)));
     }
 }

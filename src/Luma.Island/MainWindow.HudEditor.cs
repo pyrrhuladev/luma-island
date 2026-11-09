@@ -79,7 +79,6 @@ public partial class MainWindow
             App.Log(new InvalidOperationException("The settings target changed while its draft was open."));
             return false;
         }
-        CompleteTransition();
         var edited = new HudProfileSettings(AppearanceStore.Normalize(appearance with { ClickThrough = Appearance.ClickThrough }),
             components, PlacementStore.Normalize(application.Placement));
         bool saved;
@@ -131,7 +130,6 @@ public partial class MainWindow
     {
         VerifyAccess();
         if (_closed) return false;
-        CompleteTransition();
         // Input recovery remains a separate global preference, outside the editor's draft.
         Appearance = AppearanceStore.Normalize(appearance with { ClickThrough = Appearance.ClickThrough });
         Components = components ?? ComponentSettings.Default;

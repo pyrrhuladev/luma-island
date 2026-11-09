@@ -89,8 +89,9 @@ internal static class Program
             Check(hiddenStyle == ((sourceStyle | 0x80u) & ~0x40000u),
                 "Only TOOLWINDOW and APPWINDOW bits change during native source initialization");
             SameBounds(sourceBounds, DisplayService.GetWindowBounds(window), "Applying the initial style preserves hidden native window bounds");
-            var expandButton = (UIElement)window.FindName("CompactExpandButton");
-            Check((hiddenStyle & 0x08000000) == 0 && window.IsEnabled && expandButton.Focusable && expandButton.IsHitTestVisible,
+            var playButton = (UIElement)window.FindName("CompactPlayButton");
+            var dragSurface = (UIElement)window.FindName("IslandSurface");
+            Check((hiddenStyle & 0x08000000) == 0 && window.IsEnabled && playButton.Focusable && dragSurface.IsHitTestVisible,
                 "The capsule retains keyboard and pointer input without WS_EX_NOACTIVATE");
             window.Show();
             await Settle();
@@ -105,12 +106,12 @@ internal static class Program
             Check(surface.ContextMenu.Items.OfType<MenuItem>().Count(item => Equals(item.Header, "Скрыть в трей")) == 1,
                 "Repeated initialization never duplicates the visibility command");
             Check(Equals(capsule.InputGestureText, "Ctrl+Alt+Space"), "Capsule hide command advertises its visibility hotkey");
-            Check(surface.ContextMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "Развернуть")),
-                "Expansion remains a separate context command");
+            Check(surface.ContextMenu.Items.OfType<MenuItem>().Select(item => (string)item.Header)
+                .SequenceEqual(new[] { "Скрыть в трей", "Пропускать клики в игру", "Настройки…", "Выход" }),
+                "The capsule menu contains the four actions available in the single view");
             Check(window.IsVisible && window.Opacity == 0 && !window.ShowActivated && !window.ShowInTaskbar,
                 "The native test window stays transparent, nonactivating and absent from taskbar");
-            tray = new TrayService(window, window.ToggleTrayVisibility, () => { window.RestoreFromTray(); window.ToggleExpanded(); },
-                () => { }, showVisible: window.RestoreFromTray);
+            tray = new TrayService(window, window.ToggleTrayVisibility, () => { }, showVisible: window.RestoreFromTray);
             ShellRegistered = tray.IsRegistered;
             var trayMenu = (ContextMenu)typeof(TrayService).GetField("_menu", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(tray)!;
             MenuItem trayItem = (MenuItem)trayMenu.Items[0];
@@ -160,19 +161,18 @@ internal static class Program
                 }
             }
 
-            window.ToggleExpanded();
+            Rect beforeHide = DisplayService.GetWindowBounds(window);
             window.HideToTray();
-            Check(!window.IsVisible && Math.Abs(window.Height - window.ExpandedWindowHeight) < .01,
-                "Hiding during expansion completes the animation before hiding");
+            Check(!window.IsVisible && Math.Abs(window.Height - window.CollapsedWindowHeight) < .01,
+                "Hiding keeps the HUD sized to its selected components");
             window.RestoreFromTray();
-            Check(window.IsVisible && Math.Abs(window.Width - 408) < .01 && Math.Abs(window.Height - window.ExpandedWindowHeight) < .01,
-                "Restoring preserves the expanded state");
-            CheckToolWindow(window, "after expansion and restoration");
-            window.ToggleExpanded();
+            await Settle();
+            Check(((FrameworkElement)window.FindName("CompactView")).IsVisible,
+                "Restoring displays the compact HUD directly");
+            SameBounds(beforeHide, DisplayService.GetWindowBounds(window), "Restoring keeps native position and dimensions");
+            CheckToolWindow(window, "after compact HUD restoration");
             window.HideToTray();
-            Check(Math.Abs(window.Height - window.CollapsedWindowHeight) < .01,
-                "Hiding during collapse completes the animation before hiding");
-            CheckToolWindow(window, "while hidden after collapse");
+            CheckToolWindow(window, "while hidden");
 
             var version4 = typeof(TrayService).GetField("_usingVersion4", BindingFlags.Instance | BindingFlags.NonPublic)!;
             version4.SetValue(tray, true);

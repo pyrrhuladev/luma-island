@@ -37,17 +37,15 @@ public partial class MainWindow
         double? low = _lastFrameMetrics.OnePercentLow;
         string lowText = low is > 0 and <= 20000 && double.IsFinite(low.Value) ? low.Value.ToString("0", _culture) : "—";
         CompactOnePercentLow.Text = lowText;
-        ExpandedOnePercentLow.Text = "1% Low " + lowText;
         string lowTip = _lastFrameMetrics.OnePercentLowStatus ?? "1% Low · NVIDIA FrameView. Ожидание данных наиболее медленных кадров.";
-        CompactLowPanel.ToolTip = CompactOnePercentLow.ToolTip = ExpandedOnePercentLow.ToolTip = lowTip;
+        CompactLowPanel.ToolTip = CompactOnePercentLow.ToolTip = lowTip;
         double? milliseconds = _lastFrameMetrics.FrameTimeMilliseconds;
         string timeText = milliseconds is > 0 and <= 60000 && double.IsFinite(milliseconds.Value)
             ? milliseconds.Value.ToString("0.0", _culture) + " мс" : "—";
-        CompactFrameTime.Text = "Кадр " + timeText;
         FrameTimeValue.Text = timeText;
         string frameTip = "Интервалы между Present игры · NVIDIA FrameView.\n" +
             (_lastFrameMetrics.FrameTimeStatus ?? "Ожидание отдельных кадров.");
-        CompactFrameTime.ToolTip = FrameTimeCard.ToolTip = frameTip;
+        FrameTimeCard.ToolTip = frameTip;
     }
 
     private void RefreshFrameMetricVisibility()

@@ -92,7 +92,6 @@ public partial class MainWindow
             var components = MusicIslandComponents();
             if (child.Appearance != appearance || child.Components != components)
             {
-                child.CompleteTransition();
                 child.Appearance = appearance;
                 child.Components = components;
                 child.ApplyComponentVisibility();
@@ -180,13 +179,10 @@ public partial class MainWindow
         menu.Items.Clear();
         var visibility = new MenuItem();
         visibility.Click += (_, _) => owner.ToggleTrayVisibility();
-        var expanded = new MenuItem();
-        expanded.Click += (_, _) => ToggleExpanded();
         var exit = new MenuItem { Header = "Выход" };
         QuickMenuTheme.SetIcon(exit, QuickMenuIcon.Exit);
         exit.Click += OnExit;
         menu.Items.Add(visibility);
-        menu.Items.Add(expanded);
         menu.Items.Add(owner.CreateInputMenuItem());
         menu.Items.Add(owner.CreateSettingsMenuItem());
         menu.Items.Add(new Separator());
@@ -195,7 +191,6 @@ public partial class MainWindow
         void RefreshActions()
         {
             QuickMenuTheme.UpdateVisibility(visibility, owner.IsVisible, owner.TrayHotkeyAvailable);
-            QuickMenuTheme.UpdateExpansion(expanded, _expanded);
         }
         RefreshActions();
         menu.Opened += (_, _) => RefreshActions();
@@ -203,9 +198,7 @@ public partial class MainWindow
 
     private void PrepareForIslandClickThrough()
     {
-        CompleteTransition();
         IslandSurface.ContextMenu.IsOpen = false;
-        if (_expanded) { ToggleExpanded(); CompleteTransition(); }
         if (Mouse.Captured is DependencyObject captured && Window.GetWindow(captured) == this) Mouse.Capture(null);
         if (IsKeyboardFocusWithin) Keyboard.ClearFocus();
     }

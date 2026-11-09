@@ -51,7 +51,6 @@ public partial class MainWindow
     {
         VerifyAccess();
         if (_closed || _profiles is null) return false;
-        CompleteTransition();
         var current = CaptureHudSettings();
         string? previousId = _profiles.ActiveProfileId;
         bool saved = _profiles.CaptureCurrent(current);
@@ -73,7 +72,6 @@ public partial class MainWindow
     private void ApplyProfileSnapshot(HudProfileSettings settings)
     {
         if (_profiles is null || _placement is null) return;
-        CompleteTransition();
         using (_profiles.SuppressWrites())
         {
             ResetAlerts();

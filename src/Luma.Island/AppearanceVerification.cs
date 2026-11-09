@@ -25,7 +25,7 @@ public static class AppearanceVerification
         Directory.CreateDirectory(directory);
         int initialErrors = errors.Count;
         var originalPlacement = window.Placement.Settings;
-        Rect collapsedBounds = DisplayService.GetWindowBounds(window);
+        Rect hudBounds = DisplayService.GetWindowBounds(window);
         bool placementUnchanged = true;
         bool opaqueText = false;
 
@@ -38,24 +38,25 @@ public static class AppearanceVerification
 
         Click(menu, 0);
         await SettleAsync(window);
-        BitmapSource matteCollapsed = window.CapturePreview();
-        int matteAlpha = SurfaceAlpha(window, matteCollapsed);
+        BitmapSource mattePreview = window.CapturePreview();
+        int matteAlpha = SurfaceAlpha(window, mattePreview);
         if (window.Appearance.Mode != IslandAppearance.Matte || matteAlpha != 255)
             errors.Add($"Матовое оформление не стало непрозрачным: alpha={matteAlpha}.");
-        if (AlphaAt(matteCollapsed, 0, 0) != 0)
+        if (AlphaAt(mattePreview, 0, 0) != 0)
             errors.Add("Снаружи матовой капсулы потеряна прозрачность окна.");
-        placementUnchanged &= SameBounds(collapsedBounds, DisplayService.GetWindowBounds(window));
+        Save(mattePreview, Path.Combine(directory, "matte-compact.png"));
+        placementUnchanged &= SameBounds(hudBounds, DisplayService.GetWindowBounds(window));
 
         Click(menu, 1);
         await SettleAsync(window);
-        BitmapSource glassCollapsed = window.CapturePreview();
-        int glassAlpha = SurfaceAlpha(window, glassCollapsed);
+        BitmapSource glassPreview = window.CapturePreview();
+        int glassAlpha = SurfaceAlpha(window, glassPreview);
         if (window.Appearance.Mode != IslandAppearance.Glass || Math.Abs(glassAlpha - 194) > 1)
             errors.Add($"Переключатель стекла не установил ожидаемую альфу .76: alpha={glassAlpha}.");
-        if (AlphaAt(glassCollapsed, 0, 0) != 0)
+        if (AlphaAt(glassPreview, 0, 0) != 0)
             errors.Add("Снаружи стеклянной капсулы потеряна прозрачность окна.");
-        Save(glassCollapsed, Path.Combine(directory, "glass-collapsed.png"));
-        placementUnchanged &= SameBounds(collapsedBounds, DisplayService.GetWindowBounds(window));
+        Save(glassPreview, Path.Combine(directory, "glass-compact.png"));
+        placementUnchanged &= SameBounds(hudBounds, DisplayService.GetWindowBounds(window));
 
         var presetAlphas = new int[10];
         double[] expectedOpacities = { .90, .76, .65, .50, .35, .25, 1, .40, .15, .05 };
@@ -68,7 +69,7 @@ public static class AppearanceVerification
             if (Math.Abs(window.Appearance.GlassOpacity - expectedOpacities[index]) > .0001 ||
                 Math.Abs(presetAlphas[index] - expectedAlpha) > 1)
                 errors.Add($"Пресет стекла {expectedOpacities[index]:0.00} не применился: alpha={presetAlphas[index]}.");
-            placementUnchanged &= SameBounds(collapsedBounds, DisplayService.GetWindowBounds(window));
+            placementUnchanged &= SameBounds(hudBounds, DisplayService.GetWindowBounds(window));
         }
         for (int i = 1; i < 6; i++)
             if (presetAlphas[i] >= presetAlphas[i - 1]) errors.Add("Пресеты прозрачности не дают последовательно уменьшающуюся альфу.");
@@ -91,51 +92,31 @@ public static class AppearanceVerification
                     errors.Add($"Ползунок прозрачности {transparency}% не изменил только фон: alpha={alpha}.");
             }
             slider.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
-            placementUnchanged &= SameBounds(collapsedBounds, DisplayService.GetWindowBounds(window));
+            placementUnchanged &= SameBounds(hudBounds, DisplayService.GetWindowBounds(window));
         }
-
-        Click(menu, 4); // Glass, .76; the default used for comparison.
-        await SettleAsync(window);
-        window.ToggleExpanded();
-        await window.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
-        await SettleAsync(window);
-        Rect expandedBounds = DisplayService.GetWindowBounds(window);
-        BitmapSource glassExpanded = window.CapturePreview();
-        Save(glassExpanded, Path.Combine(directory, "glass-expanded.png"));
 
         window.SetAppearance(IslandAppearance.Glass, .05);
         await SettleAsync(window);
-        BitmapSource transparentExpanded = window.CapturePreview();
-        Save(transparentExpanded, Path.Combine(directory, "transparent-expanded.png"));
-        if (window.FindName("ExpandedTitle") is TextBlock title)
+        BitmapSource transparentPreview = window.CapturePreview();
+        Save(transparentPreview, Path.Combine(directory, "transparent-compact.png"));
+        if (window.FindName("CompactTitle") is TextBlock title)
         {
             Rect titleBounds = title.TransformToAncestor(window).TransformBounds(
                 new Rect(new Point(), title.RenderSize));
             opaqueText = window.Opacity == 1 && title.Opacity == 1 &&
                 title.Foreground is SolidColorBrush foreground && foreground.Color.A == 255 &&
-                CountOpaquePixels(transparentExpanded, titleBounds) > 0;
+                CountOpaquePixels(transparentPreview, titleBounds) > 0;
         }
         if (!opaqueText) errors.Add("Стеклянный фон сделал основной текст полупрозрачным.");
 
-        Click(menu, 0);
-        await SettleAsync(window);
-        BitmapSource matteExpanded = window.CapturePreview();
-        Save(matteExpanded, Path.Combine(directory, "matte-expanded.png"));
-        placementUnchanged &= SameBounds(expandedBounds, DisplayService.GetWindowBounds(window));
-
         Click(menu, 4);
         await SettleAsync(window);
-        placementUnchanged &= SameBounds(expandedBounds, DisplayService.GetWindowBounds(window));
-        window.ToggleExpanded();
-        await window.WaitForTransitionAsync().WaitAsync(TimeSpan.FromSeconds(3));
-        await SettleAsync(window);
-        Save(window.CapturePreview(), Path.Combine(directory, "glass-collapsed.png"));
-        placementUnchanged &= SameBounds(collapsedBounds, DisplayService.GetWindowBounds(window)) &&
+        placementUnchanged &= SameBounds(hudBounds, DisplayService.GetWindowBounds(window)) &&
             window.Placement.Settings == originalPlacement;
         if (!placementUnchanged) errors.Add("Переключение оформления изменило положение или настройки размещения.");
         if (window.Opacity != 1) errors.Add("Оформление изменило общую непрозрачность окна.");
 
-        Save(CreateComparison(matteExpanded, glassExpanded), Path.Combine(directory, "glass-comparison.png"));
+        Save(CreateComparison(mattePreview, glassPreview), Path.Combine(directory, "glass-comparison.png"));
         return new Result(errors.Count == initialErrors, glassAlpha, matteAlpha,
             opaqueText, placementUnchanged, menuItems);
     }
