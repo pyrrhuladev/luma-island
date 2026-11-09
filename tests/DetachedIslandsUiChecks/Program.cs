@@ -16,7 +16,7 @@ using Luma.Island;
 using Luma.Island.Services;
 using Luma.Island.Settings;
 
-internal static class Program
+internal static partial class Program
 {
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
     private const long InputMask = 0x20 | 0x08000000;
@@ -41,6 +41,8 @@ internal static class Program
                 await RunPresentationChecks();
                 await RunPositionLifecycleChecks();
                 await RunProfileChecks();
+                await RunCapsuleEditChecks();
+                await RunCapsuleProfileChecks();
                 Check(preferences.OrderBy(p => p.Key).SequenceEqual(RealPreferences().OrderBy(p => p.Key)),
                     "All actual user preference files remain byte-for-byte unchanged");
             }
@@ -167,10 +169,10 @@ internal static class Program
             "Both native presentations remain tool windows excluded from Alt+Tab");
 
         var menu = Named<Border>(child, "IslandSurface").ContextMenu;
-        Check(menu.Items.Count == 5 && menu.Items[3] is Separator &&
+        Check(menu.Items.Count == 6 && menu.Items[4] is Separator &&
               menu.Items.OfType<MenuItem>().Select(item => (string)item.Header)
-                .SequenceEqual(new[] { "Скрыть в трей", "Пропускать клики в игру", "Настройки…", "Выход" }),
-            "The detached quick menu offers the same four actions as the main HUD");
+                .SequenceEqual(new[] { "Скрыть в трей", "Пропускать клики в игру", "Редактировать HUD…", "Настройки…", "Выход" }),
+            "The detached quick menu offers the same five actions as the main HUD");
         foreach (string name in new[] { "CompactPreviousButton", "CompactPlayButton", "CompactNextButton" })
         {
             var button = Named<Button>(child, name);
@@ -464,6 +466,160 @@ internal static class Program
         }
         finally { restarted.Close(); }
     }
+
+    private static async Task RunCapsuleEditChecks()
+    {
+        var configured = Full with { Charts = true };
+        using var fixture = new Fixture("capsule-edit", AppearanceSettings.Default, configured);
+        var window = fixture.Window;
+        window.Show(); await Settle();
+        window.ApplyPerformanceDisplay(new(35, 71, 42, 14UL << 30, 32UL << 30, 65, "Fixture", 58, "Fixture", 49, "Fixture"));
+        window.InitializeInputRecovery(true, true);
+        Check(window.SetClickThrough(true), "The capsule edit fixture starts with persisted click-through");
+        var original = window.CaptureHudSettings();
+        string[] originalBytes = fixture.BaseHashes();
+        int originalSubscriptions = Subscribers(fixture.Media);
+        var display = window.Placement.CurrentDisplay;
+        var area = display.WorkArea;
+        var drop = new Point(area.Left + area.Width * .73, area.Top + area.Height * .57);
+
+        var command = window.CreateCapsuleEditMenuItem();
+        command.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent, command)); await Settle();
+        Check(window.IsHudDragging && !window.IsClickThrough && (Style(window) & InputMask) == 0 &&
+              Named<Border>(window, "CapsuleEditBar").IsVisible && Named<Border>(window, "CapsuleMoveGrip").IsVisible,
+            "The edit command temporarily restores interaction and displays the draft bar and outside handle");
+        Check(window.Appearance.Layout.Capsules == HudCapsuleLayout.FromLegacy(original.Appearance.Layout) &&
+              fixture.BaseHashes().SequenceEqual(originalBytes),
+            "Opening live editing creates a compatible draft and leaves the preferences untouched");
+        CheckCapsuleGestureGeometry(window);
+
+        Call(window, "MoveCapsuleItem", "cpu", null, 0, drop); await Settle();
+        var (cpuId, cpuWindow) = CapsuleWindows(window).Single(capsule => capsule.Id != HudCapsuleLayout.MainId);
+        Check(cpuWindow.Owner == window && cpuWindow.IsVisible && cpuWindow.CollapsedWindowWidth < window.CollapsedWindowWidth &&
+              cpuWindow.Placement.Settings.MonitorId == display.Id &&
+              Named<Border>(cpuWindow, "CapsuleMoveGrip").IsVisible,
+            "An outside drop opens a smaller owned capsule on the drop monitor with its own grip");
+        Check(Named<TextBlock>(cpuWindow, "CompactCpu").IsVisible && !Named<TextBlock>(window, "CompactCpu").IsVisible &&
+              !Named<TextBlock>(cpuWindow, "CompactGpu").IsVisible && window.Components == configured,
+            "The CPU presentation has exactly one visible home and keeps the global collector configuration");
+        Check(!Named<Border>(window, "CpuChartCard").IsVisible && Named<Border>(cpuWindow, "CpuChartCard").IsVisible &&
+              Named<System.Windows.Shapes.Path>(cpuWindow, "CpuChartLine").Data is { } history && !history.Bounds.IsEmpty &&
+              Named<TextBlock>(cpuWindow, "CpuChartValue").Text == "35%",
+            "Detaching CPU carries its existing chart samples without waiting for the next collector update");
+
+        Call(window, "MoveCapsuleItem", "gpu", cpuId, 1, drop); await Settle();
+        Call(window, "MoveCapsuleItem", "music", HudCapsuleLayout.MainId, 1, drop); await Settle();
+        Check(ReferenceEquals(CapsuleWindows(window).Single(capsule => capsule.Id == cpuId).Window, cpuWindow) &&
+              Named<TextBlock>(cpuWindow, "CompactGpu").IsVisible &&
+              !Named<TextBlock>(window, "CompactGpu").IsVisible && Named<TextBlock>(window, "CompactMemory").IsVisible,
+            "Merging a second metric reuses the destination window and keeps unassigned RAM in the root");
+        Check(Grid.GetRow(Named<Grid>(window, "CompactMusicRow")) < Grid.GetRow(Named<UniformGrid>(window, "CompactPerformance")),
+            "Moving music above the hardware group changes the actual rendered order");
+        window.ApplyPerformanceDisplay(new(43, 76, 48, 16UL << 30, 32UL << 30, 68, "Fixture", 62, "Fixture", 51, "Fixture"));
+        Check(Named<TextBlock>(cpuWindow, "CompactCpu").Text.StartsWith("CPU 43%", StringComparison.Ordinal) &&
+              Named<TextBlock>(cpuWindow, "CompactCpu").Text.Contains("62", StringComparison.Ordinal) &&
+              Named<TextBlock>(cpuWindow, "CompactGpu").Text.StartsWith("GPU 76%", StringComparison.Ordinal) &&
+              Named<TextBlock>(window, "CompactMemory").Text.StartsWith("RAM 48%", StringComparison.Ordinal),
+            "One incoming performance snapshot updates every visible metric and its associated temperature");
+
+        window.Placement.BeginDrag();
+        DisplayService.MoveWindow(window, area.Left + area.Width * .17, area.Top + area.Height * .39);
+        window.Placement.EndDrag(persist: false);
+        Check(window.Placement.Settings != original.Placement && fixture.BaseHashes().SequenceEqual(originalBytes),
+            "A whole-capsule move and widget edits remain reversible until the draft is saved");
+        Call(window, "EndCapsuleEdit", false); await Settle();
+        Check(window.CaptureHudSettings() == original && window.IsClickThrough && (Style(window) & InputMask) == InputMask &&
+              !Named<Border>(window, "CapsuleEditBar").IsVisible && !window.IsHudDragging,
+            "Cancel restores the original visual layout, primary anchor and click-through");
+        Check(CapsuleWindows(window).Length == 1 && !cpuWindow.IsVisible && Subscribers(fixture.Media) == originalSubscriptions &&
+              fixture.BaseHashes().SequenceEqual(originalBytes),
+            "Cancel releases draft windows and their listeners without changing persisted bytes");
+
+        Call(window, "BeginCapsuleEdit");
+        Call(window, "MoveCapsuleItem", "cpu", null, 0, drop); await Settle();
+        var (returnId, returnWindow) = CapsuleWindows(window).Single(capsule => capsule.Id != HudCapsuleLayout.MainId);
+        Call(window, "MoveCapsuleItem", "cpu", HudCapsuleLayout.MainId, 1, drop); await Settle();
+        Check(CapsuleWindows(window).All(capsule => capsule.Id != returnId) && !returnWindow.IsVisible &&
+              Named<TextBlock>(window, "CompactCpu").IsVisible,
+            "Returning the last widget closes its now-empty floating capsule");
+        Call(window, "MoveCapsuleItem", "cpu", null, 0, drop); await Settle();
+        var committed = window.Appearance.Layout.Capsules!;
+        Call(window, "EndCapsuleEdit", true); await Settle();
+        var savedWindow = CapsuleWindows(window).Single(capsule => capsule.Id != HudCapsuleLayout.MainId).Window;
+        Check(fixture.Appearance.Load().Layout.Capsules == committed && savedWindow.IsClickThrough &&
+              (Style(savedWindow) & InputMask) == InputMask && !Named<Border>(savedWindow, "CapsuleMoveGrip").IsVisible,
+            "Done persists the capsule layout and restores the input mode on all committed windows");
+        window.HideToTray(); await Settle();
+        Check(!window.IsHudPresentationVisible && !savedWindow.IsVisible, "Hiding the HUD also hides the committed detached capsule");
+        window.RestoreFromTray(); await Settle();
+        Check(window.IsHudPresentationVisible && savedWindow.IsVisible &&
+              ReferenceEquals(CapsuleWindows(window).Single(capsule => capsule.Id != HudCapsuleLayout.MainId).Window, savedWindow),
+            "Restoring the HUD reuses its detached window and anchor");
+
+        var savedPlacement = savedWindow.Placement.Settings;
+        window.Close(); fixture.WindowClosed = true; await Settle();
+        var restarted = new MainWindow(fixture.Media, fixture.System, fixture.Placement, fixture.Appearance, fixture.Components,
+            new AutostartService(readOnly: true)) { Opacity = 0, ShowActivated = false, ShowInTaskbar = false, Topmost = false };
+        try
+        {
+            restarted.Show(); await Settle();
+            var restored = CapsuleWindows(restarted).Single(capsule => capsule.Id != HudCapsuleLayout.MainId).Window;
+            Check(restarted.Appearance.Layout.Capsules == committed && restored.Placement.Settings == savedPlacement &&
+                  Named<TextBlock>(restored, "CompactCpu").IsVisible,
+                "A fresh root reloads the committed capsule, its placement and its widget assignment");
+        }
+        finally { restarted.Close(); }
+    }
+
+    private static async Task RunCapsuleProfileChecks()
+    {
+        using var fixture = new Fixture("capsule-profile", AppearanceSettings.Default, Full, profiles: true);
+        var window = fixture.Window;
+        string first = Guid.NewGuid().ToString("D"), second = Guid.NewGuid().ToString("D");
+        var musicAnchor = new HudIslandPosition(null, .21, .62);
+        var originalAppearance = AppearanceSettings.Default with { Layout = new(DetachedMusic: true, MusicPosition: musicAnchor) };
+        var firstHud = new HudProfileSettings(originalAppearance, Full, PlacementSettings.Default);
+        var secondHud = new HudProfileSettings(AppearanceSettings.Default, Full, PlacementSettings.Default);
+        Check(fixture.Controller!.ReplaceSettings(new(true, new[]
+        {
+            new GameProfile(first, "Капсулы", @"D:\Games\CapsuleFixture\game.exe", firstHud),
+            new GameProfile(second, "Обычный HUD", @"D:\Games\StandardFixture\game.exe", secondHud)
+        })), "Two isolated game profiles are available for editing and switching");
+        window.Show(); await Settle();
+        Check(window.ActivateGameProfile(first), "The legacy split game profile is selected");
+        var ordinaryBytes = fixture.BaseHashes();
+        string profileHash = Hash(Path.Combine(fixture.Root, "profiles.json"));
+
+        Call(window, "BeginCapsuleEdit");
+        Call(window, "MoveCapsuleItem", "memory", "music", 0, new Point()); await Settle();
+        var layout = window.Appearance.Layout.Capsules!;
+        Check(layout.Islands.Single(capsule => capsule.Id == "music") == new HudCapsule("music", "memory,music", musicAnchor) &&
+              !window.ActivateGameProfile(second) && window.ActiveGameProfileId == first,
+            "Moving RAM into the legacy music island keeps its anchor and defers game switching while editing");
+        Check(fixture.BaseHashes().SequenceEqual(ordinaryBytes) && Hash(Path.Combine(fixture.Root, "profiles.json")) == profileHash,
+            "A profile draft writes neither the ordinary stores nor profiles.json");
+        Call(window, "EndCapsuleEdit", true); await Settle();
+        var saved = fixture.Profiles.Load().Profiles;
+        Check(saved.Single(profile => profile.Id == first).Settings.Appearance.Layout.Capsules == layout &&
+              saved.Single(profile => profile.Id == second).Settings == secondHud &&
+              fixture.BaseHashes().SequenceEqual(ordinaryBytes),
+            "Saving commits only the active game's capsule layout");
+        Check(window.ActivateGameProfile(second) && CapsuleWindows(window).Length == 1 &&
+              window.ActivateGameProfile(first),
+            "Switching profiles restores the independent capsule arrangement");
+        await Settle();
+        var child = CapsuleWindows(window).Single(capsule => capsule.Id == "music").Window;
+        Check(child.Placement.Settings.XFraction == musicAnchor.XFraction &&
+              child.Placement.Settings.YFraction == musicAnchor.YFraction &&
+              Named<TextBlock>(child, "CompactMemory").IsVisible && Named<Grid>(child, "CompactMusicRow").IsVisible,
+            "Returning to the saved profile restores the mixed RAM and music capsule at its original position");
+    }
+
+    private static object? Call(MainWindow window, string method, params object?[] args) =>
+        typeof(MainWindow).GetMethod(method, Private)!.Invoke(window, args);
+
+    private static (string Id, MainWindow Window)[] CapsuleWindows(MainWindow owner) =>
+        ((IEnumerable<(string Id, MainWindow Window)>)Call(owner, "LayoutWindows")!).ToArray();
 
     private sealed class Fixture : IDisposable
     {

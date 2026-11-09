@@ -76,19 +76,19 @@ public sealed class PlacementController : IDisposable
         _dragStart = DisplayService.GetWindowBounds(_window);
         _dragging = true;
     }
-    public void EndDrag()
+    public void EndDrag(bool persist = true)
     {
         _dragging = false;
         if (_disposed) return;
         try
         {
             Rect end = DisplayService.GetWindowBounds(_window);
-            if (Math.Abs(end.X - _dragStart.X) > .5 || Math.Abs(end.Y - _dragStart.Y) > .5) CaptureDrag();
+            if (Math.Abs(end.X - _dragStart.X) > .5 || Math.Abs(end.Y - _dragStart.Y) > .5) CaptureDrag(persist);
         }
         finally { DragCompleted?.Invoke(); }
     }
 
-    public void CaptureDrag()
+    public void CaptureDrag(bool persist = true)
     {
         if (Settings.Locked) return;
         Displays = DisplayService.GetDisplays();
@@ -96,14 +96,14 @@ public sealed class PlacementController : IDisposable
         var display = PlacementMath.NearestDisplay(window, Displays);
         var fractions = PlacementMath.Capture(display.WorkArea, window, 8 * DisplayService.GetWindowScale(_window));
         Change(Settings with { MonitorId = display.Id, Placement = IslandPlacement.Custom,
-            XFraction = fractions.X, YFraction = fractions.Y });
+            XFraction = fractions.X, YFraction = fractions.Y }, persist);
     }
 
-    private void Change(PlacementSettings settings)
+    private void Change(PlacementSettings settings, bool persist = true)
     {
         Settings = settings;
         Apply();
-        if (!_store.Save(settings)) System.Windows.MessageBox.Show(
+        if (persist && !_store.Save(settings)) System.Windows.MessageBox.Show(
             "Положение изменено, но сохранить его не удалось. После перезапуска оно может сброситься.",
             "Luma Island", MessageBoxButton.OK, MessageBoxImage.Warning);
     }

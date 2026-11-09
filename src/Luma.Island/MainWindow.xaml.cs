@@ -29,7 +29,7 @@ public partial class MainWindow : Window
 
     public MainWindow(MediaService media, SystemService system, PlacementStore? placementStore = null, AppearanceStore? appearanceStore = null,
         ComponentStore? componentStore = null, AutostartService? autostart = null, GameProfileController? profiles = null,
-        MainWindow? islandOwner = null)
+        MainWindow? islandOwner = null, string? capsuleId = null)
     {
         _media = media;
         _system = system;
@@ -37,6 +37,7 @@ public partial class MainWindow : Window
         _autostart = autostart ?? new AutostartService();
         _profiles = profiles;
         _islandOwner = islandOwner;
+        _capsuleId = capsuleId;
         InitializeComponent();
         InitializeAppearance(appearanceStore ?? new AppearanceStore());
         InitializeComponents(componentStore ?? new ComponentStore());
@@ -59,7 +60,8 @@ public partial class MainWindow : Window
         {
             InitializeTrayVisibility();
             IslandSurface.ContextMenu.Items.Insert(1, CreateInputMenuItem());
-            IslandSurface.ContextMenu.Items.Insert(2, CreateSettingsMenuItem());
+            IslandSurface.ContextMenu.Items.Insert(2, CreateCapsuleEditMenuItem());
+            IslandSurface.ContextMenu.Items.Insert(3, CreateSettingsMenuItem());
             QuickMenuTheme.Apply(IslandSurface.ContextMenu);
             SynchronizeMusicIsland();
         }
@@ -256,6 +258,7 @@ public partial class MainWindow : Window
 
     private void OnSurfacePointerDown(object sender, MouseButtonEventArgs e)
     {
+        if (TryHandleCapsulePointerDown(e)) return;
         if (e.ChangedButton != MouseButton.Left || e.ButtonState != MouseButtonState.Pressed ||
             !CanStartSurfaceDrag(e.OriginalSource as DependencyObject)) return;
 
@@ -280,7 +283,8 @@ public partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
-        SaveCurrentProfileEdits();
+        if (!IsCapsuleLayoutEditing) SaveCurrentProfileEdits();
+        CancelCapsuleGesture();
         _closed = true;
         DisposeIslandLifecycle();
         ResetAlerts();

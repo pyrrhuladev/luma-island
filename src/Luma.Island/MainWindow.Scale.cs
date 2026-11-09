@@ -45,7 +45,7 @@ public partial class MainWindow
     {
         double effective = HudScale;
         if (_hudDisplay is not null)
-            effective = FitScale(HudScale, new Size(BaseCollapsedWindowWidth, BaseCollapsedWindowHeight),
+            effective = FitScale(HudScale, new Size(BaseCollapsedWindowWidth, BaseCollapsedWindowHeight + CapsuleEditBarHeight),
                 _hudDisplay.WorkArea, _hudMonitorScale);
         if (_hudScaleInstalled && Math.Abs(effective - _effectiveHudScale) < .000001) return false;
         _effectiveHudScale = effective;

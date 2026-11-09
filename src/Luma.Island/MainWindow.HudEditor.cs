@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Windows;
@@ -158,13 +159,14 @@ public partial class MainWindow
         private readonly MainWindow _window;
         private readonly FrameworkElement _content;
         private HudPreviewSession? _musicPreview;
+        private HudPreviewSession? _capsulePreview;
 
-        public HudPreviewSession()
+        public HudPreviewSession(string? capsuleId = null)
         {
             // A never-shown visual tree needs no media session, SDK, collector, tray or native HWND.
             _system.Dispose();
             _window = new MainWindow(_media, _system, new PreviewPlacementStore(),
-                new PreviewAppearanceStore(), new PreviewComponentStore(), new AutostartService(readOnly: true));
+                new PreviewAppearanceStore(), new PreviewComponentStore(), new AutostartService(readOnly: true), capsuleId: capsuleId);
             _content = (FrameworkElement)_window.Content;
             _window.Content = null;
             _content.Resources = _window.Resources;
@@ -200,6 +202,19 @@ public partial class MainWindow
                 96, 96, PixelFormats.Pbgra32);
             bitmap.Render(_content);
             bitmap.Freeze();
+            if (_window.Appearance.Layout.Capsules is { } capsules)
+            {
+                var pictures = new List<BitmapSource>();
+                if (_window.HasCapsuleContent) pictures.Add(bitmap);
+                foreach (var capsule in capsules.Islands.Skip(1))
+                {
+                    var projected = ProjectCapsule(_window.Appearance, components, capsule);
+                    _capsulePreview ??= new HudPreviewSession(capsuleId: "preview");
+                    BitmapSource picture = _capsulePreview.Render(projected.Appearance, projected.Components);
+                    if (_capsulePreview._window.HasCapsuleContent) pictures.Add(picture);
+                }
+                return pictures.Count == 0 ? bitmap : Compose(pictures);
+            }
             if (_window.Appearance.Layout.DetachedMusic && (components.Music || components.Volume))
             {
                 // Composite another never-shown tree. A settings preview must not create
@@ -213,28 +228,40 @@ public partial class MainWindow
                 var musicComponents = new ComponentSettings(Music: components.Music, Volume: components.Volume,
                     Time: false, Date: false, Battery: false);
                 BitmapSource music = _musicPreview.Render(musicAppearance, musicComponents);
-                const int gap = 12;
-                var composite = new RenderTargetBitmap(Math.Max(bitmap.PixelWidth, music.PixelWidth),
-                    bitmap.PixelHeight + gap + music.PixelHeight, 96, 96, PixelFormats.Pbgra32);
-                var drawing = new DrawingVisual();
-                using (DrawingContext context = drawing.RenderOpen())
-                {
-                    context.DrawImage(bitmap, new Rect((composite.PixelWidth - bitmap.PixelWidth) / 2d, 0,
-                        bitmap.PixelWidth, bitmap.PixelHeight));
-                    context.DrawImage(music, new Rect((composite.PixelWidth - music.PixelWidth) / 2d,
-                        bitmap.PixelHeight + gap, music.PixelWidth, music.PixelHeight));
-                }
-                composite.Render(drawing);
-                composite.Freeze();
-                return composite;
+                return Compose([bitmap, music]);
             }
             return bitmap;
+        }
+
+        private static BitmapSource Compose(IReadOnlyList<BitmapSource> pictures)
+        {
+            if (pictures.Count == 1) return pictures[0];
+            const int gap = 12;
+            int width = pictures.Max(picture => picture.PixelWidth);
+            int height = pictures.Sum(picture => picture.PixelHeight) + gap * (pictures.Count - 1);
+            var drawing = new DrawingVisual();
+            using (DrawingContext context = drawing.RenderOpen())
+            {
+                int top = 0;
+                foreach (BitmapSource picture in pictures)
+                {
+                    context.DrawImage(picture, new Rect((width - picture.PixelWidth) / 2d, top,
+                        picture.PixelWidth, picture.PixelHeight));
+                    top += picture.PixelHeight + gap;
+                }
+            }
+            var composite = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            composite.Render(drawing);
+            composite.Freeze();
+            return composite;
         }
 
         public void Dispose()
         {
             _musicPreview?.Dispose();
             _musicPreview = null;
+            _capsulePreview?.Dispose();
+            _capsulePreview = null;
             _window.Close();
             _media.Dispose();
             _system.Dispose();

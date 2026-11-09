@@ -107,8 +107,8 @@ internal static class Program
                 "Repeated initialization never duplicates the visibility command");
             Check(Equals(capsule.InputGestureText, "Ctrl+Alt+Space"), "Capsule hide command advertises its visibility hotkey");
             Check(surface.ContextMenu.Items.OfType<MenuItem>().Select(item => (string)item.Header)
-                .SequenceEqual(new[] { "Скрыть в трей", "Пропускать клики в игру", "Настройки…", "Выход" }),
-                "The capsule menu contains the four actions available in the single view");
+                .SequenceEqual(new[] { "Скрыть в трей", "Пропускать клики в игру", "Редактировать HUD…", "Настройки…", "Выход" }),
+                "The capsule menu includes the live layout action");
             Check(window.IsVisible && window.Opacity == 0 && !window.ShowActivated && !window.ShowInTaskbar,
                 "The native test window stays transparent, nonactivating and absent from taskbar");
             tray = new TrayService(window, window.ToggleTrayVisibility, () => { }, showVisible: window.RestoreFromTray);

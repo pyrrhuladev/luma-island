@@ -51,4 +51,67 @@ Check(HudLayoutSettings.Normalize(JsonSerializer.Deserialize<HudLayoutSettings>(
     "A detached monitor position round-trips through the settings JSON");
 Check(JsonSerializer.Deserialize<HudLayoutSettings>("{\"detachedMusic\":true,\"musicPosition\":null}", jsonOptions) is { DetachedMusic: true, MusicPosition: null },
     "Split mode may intentionally request initial automatic placement");
+
+Check(canonicalDetached.Capsules is null && migrated?.Capsules is null, "Legacy layouts keep their existing runtime until a capsule draft is started");
+var mainLayout = HudCapsuleLayout.FromLegacy(new(BlockOrder: "music,metrics,header", MetricOrder: "memory,cpu,gpu"));
+Check(mainLayout.Islands.SequenceEqual(new[] { new HudCapsule("main", "music,memory,cpu,gpu,header") }),
+    "Opening a capsule draft retains the legacy block and hardware order");
+var split = HudCapsuleLayout.FromLegacy(canonicalDetached with { BlockOrder = "metrics,music,header", MetricOrder = "gpu,cpu,memory" });
+Check(split.Islands.SequenceEqual(new[] { new HudCapsule("main", "gpu,cpu,memory,header"), new HudCapsule("music", "music", canonicalPosition) }),
+    "Opening a capsule draft retains the detached player's monitor, position and remaining block order");
+Check(HudCapsuleLayout.FromLegacy(detached with { MusicPosition = null }).Islands[1].Position is null,
+    "Automatic legacy music placement remains automatic in the capsule model");
+
+var splitCpu = mainLayout.Move("cpu", null, 0, musicPosition);
+var cpu = splitCpu.Islands[1];
+Check(splitCpu.Islands[0].Items == "music,memory,gpu,header" && cpu.Items == "cpu" && cpu.Position == canonicalPosition,
+    "Dropping CPU outside gives it one independent capsule at the normalized drop position");
+var movedCpu = splitCpu.Move("cpu", null, 0, new("DISPLAY1", .1, .2));
+Check(movedCpu.Islands.Length == 2 && movedCpu.Islands[1] == cpu with { Position = new("DISPLAY1", .1, .2) },
+    "Dragging a one-block capsule's content outside preserves its identity");
+Check(ReferenceEquals(splitCpu.WithPosition("main", canonicalPosition), splitCpu) &&
+      ReferenceEquals(splitCpu.WithPosition(cpu.Id, canonicalPosition), splitCpu),
+    "The primary placement belongs to the existing placement store, and an unchanged detached anchor does not edit layout");
+
+var grouped = splitCpu.Move("gpu", cpu.Id, 0);
+Check(grouped.Islands[1].Items == "gpu,cpu" && grouped.Islands[1].Position == canonicalPosition &&
+      grouped.Islands[0].Items == "music,memory,header",
+    "Moving GPU before CPU groups both indicators in the existing destination without shifting its anchor");
+var musicBelow = grouped.Move("music", cpu.Id, 2);
+Check(musicBelow.Islands[1].Items == "gpu,cpu,music" && musicBelow.Islands[0].Items == "memory,header",
+    "Music can join a hardware capsule below the metric grid");
+var musicAbove = musicBelow.Move("music", cpu.Id, 0);
+Check(musicAbove.Islands[1].Items == "music,gpu,cpu",
+    "A drop above the hardware grid changes the music order inside the same capsule");
+var reordered = musicAbove.Move("cpu", cpu.Id, 1);
+Check(reordered.Islands[1].Items == "music,cpu,gpu",
+    "Reordering hardware respects pre-removal insertion indexes");
+var emptied = splitCpu.Move("cpu", "main", 2);
+Check(emptied == mainLayout, "Returning the only detached widget removes its empty capsule and preserves value equality");
+Check(ReferenceEquals(mainLayout.Move("header", null, 0, canonicalPosition), mainLayout) &&
+      ReferenceEquals(mainLayout.Move("cpu", "missing", 0), mainLayout) &&
+      ReferenceEquals(mainLayout.Move("cpu", null, 0), mainLayout),
+    "Invalid destinations and attempts to move the fixed header leave the draft intact");
+
+var malformed = new HudCapsuleLayout([
+    new(" FIRST ", "gpu, music,cpu,header,unknown,gpu", new(" DISPLAY1 ", -1, 2)),
+    new("MAIN", "memory,header,memory", canonicalPosition),
+    new("first", "cpu"),
+    new("bad/path", "header"),
+    new("empty", "alien")
+]);
+var repaired = HudCapsuleLayout.Normalize(malformed);
+Check(repaired.Islands.SequenceEqual(new[] {
+    new HudCapsule("main", "memory,header"), new HudCapsule("first", "gpu,cpu,music", new("DISPLAY1", 0, 1))
+}), "Normalization repairs IDs, monitor anchors, duplicate widgets, invalid islands and hardware grouping");
+Check(ReferenceEquals(HudCapsuleLayout.Normalize(repaired), repaired) &&
+      HudCapsuleLayout.Normalize(new(default)) == HudCapsuleLayout.FromLegacy(HudLayoutSettings.Default),
+    "Normalization returns a stable value and restores missing widgets to the main capsule");
+Check(musicBelow.Islands[1].GetInsertionIndex("music", 1) == 0 &&
+      musicBelow.Islands[1].GetInsertionIndex("memory", 3) == 2,
+    "Drop previews can use the same metric-grid insertion boundaries as the model");
+var capsuleSettings = canonicalDetached with { Capsules = reordered };
+string capsuleJson = JsonSerializer.Serialize(capsuleSettings, jsonOptions);
+Check(HudLayoutSettings.Normalize(JsonSerializer.Deserialize<HudLayoutSettings>(capsuleJson, jsonOptions)) == capsuleSettings,
+    "Ordered capsules and their independent positions round-trip with value equality through layout JSON");
 Console.WriteLine($"PASS: {count} HUD layout settings checks.");

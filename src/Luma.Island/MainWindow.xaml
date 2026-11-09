@@ -6,7 +6,7 @@
         Background="Transparent" Topmost="True" ShowInTaskbar="False"
         ShowActivated="False" WindowStartupLocation="Manual"
         FontFamily="Segoe UI" Foreground="{DynamicResource TextPrimary}"
-        UseLayoutRounding="True" SnapsToDevicePixels="True">
+        UseLayoutRounding="True" SnapsToDevicePixels="True" PreviewKeyDown="OnCapsuleEditorKeyDown">
     <Window.Resources>
         <Style TargetType="TextBlock">
             <Setter Property="Effect" Value="{DynamicResource GlassTextShadow}"/>
@@ -312,6 +312,25 @@
                          VerticalAlignment="Top" Margin="0,8,10,0" Fill="#F3BE64" Visibility="Collapsed"
                          AutomationProperties.Name="Предупреждение HUD"/>
             </Grid>
+        </Border>
+        <Border x:Name="CapsuleMoveGrip" Visibility="Collapsed" Width="14" Height="36"
+                HorizontalAlignment="Left" VerticalAlignment="Top" Margin="1,22,0,0"
+                Background="#E8213432" BorderBrush="#659C8D" BorderThickness="1" CornerRadius="5"
+                Cursor="SizeAll" PreviewMouseLeftButtonDown="OnCapsuleGripDown"
+                ToolTip="Переместить всю капсулу" AutomationProperties.Name="Переместить всю капсулу">
+            <TextBlock Text="⋮" Foreground="{StaticResource Mint}" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+        <Border x:Name="CapsuleEditBar" Visibility="Collapsed" Height="32" Margin="16,0,16,6"
+                Background="#F01A252C" BorderBrush="#45655D" BorderThickness="1" CornerRadius="9"
+                VerticalAlignment="Bottom" Padding="9,0">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Готово" Width="64" Height="25" Foreground="{StaticResource Mint}"
+                        Style="{StaticResource QuietButton}" Click="OnCapsuleEditDone"/>
+                <Button DockPanel.Dock="Right" Content="Отмена" Width="62" Height="25"
+                        Style="{StaticResource QuietButton}" Click="OnCapsuleEditCancel"/>
+                <TextBlock Text="Перетащите блок или ручку капсулы" Foreground="#D9E9E5" FontSize="11"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
         </Border>
     </Grid>
 </Window>

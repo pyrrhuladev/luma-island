@@ -13,6 +13,8 @@ public sealed record HudLayoutSettings(
     bool DetachedMusic = false,
     HudIslandPosition? MusicPosition = null)
 {
+    public HudCapsuleLayout? Capsules { get; init; }
+
     public static HudLayoutSettings Default { get; } = new();
     public const double MinTextScale = .8;
     public const double MaxTextScale = 1.3;
@@ -29,7 +31,8 @@ public sealed record HudLayoutSettings(
             MetricColumns = Math.Clamp(settings.MetricColumns, 1, 3),
             TextScale = double.IsFinite(settings.TextScale) ? Math.Clamp(settings.TextScale, MinTextScale, MaxTextScale) : 1,
             Spacing = double.IsFinite(settings.Spacing) ? Math.Clamp(settings.Spacing, MinSpacing, MaxSpacing) : 6,
-            MusicPosition = HudIslandPosition.Normalize(settings.MusicPosition)
+            MusicPosition = HudIslandPosition.Normalize(settings.MusicPosition),
+            Capsules = settings.Capsules is { } capsules ? HudCapsuleLayout.Normalize(capsules) : null
         };
     }
 

@@ -14,21 +14,23 @@ public partial class MainWindow
     public event Action<ComponentSettings>? ComponentsChanged;
     public bool HasPerformance => Components.Cpu || Components.Gpu || Components.Memory || Components.Fps
         || Components.GpuTemperature || Components.CpuTemperature || Components.MemoryTemperature || Components.OnePercentLow || Components.FrameTime;
-    private bool HasHardwareMetrics => Components.Cpu || Components.Gpu || Components.Memory
-        || Components.GpuTemperature || Components.CpuTemperature || Components.MemoryTemperature;
-    private double TemperatureRowHeight => (Components.Gpu && Components.GpuTemperature)
-        || (Components.Cpu && Components.CpuTemperature) || (Components.Memory && Components.MemoryTemperature) ? 16 : 0;
-    private double HudHeaderContentHeight => (Components.Fps || Components.OnePercentLow ? 50
-        : Components.Time || _batteryVisible ? 24 : 0) * LayoutGrowth;
+    private bool HasHardwareMetrics => PresentedComponents.Cpu || PresentedComponents.Gpu || PresentedComponents.Memory
+        || PresentedComponents.GpuTemperature || PresentedComponents.CpuTemperature || PresentedComponents.MemoryTemperature;
+    private double TemperatureRowHeight => (PresentedComponents.Gpu && PresentedComponents.GpuTemperature)
+        || (PresentedComponents.Cpu && PresentedComponents.CpuTemperature) || (PresentedComponents.Memory && PresentedComponents.MemoryTemperature) ? 16 : 0;
+    private double HudHeaderContentHeight => (PresentedComponents.Fps || PresentedComponents.OnePercentLow ? 50
+        : PresentedComponents.Time || _batteryVisible ? 24 : 0) * LayoutGrowth;
     private double HudMetricsContentHeight => HasHardwareMetrics ? CompactMetricGridHeight + 2 * LayoutSpacing : 0;
     private double HudMusicContentHeight => MusicInThisIsland ? 44 * LayoutGrowth : 0;
     private double HudHeaderHeight => HudHeaderContentHeight > 0 ? HudHeaderContentHeight + LayoutBlockGap("header") : 0;
     private double HudMetricsHeight => HudMetricsContentHeight > 0 ? HudMetricsContentHeight + LayoutBlockGap("metrics") : 0;
     private double HudMusicHeight => HudMusicContentHeight > 0 ? HudMusicContentHeight + LayoutBlockGap("music") : 0;
     private double HudVolumeHeight => VolumeInThisIsland ? 28 * LayoutGrowth : 0;
-    private double HudDateHeight => Components.Date ? 19 * LayoutGrowth : 0;
-    private const double BaseCollapsedWindowWidth = 408;
-    private const double CollapsedSurfaceWidth = 376;
+    private double HudDateHeight => PresentedComponents.Date ? 19 * LayoutGrowth : 0;
+    private double BaseCollapsedWindowWidth => _capsuleId is not null && !MusicInThisIsland && !VolumeInThisIsland
+        ? Math.Min(408, 68 + LayoutGrowth * Math.Max(LayoutMetricColumns * 100,
+            PresentedComponents.Charts ? Math.Min(2, EnabledChartCount) * 126 : 0)) : 408;
+    private double CollapsedSurfaceWidth => BaseCollapsedWindowWidth - 32;
     private double BaseCollapsedWindowHeight => 38 + Math.Max(20,
         HudHeaderHeight + HudMetricsHeight + HudMusicHeight + ChartsHeight + LayoutFrameTimeHeight + HudVolumeHeight + HudDateHeight);
     public double CollapsedWindowHeight => ScaledHudDimension(BaseCollapsedWindowHeight);
@@ -61,32 +63,35 @@ public partial class MainWindow
     private static Visibility Show(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
     private void ApplyComponentVisibility()
     {
+        RefreshCapsuleProjection();
         CompactMusicRow.Visibility = Show(MusicInThisIsland);
         CompactArtworkFrame.Visibility = Show(MusicInThisIsland);
         CompactArtworkColumn.Width = new GridLength(MusicInThisIsland ? 30 : 0);
-        CompactClock.Visibility = Show(Components.Time);
-        DateLabel.Visibility = Show(Components.Date);
+        CompactClock.Visibility = Show(PresentedComponents.Time);
+        DateLabel.Visibility = Show(PresentedComponents.Date);
         CompactArtist.Visibility = Show(MusicInThisIsland);
         CompactPlaybackControls.Visibility = Show(MusicInThisIsland);
         CompactVolume.Visibility = Show(VolumeInThisIsland);
         CompactPerformance.Visibility = Show(HasHardwareMetrics);
-        CompactCpu.Visibility = Show(Components.Cpu || Components.CpuTemperature);
-        CompactGpu.Visibility = Show(Components.Gpu || Components.GpuTemperature);
-        CompactMemory.Visibility = Show(Components.Memory || Components.MemoryTemperature);
-        CompactFps.Visibility = Show(Components.Fps);
-        CompactFpsPanel.Visibility = Show(Components.Fps);
-        CompactLowPanel.Visibility = Show(Components.OnePercentLow);
-        FrameTimeCard.Visibility = Show(Components.FrameTime);
+        CompactCpu.Visibility = Show(PresentedComponents.Cpu || PresentedComponents.CpuTemperature);
+        CompactGpu.Visibility = Show(PresentedComponents.Gpu || PresentedComponents.GpuTemperature);
+        CompactMemory.Visibility = Show(PresentedComponents.Memory || PresentedComponents.MemoryTemperature);
+        CompactFps.Visibility = Show(PresentedComponents.Fps);
+        CompactFpsPanel.Visibility = Show(PresentedComponents.Fps);
+        CompactLowPanel.Visibility = Show(PresentedComponents.OnePercentLow);
+        FrameTimeCard.Visibility = Show(PresentedComponents.FrameTime);
         RefreshFrameMetricVisibility();
         RefreshGpuMetric();
         RefreshCpuMemoryMetrics();
         RefreshChartsVisibility();
         RefreshComponentSize();
         SynchronizeMusicIsland();
+        RefreshCapsuleEditChrome();
     }
 
     private void RefreshComponentSize()
     {
+        CompactContentGrid.Width = CollapsedSurfaceWidth - 28;
         ApplyHudLayout();
         UpdateHudScaleTransform();
         HudHeaderRow.Height = new GridLength(HudHeaderHeight);
@@ -95,7 +100,9 @@ public partial class MainWindow
         HudMusicRow.Height = new GridLength(HudMusicHeight);
         IslandSurface.Height = BaseCollapsedWindowHeight - 24;
         IslandSurface.Width = CollapsedSurfaceWidth;
-        Height = CollapsedWindowHeight;
+        IslandSurface.Visibility = !IsCapsuleLayoutActive || HasCapsuleContent || IsCapsuleLayoutEditing
+            ? Visibility.Visible : Visibility.Hidden;
+        Height = ScaledHudDimension(BaseCollapsedWindowHeight + CapsuleEditBarHeight);
         Width = CollapsedWindowWidth;
         _placement?.Apply();
     }
@@ -109,7 +116,11 @@ public partial class MainWindow
         string percent = battery.Percent >= 0 ? $"{battery.Percent}%" : "—";
         CompactBattery.Text = percent;
         CompactBattery.ToolTip = battery.IsCharging ? $"Заряжается · {percent}" : $"Батарея · {percent}";
-        if (changed) RefreshComponentSize();
+        if (changed)
+        {
+            RefreshComponentSize();
+            if (IsCapsuleLayoutActive && IsLoaded) NotifyPresentationVisibilityChanged();
+        }
     }
 
     public void ApplyPerformance(PerformanceSnapshot snapshot)
@@ -124,27 +135,32 @@ public partial class MainWindow
         if (_closed) return;
         _lastPerformance = snapshot;
         if (observeAlerts) ApplyAlertPerformance(snapshot);
-        RefreshGpuMetric();
-        RefreshCpuMemoryMetrics();
+        if (!IsCapsuleLayoutActive || HasHardwareMetrics)
+        {
+            RefreshGpuMetric();
+            RefreshCpuMemoryMetrics();
+        }
         RecordPerformanceHistory(snapshot);
+        foreach (var child in _capsuleWindows.Values)
+            if (child.IsVisible && child.HasHardwareMetrics) child.ApplyPerformanceCore(snapshot, observeAlerts: false);
     }
 
     private void RefreshCpuMemoryMetrics()
     {
-        string cpuLabel = Components.Cpu ? Percent("CPU", _lastPerformance.CpuPercent) : "CPU";
-        string memoryLabel = Components.Memory ? Percent("RAM", _lastPerformance.MemoryPercent) : "RAM";
-        string cpuTip = Components.Cpu ? CpuUsageDescription(_lastPerformance.CpuUsageSource) : string.Empty;
-        string memoryTip = Components.Memory && _lastPerformance.TotalMemoryBytes > 0
+        string cpuLabel = PresentedComponents.Cpu ? Percent("CPU", _lastPerformance.CpuPercent) : "CPU";
+        string memoryLabel = PresentedComponents.Memory ? Percent("RAM", _lastPerformance.MemoryPercent) : "RAM";
+        string cpuTip = PresentedComponents.Cpu ? CpuUsageDescription(_lastPerformance.CpuUsageSource) : string.Empty;
+        string memoryTip = PresentedComponents.Memory && _lastPerformance.TotalMemoryBytes > 0
             ? $"Память: {_lastPerformance.UsedMemoryBytes / 1073741824d:0.0} / {_lastPerformance.TotalMemoryBytes / 1073741824d:0.0} ГБ" : string.Empty;
-        if (Components.CpuTemperature)
+        if (PresentedComponents.CpuTemperature)
         {
-            cpuLabel += (Components.Cpu ? "\n" : " ") + Degrees(_lastPerformance.CpuTemperatureCelsius);
+            cpuLabel += (PresentedComponents.Cpu ? "\n" : " ") + Degrees(_lastPerformance.CpuTemperatureCelsius);
             cpuTip += (cpuTip.Length > 0 ? "\n" : "") + "Температура CPU Package / Tctl/Tdie.\n"
                 + SensorStatusText(_lastPerformance.CpuTemperatureStatus);
         }
-        if (Components.MemoryTemperature)
+        if (PresentedComponents.MemoryTemperature)
         {
-            memoryLabel += (Components.Memory ? "\n" : " ") + Degrees(_lastPerformance.MemoryTemperatureCelsius, memory: true);
+            memoryLabel += (PresentedComponents.Memory ? "\n" : " ") + Degrees(_lastPerformance.MemoryTemperatureCelsius, memory: true);
             memoryTip += (memoryTip.Length > 0 ? "\n" : "") + "Максимальная температура доступных модулей RAM (датчик DIMM / SPD hub).\n"
                 + SensorStatusText(_lastPerformance.MemoryTemperatureStatus);
         }
@@ -179,15 +195,15 @@ public partial class MainWindow
 
     private void RefreshGpuMetric()
     {
-        string label = Components.Gpu ? Percent("GPU", _lastPerformance.GpuPercent) : "GPU";
-        string tip = Components.Gpu ? (_lastPerformance.GpuPercent.HasValue
+        string label = PresentedComponents.Gpu ? Percent("GPU", _lastPerformance.GpuPercent) : "GPU";
+        string tip = PresentedComponents.Gpu ? (_lastPerformance.GpuPercent.HasValue
             ? "Загрузка самого занятого графического движка" : "Нет данных GPU от системного счётчика Windows") : string.Empty;
-        if (Components.GpuTemperature)
+        if (PresentedComponents.GpuTemperature)
         {
             double? temperature = _lastPerformance.GpuTemperatureCelsius;
             string degrees = temperature is >= 0 and <= 150 && double.IsFinite(temperature.Value)
                 ? temperature.Value.ToString("0", _culture) : "—";
-            label += (Components.Gpu ? "\n" : " ") + degrees + "\u00a0°C";
+            label += (PresentedComponents.Gpu ? "\n" : " ") + degrees + "\u00a0°C";
             if (tip.Length > 0) tip += "\n";
             tip += "Температура ядра GPU: максимум среди доступных видеокарт NVIDIA.\n"
                 + (_lastPerformance.GpuTemperatureStatus ?? "Данных пока нет.");

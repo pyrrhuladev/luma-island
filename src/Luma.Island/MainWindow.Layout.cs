@@ -16,19 +16,20 @@ public partial class MainWindow
     private double LayoutTextScale => LayoutSettings.TextScale;
     private double LayoutGrowth => Math.Max(1, LayoutTextScale);
     private double LayoutSpacing => LayoutSettings.Spacing;
-    private int VisibleHardwareCount => (Components.Cpu || Components.CpuTemperature ? 1 : 0)
-        + (Components.Gpu || Components.GpuTemperature ? 1 : 0) + (Components.Memory || Components.MemoryTemperature ? 1 : 0);
+    private int VisibleHardwareCount => (PresentedComponents.Cpu || PresentedComponents.CpuTemperature ? 1 : 0)
+        + (PresentedComponents.Gpu || PresentedComponents.GpuTemperature ? 1 : 0)
+        + (PresentedComponents.Memory || PresentedComponents.MemoryTemperature ? 1 : 0);
     private int LayoutMetricColumns => Math.Max(1, Math.Min(VisibleHardwareCount, LayoutSettings.MetricColumns));
     private int LayoutMetricRows => VisibleHardwareCount == 0 ? 0 : (VisibleHardwareCount + LayoutMetricColumns - 1) / LayoutMetricColumns;
     private double CompactMetricCellHeight => (28 + TemperatureRowHeight) * LayoutGrowth;
     private double CompactMetricGridHeight => LayoutMetricRows == 0 ? 0
         : CompactMetricCellHeight * LayoutMetricRows + LayoutSpacing * (LayoutMetricRows - 1);
-    private double LayoutFrameTimeHeight => Components.FrameTime ? 72 + (LayoutGrowth - 1) * 32 : 0;
+    private double LayoutFrameTimeHeight => PresentedComponents.FrameTime ? 72 + (LayoutGrowth - 1) * 32 : 0;
 
     private double LayoutBlockGap(string block)
     {
         bool previousVisible = false;
-        foreach (string key in LayoutSettings.BlockOrder.Split(','))
+        foreach (string key in PresentationLayout.BlockOrder.Split(','))
         {
             bool visible = key switch { "header" => HudHeaderContentHeight > 0, "metrics" => HudMetricsContentHeight > 0, _ => HudMusicContentHeight > 0 };
             if (key == block) return previousVisible && visible ? LayoutSpacing - 6 : 0;
@@ -52,7 +53,7 @@ public partial class MainWindow
     private void ApplyHudLayout()
     {
         if (CompactContentGrid is null) return;
-        var layout = HudLayoutSettings.Normalize(Appearance.Layout);
+        var layout = _presentationLayout ?? HudLayoutSettings.Normalize(Appearance.Layout);
         if (!_layoutFontsCaptured && Content is not null) { CaptureLayoutFonts(Content); _layoutFontsCaptured = true; }
         foreach (var item in _layoutBaseFonts) item.Key.FontSize = item.Value * layout.TextScale;
         CompactCpu.LineHeight = CompactGpu.LineHeight = CompactMemory.LineHeight = 16 * layout.TextScale;
@@ -88,7 +89,7 @@ public partial class MainWindow
         CompactPerformance.Height = CompactMetricGridHeight;
         double bandMargin = layout.Spacing;
         HudHeader.Margin = new Thickness(0, LayoutBlockGap("header"), 0, 0);
-        CompactLowPanel.Margin = new Thickness(Components.Fps ? 12 : 0, 0, 0, 0);
+        CompactLowPanel.Margin = new Thickness(PresentedComponents.Fps ? 12 : 0, 0, 0, 0);
         CompactMusicRow.Margin = new Thickness(0, LayoutBlockGap("music"), 0, 0);
         CompactPerformance.Margin = new Thickness(0, bandMargin + LayoutBlockGap("metrics"), 0, bandMargin);
         int visibleIndex = 0;
@@ -114,25 +115,26 @@ public partial class MainWindow
     // measurements on every frame update, while keeping large user fonts inside the capsule.
     private void FitHeaderText(bool force = false)
     {
-        var key = (Components.Fps ? CompactFps.Text.Length : 0, Components.OnePercentLow ? CompactOnePercentLow.Text.Length : 0,
-            Components.Time, _batteryVisible, LayoutTextScale);
+        var key = (PresentedComponents.Fps ? CompactFps.Text.Length : 0,
+            PresentedComponents.OnePercentLow ? CompactOnePercentLow.Text.Length : 0,
+            PresentedComponents.Time, _batteryVisible, LayoutTextScale);
         if (!force && _headerFitKey == key) return;
         _headerFitKey = key;
         double factor = LayoutTextScale;
         CompactFps.FontSize = 34 * factor;
-        CompactOnePercentLow.FontSize = (Components.Fps ? 18 : 24) * factor;
+        CompactOnePercentLow.FontSize = (PresentedComponents.Fps ? 18 : 24) * factor;
         CompactFpsUnit.FontSize = 11 * factor;
         if (CompactLowPanel.Children[0] is TextBlock lowLabel) lowLabel.FontSize = 11 * factor;
-        if (!Components.Fps && !Components.OnePercentLow) return;
+        if (!PresentedComponents.Fps && !PresentedComponents.OnePercentLow) return;
         static double Width(FrameworkElement element)
         {
             element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             return element.DesiredSize.Width;
         }
         double right = 0;
-        if (Components.Time) right += Width(CompactClock);
+        if (PresentedComponents.Time) right += Width(CompactClock);
         if (_batteryVisible) right += Width(CompactBattery);
-        double needed = (Components.Fps ? Width(CompactFpsPanel) : 0) + (Components.OnePercentLow ? Width(CompactLowPanel) : 0);
+        double needed = (PresentedComponents.Fps ? Width(CompactFpsPanel) : 0) + (PresentedComponents.OnePercentLow ? Width(CompactLowPanel) : 0);
         double fit = needed > 0 ? Math.Min(1, Math.Max(1, CompactContentGrid.Width - right - 2) / needed) : 1;
         if (fit >= 1) return;
         CompactFps.FontSize *= fit;

@@ -182,7 +182,8 @@ public partial class App : System.Windows.Application
     {
         var island = _island ?? throw new InvalidOperationException("HUD is not initialized.");
         _tray = new TrayService(island, ToggleVisible, () => Shutdown(), showVisible: island.RestoreForInteraction,
-            inputMenuFactory: island.CreateInputMenuItem, hudEditorMenuFactory: island.CreateSettingsMenuItem);
+            inputMenuFactory: island.CreateInputMenuItem, hudEditorMenuFactory: island.CreateSettingsMenuItem,
+            capsuleEditorMenuFactory: island.CreateCapsuleEditMenuItem);
         _tray.RegistrationChanged += OnTrayRegistrationChanged;
         _island.InputModeChanged += OnInputModeChanged;
     }

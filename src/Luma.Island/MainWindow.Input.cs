@@ -47,6 +47,7 @@ public partial class MainWindow
         VerifyAccess();
         if (_islandOwner is not null) return _islandOwner.SetClickThrough(enabled);
         if (_closed) return false;
+        EndCapsuleEdit(save: false);
         if (enabled && !InputRecoveryAvailable)
         {
             _inputModeError = "Не удалось подключить горячую клавишу и значок трея. Управление HUD оставлено доступным.";

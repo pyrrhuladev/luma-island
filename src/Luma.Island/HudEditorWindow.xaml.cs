@@ -140,6 +140,9 @@ public partial class HudEditorWindow : Window
 
     private void LoadLayout(HudLayoutSettings layout)
     {
+        var legacy = layout.Capsules is null ? Visibility.Visible : Visibility.Collapsed;
+        LegacyIslandsCard.Visibility = LegacyOrderCard.Visibility = LegacyMetricOrderControls.Visibility = legacy;
+        CapsuleLayoutCard.Visibility = layout.Capsules is null ? Visibility.Collapsed : Visibility.Visible;
         TextScaleSlider.Value = layout.TextScale * 100;
         SpacingSlider.Value = layout.Spacing;
         ColumnsOneRadio.IsChecked = layout.MetricColumns == 1;

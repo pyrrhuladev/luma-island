@@ -6,7 +6,7 @@ using System.Windows.Shapes;
 
 namespace Luma.Island.Services;
 
-internal enum QuickMenuIcon { Hide, Show, Input, Settings, Exit }
+internal enum QuickMenuIcon { Hide, Show, Input, Settings, Exit, Edit }
 
 /// <summary>Shared resources for the HUD and tray quick-action menus.</summary>
 public static class QuickMenuTheme
@@ -18,7 +18,8 @@ public static class QuickMenuTheme
         Glyph("M 2,8 V 13 H 14 V 8 M 8,10 V 2 M 5,5 L 8,2 L 11,5"),
         Glyph("M 4,2 L 13,9 H 9 L 11,13 L 8.5,14 L 6.5,10 L 4,12 Z"),
         Glyph("M 2,4 H 5 M 8,4 H 14 M 5,2 V 6 M 2,8 H 10 M 13,8 H 14 M 10,6 V 10 M 2,12 H 5 M 8,12 H 14 M 5,10 V 14"),
-        Glyph("M 8,2 H 3 V 14 H 8 M 6,8 H 14 M 11,5 L 14,8 L 11,11")
+        Glyph("M 8,2 H 3 V 14 H 8 M 6,8 H 14 M 11,5 L 14,8 L 11,11"),
+        Glyph("M 2,4 H 10 V 7 H 2 Z M 6,9 H 14 V 12 H 6 Z")
     ];
     private static readonly Brush IconInk = Ink(0xBA, 0xC8, 0xD3);
     private static readonly Brush SettingsInk = Ink(0x9D, 0xE6, 0xD1);

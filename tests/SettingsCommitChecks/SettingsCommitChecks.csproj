@@ -13,6 +13,7 @@
     <Compile Include="../../src/Luma.Island/Services/GameProfileStore.cs" Link="GameProfileStore.cs" />
     <Compile Include="../../src/Luma.Island/Services/AppearanceStore.cs" Link="AppearanceStore.cs" />
     <Compile Include="../../src/Luma.Island/Services/HudLayoutSettings.cs" Link="HudLayoutSettings.cs" />
+    <Compile Include="../../src/Luma.Island/Services/HudCapsuleLayout.cs" Link="HudCapsuleLayout.cs" />
     <Compile Include="../../src/Luma.Island/Services/AlertSettings.cs" Link="AlertSettings.cs" />
     <Compile Include="../../src/Luma.Island/Services/ComponentStore.cs" Link="ComponentStore.cs" />
     <Compile Include="../../src/Luma.Island/Services/PlacementStore.cs" Link="PlacementStore.cs" />

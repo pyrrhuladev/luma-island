@@ -65,11 +65,11 @@ internal static class Program
             IntPtr handle = new WindowInteropHelper(window).EnsureHandle();
             window.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, window));
             var capsule = ((Border)window.FindName("IslandSurface")).ContextMenu;
-            var expected = new[] { "Показать капсулу", "Пропускать клики в игру", "Настройки…", "Выход" };
+            var expected = new[] { "Показать капсулу", "Пропускать клики в игру", "Редактировать HUD…", "Настройки…", "Выход" };
             Check(!window.IsVisible && !window.ShowActivated && !window.ShowInTaskbar && GetForegroundWindow() != handle,
                 "The production Loaded hook is exercised without displaying or activating the fixture HUD");
-            Check(capsule.Items.Count == 5 && capsule.Items[3] is Separator && Labels(capsule).SequenceEqual(expected),
-                "HUD exposes visibility, input, Settings and Exit");
+            Check(capsule.Items.Count == 6 && capsule.Items[4] is Separator && Labels(capsule).SequenceEqual(expected),
+                "HUD exposes visibility, input, live layout, Settings and Exit");
             Check(capsule.Items.OfType<MenuItem>().All(item => !item.HasItems), "HUD quick actions have no duplicated settings submenus");
             Check(capsule.Items.OfType<MenuItem>().Count(item => Equals(item.Header, "Настройки…")) == 1,
                 "HUD has a single unified Settings entry");
@@ -83,19 +83,20 @@ internal static class Program
             MenuItem Settings() { settingsCalls++; return window.CreateSettingsMenuItem(); }
             tray = new TrayService(window, () => { }, () => { },
                 positionMenuFactory: Legacy, appearanceMenuFactory: Legacy, componentsMenuFactory: Legacy, autostartMenuFactory: Legacy,
-                inputMenuFactory: window.CreateInputMenuItem, profilesMenuFactory: Legacy, hudEditorMenuFactory: Settings);
+                inputMenuFactory: window.CreateInputMenuItem, profilesMenuFactory: Legacy, hudEditorMenuFactory: Settings,
+                capsuleEditorMenuFactory: window.CreateCapsuleEditMenuItem);
             ShellRegistered = tray.IsRegistered;
             var trayMenu = (ContextMenu)typeof(TrayService).GetField("_menu", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(tray)!;
             Check(legacyCalls == 0 && settingsCalls == 1, "Unified tray Settings avoids constructing legacy settings branches");
-            Check(trayMenu.Items.Count == 5 && trayMenu.Items[3] is Separator && Labels(trayMenu).SequenceEqual(expected),
-                "Tray and HUD present the same four quick actions in the same order");
+            Check(trayMenu.Items.Count == 6 && trayMenu.Items[4] is Separator && Labels(trayMenu).SequenceEqual(expected),
+                "Tray and HUD present the same five quick actions in the same order");
             Check(capsule.Items.OfType<MenuItem>().Concat(trayMenu.Items.OfType<MenuItem>()).All(item => item.Icon is ShapePath { Data.IsFrozen: true }),
                 "Each quick action has a crisp vector icon in both menus");
             window.Show();
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             capsule.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent, capsule));
             trayMenu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent, trayMenu));
-            var visibleLabels = new[] { "Скрыть в трей", "Пропускать клики в игру", "Настройки…", "Выход" };
+            var visibleLabels = new[] { "Скрыть в трей", "Пропускать клики в игру", "Редактировать HUD…", "Настройки…", "Выход" };
             Check(Labels(capsule).SequenceEqual(visibleLabels) && Labels(trayMenu).SequenceEqual(visibleLabels),
                 "The visible HUD offers the hide action in both menus");
             window.HideToTray();
@@ -133,7 +134,7 @@ internal static class Program
                 "The compact themed menu measures to a bounded readable size");
             Check(BrushColor(capsule.Background) == "#FF141A21" && BrushColor(capsule.Foreground) == "#FFEDF3F7" &&
                   BrushColor(capsule.Background) == BrushColor(trayMenu.Background), "Both menu surfaces share the dark palette and readable foreground");
-            Check(FindVisuals<Border>((Separator)capsule.Items[3]).Any(border => BrushColor(border.Background) == "#FF2D3944"),
+            Check(FindVisuals<Border>((Separator)capsule.Items[4]).Any(border => BrushColor(border.Background) == "#FF2D3944"),
                 "The actual menu separator uses the muted shared palette rather than the default Windows line");
             var row = (Border)capsuleInput.Template.FindName("Row", capsuleInput)!;
             var marker = (ShapePath)capsuleInput.Template.FindName("Check", capsuleInput)!;
@@ -157,7 +158,7 @@ internal static class Program
             Check(capsuleInput.Focusable && KeyboardNavigation.GetDirectionalNavigation(FindVisual<ItemsPresenter>(capsule)!) == KeyboardNavigationMode.Cycle,
                 "Quick actions retain focusability and cyclic directional navigation");
             var shortcut = (Border)capsuleInput.Template.FindName("ShortcutBadge", capsuleInput)!;
-            var exit = (MenuItem)capsule.Items[4];
+            var exit = capsule.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Выход"));
             Check(FindVisuals<TextBlock>(shortcut).Any(text => text.Text == "Ctrl+Alt+I" && text.ActualWidth > 0) &&
                   ((Border)exit.Template.FindName("ShortcutBadge", exit)!).Visibility == Visibility.Collapsed,
                 "The template renders the input shortcut and hides the badge when the action has no shortcut");

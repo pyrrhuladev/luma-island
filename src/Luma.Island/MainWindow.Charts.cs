@@ -13,8 +13,11 @@ public partial class MainWindow
 {
     private readonly MetricHistory _cpuHistory = new(), _gpuHistory = new(), _memoryHistory = new(), _fpsHistory = new();
     private string? _fpsHistoryProcess;
-    private int EnabledChartCount => (Components.Cpu ? 1 : 0) + (Components.Gpu ? 1 : 0) +
-        (Components.Memory ? 1 : 0) + (Components.Fps ? 1 : 0);
+    private MetricHistory CpuHistory => _islandOwner?._cpuHistory ?? _cpuHistory;
+    private MetricHistory GpuHistory => _islandOwner?._gpuHistory ?? _gpuHistory;
+    private MetricHistory MemoryHistory => _islandOwner?._memoryHistory ?? _memoryHistory;
+    private int EnabledChartCount => (PresentedComponents.Cpu ? 1 : 0) + (PresentedComponents.Gpu ? 1 : 0) +
+        (PresentedComponents.Memory ? 1 : 0) + (PresentedComponents.Fps ? 1 : 0);
     private double ChartCardHeight => 64 + (LayoutGrowth - 1) * 32;
     public double ChartsHeight => !Components.Charts || EnabledChartCount == 0 ? 0
         : EnabledChartCount <= 2 ? ChartCardHeight + 6 : 2 * ChartCardHeight + 12;
@@ -24,26 +27,34 @@ public partial class MainWindow
         VerifyAccess();
         if (!Components.Charts || _closed) return;
         double now = ChartTime();
-        if (Components.Cpu)
+        if (_islandOwner is null)
         {
-            _cpuHistory.Add(now, CpuUtilityValue(snapshot.CpuPercent));
+            if (Components.Cpu) _cpuHistory.Add(now, CpuUtilityValue(snapshot.CpuPercent));
+            if (Components.Gpu) _gpuHistory.Add(now, PercentValue(snapshot.GpuPercent));
+            if (Components.Memory) _memoryHistory.Add(now, PercentValue(snapshot.MemoryPercent));
+        }
+        UpdatePerformanceChartValues(snapshot);
+        if (PresentedComponents.Cpu) DrawCpuChart(now);
+        if (PresentedComponents.Gpu) DrawChart(GpuHistory, GpuChartCanvas, GpuChartGrid, GpuChartLine, 100, now);
+        if (PresentedComponents.Memory) DrawChart(MemoryHistory, MemoryChartCanvas, MemoryChartGrid, MemoryChartLine, 100, now);
+    }
+
+    private void UpdatePerformanceChartValues(PerformanceSnapshot snapshot)
+    {
+        if (PresentedComponents.Cpu)
+        {
             CpuChartValue.Text = CpuUtilityValue(snapshot.CpuPercent) is double cpu ? cpu.ToString("0", _culture) + "%" : "—";
             CpuChartCard.ToolTip = CompactCpu.ToolTip;
-            DrawCpuChart(now);
         }
-        if (Components.Gpu)
+        if (PresentedComponents.Gpu)
         {
-            _gpuHistory.Add(now, PercentValue(snapshot.GpuPercent));
             GpuChartValue.Text = ChartPercent(snapshot.GpuPercent);
             GpuChartCard.ToolTip = CompactGpu.ToolTip;
-            DrawChart(_gpuHistory, GpuChartCanvas, GpuChartGrid, GpuChartLine, 100, now);
         }
-        if (Components.Memory)
+        if (PresentedComponents.Memory)
         {
-            _memoryHistory.Add(now, PercentValue(snapshot.MemoryPercent));
             MemoryChartValue.Text = ChartPercent(snapshot.MemoryPercent);
             MemoryChartCard.ToolTip = CompactMemory.ToolTip;
-            DrawChart(_memoryHistory, MemoryChartCanvas, MemoryChartGrid, MemoryChartLine, 100, now);
         }
     }
 
@@ -69,21 +80,21 @@ public partial class MainWindow
     {
         VerifyAccess();
         ChartsPanel.Visibility = ChartsHeight > 0 ? Visibility.Visible : Visibility.Collapsed;
-        var cards = new (Border Card, bool Enabled, MetricHistory History, ShapePath Line, TextBlock Value)[]
+        var cards = new (Border Card, bool Presented, bool Enabled, MetricHistory History, ShapePath Line, TextBlock Value)[]
         {
-            (CpuChartCard, Components.Cpu, _cpuHistory, CpuChartLine, CpuChartValue),
-            (GpuChartCard, Components.Gpu, _gpuHistory, GpuChartLine, GpuChartValue),
-            (MemoryChartCard, Components.Memory, _memoryHistory, MemoryChartLine, MemoryChartValue),
-            (FpsChartCard, Components.Fps, _fpsHistory, FpsChartLine, FpsChartValue)
+            (CpuChartCard, PresentedComponents.Cpu, Components.Cpu, _cpuHistory, CpuChartLine, CpuChartValue),
+            (GpuChartCard, PresentedComponents.Gpu, Components.Gpu, _gpuHistory, GpuChartLine, GpuChartValue),
+            (MemoryChartCard, PresentedComponents.Memory, Components.Memory, _memoryHistory, MemoryChartLine, MemoryChartValue),
+            (FpsChartCard, PresentedComponents.Fps, Components.Fps, _fpsHistory, FpsChartLine, FpsChartValue)
         };
         int visible = 0;
         foreach (var card in cards)
         {
-            bool enabled = Components.Charts && card.Enabled;
+            bool enabled = Components.Charts && card.Presented;
             card.Card.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
             if (!enabled)
             {
-                card.History.Clear();
+                if (_islandOwner is null && !(Components.Charts && card.Enabled)) card.History.Clear();
                 card.Line.Data = null;
                 card.Value.Text = "—";
                 continue;
@@ -94,7 +105,11 @@ public partial class MainWindow
             visible++;
         }
         if (!Components.Charts || !Components.Fps) _fpsHistoryProcess = null;
-        if (Components.Charts) DrawAllCharts();
+        if (Components.Charts)
+        {
+            if (IsCapsuleLayoutActive) UpdatePerformanceChartValues(_lastPerformance);
+            DrawAllCharts();
+        }
     }
 
     public void ClearMetricHistory()
@@ -119,10 +134,10 @@ public partial class MainWindow
     private void DrawAllCharts()
     {
         double now = ChartTime();
-        if (Components.Cpu) DrawCpuChart(now);
-        if (Components.Gpu) DrawChart(_gpuHistory, GpuChartCanvas, GpuChartGrid, GpuChartLine, 100, now);
-        if (Components.Memory) DrawChart(_memoryHistory, MemoryChartCanvas, MemoryChartGrid, MemoryChartLine, 100, now);
-        if (Components.Fps) DrawFpsChart(now);
+        if (PresentedComponents.Cpu) DrawCpuChart(now);
+        if (PresentedComponents.Gpu) DrawChart(GpuHistory, GpuChartCanvas, GpuChartGrid, GpuChartLine, 100, now);
+        if (PresentedComponents.Memory) DrawChart(MemoryHistory, MemoryChartCanvas, MemoryChartGrid, MemoryChartLine, 100, now);
+        if (PresentedComponents.Fps) DrawFpsChart(now);
     }
 
     private void DrawFpsChart(double now)
@@ -134,9 +149,9 @@ public partial class MainWindow
 
     private void DrawCpuChart(double now)
     {
-        double maximum = MetricHistory.NiceUtilityMaximum(_cpuHistory.Maximum(now));
+        double maximum = MetricHistory.NiceUtilityMaximum(CpuHistory.Maximum(now));
         CpuChartScale.Text = $"0–{maximum:0}%";
-        DrawChart(_cpuHistory, CpuChartCanvas, CpuChartGrid, CpuChartLine, maximum, now);
+        DrawChart(CpuHistory, CpuChartCanvas, CpuChartGrid, CpuChartLine, maximum, now);
     }
 
     private static void DrawChart(MetricHistory history, Canvas canvas, ShapePath grid, ShapePath line, double maximum, double now)

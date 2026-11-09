@@ -50,6 +50,7 @@ public partial class MainWindow
         VerifyAccess();
         if (_islandOwner is not null) { _islandOwner.HideToTray(); return; }
         if (_closed) return;
+        EndCapsuleEdit(save: false);
         IslandSurface.ContextMenu.IsOpen = false;
         Hide(); // Keep the HWND, hotkey registration and native notification icon alive.
         RefreshTrayVisibilityMenu();

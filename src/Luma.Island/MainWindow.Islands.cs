@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -13,15 +15,16 @@ public partial class MainWindow
     private PlacementSettings? _automaticMusicPlacement;
     private bool _synchronizingMusicIsland;
 
-    public bool IsMusicIsland => _islandOwner is not null;
-    public MainWindow? MusicIsland => _musicIsland;
+    public bool IsMusicIsland => _islandOwner is not null && (MusicInThisIsland || VolumeInThisIsland);
+    public MainWindow? MusicIsland => _musicIsland ?? _capsuleWindows.Values.FirstOrDefault(window => window.IsMusicIsland);
     public bool IsHudPresentationVisible => _islandOwner?.IsHudPresentationVisible
-        ?? (IsVisible || _musicIsland?.IsVisible == true);
+        ?? (IsVisible && (!IsCapsuleLayoutActive || HasCapsuleContent || IsCapsuleLayoutEditing)
+            || _musicIsland?.IsVisible == true || CapsuleWindowsVisible);
     public event Action? PresentationVisibilityChanged;
 
-    private bool DetachMusic => _islandOwner is null && LayoutSettings.DetachedMusic;
-    private bool MusicInThisIsland => Components.Music && !DetachMusic;
-    private bool VolumeInThisIsland => Components.Volume && !DetachMusic;
+    private bool DetachMusic => _islandOwner is null && LayoutSettings.Capsules is null && LayoutSettings.DetachedMusic;
+    private bool MusicInThisIsland => PresentedComponents.Music && !DetachMusic;
+    private bool VolumeInThisIsland => PresentedComponents.Volume && !DetachMusic;
     private bool IsPositionLocked => (_islandOwner?._placement ?? _placement)?.Settings.Locked == true;
 
     private void InitializeIslandLifecycle()
@@ -43,22 +46,31 @@ public partial class MainWindow
 
     private void NotifyPresentationVisibilityChanged()
     {
-        if (!_closed) PresentationVisibilityChanged?.Invoke();
+        if (!_closed && !_synchronizingMusicIsland) PresentationVisibilityChanged?.Invoke();
     }
 
     private void OnIslandEditorVisibilityChanged(bool open)
     {
         // A modal settings draft must not race an independent music-window drag.
         if (_musicIsland is not null) _musicIsland.IsEnabled = !open;
+        foreach (var child in _capsuleWindows.Values) child.IsEnabled = !open;
     }
 
     private void SynchronizeMusicIsland()
     {
         // Settings previews are never shown and have no native placement controller.
         if (_islandOwner is not null || _closed || !IsLoaded || _placement is null || _synchronizingMusicIsland) return;
+        bool custom = LayoutSettings.Capsules is not null || _capsuleWindows.Count > 0;
         _synchronizingMusicIsland = true;
         try
         {
+            if (LayoutSettings.Capsules is { } capsules)
+            {
+                CloseMusicIsland();
+                SynchronizeCapsules(capsules);
+                return;
+            }
+            CloseCapsules();
             if (!DetachMusic || !(Components.Music || Components.Volume))
             {
                 CloseMusicIsland();
@@ -125,7 +137,11 @@ public partial class MainWindow
                 else SetClickThroughCore(false, persist: false); // Keep recovery consistent across both surfaces.
             }
         }
-        finally { _synchronizingMusicIsland = false; }
+        finally
+        {
+            _synchronizingMusicIsland = false;
+            if (custom) NotifyPresentationVisibilityChanged();
+        }
     }
 
     private AppearanceSettings MusicIslandAppearance() => Appearance with
@@ -185,6 +201,7 @@ public partial class MainWindow
         exit.Click += OnExit;
         menu.Items.Add(visibility);
         menu.Items.Add(owner.CreateInputMenuItem());
+        menu.Items.Add(owner.CreateCapsuleEditMenuItem());
         menu.Items.Add(owner.CreateSettingsMenuItem());
         menu.Items.Add(new Separator());
         menu.Items.Add(exit);
@@ -204,20 +221,33 @@ public partial class MainWindow
         if (IsKeyboardFocusWithin) Keyboard.ClearFocus();
     }
 
-    private void PrepareMusicIslandForClickThrough() => _musicIsland?.PrepareForIslandClickThrough();
+    private void PrepareMusicIslandForClickThrough()
+    {
+        _musicIsland?.PrepareForIslandClickThrough();
+        foreach (var child in _capsuleWindows.Values) child.PrepareForIslandClickThrough();
+    }
 
     private bool TrySetAllIslandClickThroughStyles(bool enabled)
     {
         bool previous = IsClickThrough;
         if (!TrySetClickThroughWindowStyle(enabled)) return false;
-        if (_musicIsland is not { } music) return true;
-        if (!music.TrySetClickThroughWindowStyle(enabled))
+        var applied = new List<MainWindow>();
+        foreach (var (_, window) in LayoutWindows())
         {
-            TrySetClickThroughWindowStyle(previous);
-            return false;
+            if (ReferenceEquals(window, this)) continue;
+            if (!window.TrySetClickThroughWindowStyle(enabled))
+            {
+                foreach (var child in applied) child.TrySetClickThroughWindowStyle(previous);
+                TrySetClickThroughWindowStyle(previous);
+                return false;
+            }
+            applied.Add(window);
         }
-        music.IsClickThrough = enabled;
-        music.Appearance = music.Appearance with { ClickThrough = enabled };
+        foreach (var child in applied)
+        {
+            child.IsClickThrough = enabled;
+            child.Appearance = child.Appearance with { ClickThrough = enabled };
+        }
         return true;
     }
 
@@ -245,6 +275,7 @@ public partial class MainWindow
         IsVisibleChanged -= OnIslandVisibilityChanged;
         ProfileEditorVisibilityChanged -= OnIslandEditorVisibilityChanged;
         CloseMusicIsland();
+        CloseCapsules();
     }
 
     // These adapters never read or write a second ordinary preferences file. Only a

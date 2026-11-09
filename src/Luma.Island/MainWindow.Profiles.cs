@@ -13,13 +13,15 @@ public partial class MainWindow
     public string? ActiveGameProfileId => _profiles?.ActiveProfileId;
     public GameProfileSettings GameProfiles => _profiles?.Settings ?? GameProfileSettings.Default;
     public bool IsProfileEditorOpen { get; private set; }
-    public bool IsHudDragging => _placement?.IsDragging == true || _musicIsland?._placement?.IsDragging == true;
+    public bool IsHudDragging => IsCapsuleLayoutEditing || _placement?.IsDragging == true ||
+        _musicIsland?._placement?.IsDragging == true || AnyCapsuleIsDragging;
     public event Action<GameProfileSettings>? ProfileConfigurationChanged;
     public event Action<bool>? ProfileEditorVisibilityChanged;
     public event Action? ProfileInteractionEnded;
     private void OnProfileDragCompleted()
     {
         if (_islandOwner is not null) { _islandOwner.OnProfileDragCompleted(); return; }
+        if (IsCapsuleLayoutEditing) return;
         SynchronizeMusicIsland();
         if (_musicIsland is not null)
         {
@@ -50,7 +52,7 @@ public partial class MainWindow
     public bool SetGameProfiles(GameProfileSettings settings)
     {
         VerifyAccess();
-        if (_closed || _profiles is null) return false;
+        if (_closed || _profiles is null || IsCapsuleLayoutEditing) return false;
         var current = CaptureHudSettings();
         string? previousId = _profiles.ActiveProfileId;
         bool saved = _profiles.CaptureCurrent(current);
@@ -91,6 +93,7 @@ public partial class MainWindow
     public bool SaveCurrentProfileEdits()
     {
         VerifyAccess();
+        if (IsCapsuleLayoutEditing) return true;
         if (_profiles is null) return true;
         bool saved = _profiles.CaptureCurrent(CaptureHudSettings());
         RecordProfileSaveResult(saved);

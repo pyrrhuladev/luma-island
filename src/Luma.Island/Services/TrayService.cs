@@ -32,7 +32,7 @@ public sealed class TrayService : IDisposable
         Func<MenuItem>? positionMenuFactory = null, Func<MenuItem>? appearanceMenuFactory = null, Func<MenuItem>? componentsMenuFactory = null,
         Func<MenuItem>? autostartMenuFactory = null, Action? menuOpening = null, Action? showVisible = null,
         Func<MenuItem>? inputMenuFactory = null, Func<MenuItem>? profilesMenuFactory = null,
-        Func<MenuItem>? hudEditorMenuFactory = null)
+        Func<MenuItem>? hudEditorMenuFactory = null, Func<MenuItem>? capsuleEditorMenuFactory = null)
     {
         window.Dispatcher.VerifyAccess();
         _source = HwndSource.FromHwnd(new WindowInteropHelper(window).Handle)
@@ -47,6 +47,7 @@ public sealed class TrayService : IDisposable
         QuickMenuTheme.Apply(_menu);
         _visibilityItem = AddItem(string.Empty, toggleVisible);
         if (inputMenuFactory is not null) _menu.Items.Add(inputMenuFactory());
+        if (capsuleEditorMenuFactory is not null) _menu.Items.Add(capsuleEditorMenuFactory());
         if (hudEditorMenuFactory is not null) _menu.Items.Add(hudEditorMenuFactory());
         else
         {

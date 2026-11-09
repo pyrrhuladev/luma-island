@@ -5,5 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-  <ItemGroup><Compile Include="../../src/Luma.Island/Services/HudLayoutSettings.cs" Link="HudLayoutSettings.cs" /></ItemGroup>
+  <ItemGroup>
+    <Compile Include="../../src/Luma.Island/Services/HudLayoutSettings.cs" Link="HudLayoutSettings.cs" />
+    <Compile Include="../../src/Luma.Island/Services/HudCapsuleLayout.cs" Link="HudCapsuleLayout.cs" />
+  </ItemGroup>
 </Project>
