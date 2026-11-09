@@ -373,7 +373,7 @@
                                 </Grid>
                             </DataTemplate></ListBox.ItemTemplate>
                         </ListBox>
-                        <TextBlock x:Name="NoSearchResults" Text="Совпадений нет. Попробуйте «FPS», «музыка» или «монитор»." Style="{StaticResource Caption}" Margin="8,10" Visibility="Collapsed"/>
+                        <TextBlock x:Name="NoSearchResults" Text="Совпадений нет. Попробуйте «масштаб», «громкость» или «монитор»." Style="{StaticResource Caption}" Margin="8,10" Visibility="Collapsed"/>
                     </Grid>
                 </Grid>
             </Border>
@@ -400,7 +400,7 @@
                                 <Button Content="85%" Tag="85" Click="OnTransparencyPreset" MinWidth="54" ToolTip="Прозрачность 85%"/>
                             </WrapPanel>
                         </StackPanel></Border>
-                        <Border Style="{StaticResource SectionCard}"><StackPanel>
+                        <Border Style="{StaticResource SectionCard}" Margin="0,0,0,12"><StackPanel>
                             <TextBlock Text="Размер и интервалы" Style="{StaticResource Section}" Margin="0,0,0,12"/>
                             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="Масштаб всего HUD"/>
@@ -423,9 +423,15 @@
                                 <RadioButton x:Name="ColumnsTwoRadio" Content="2" GroupName="MetricColumns" Checked="OnDraftChanged" AutomationProperties.Name="Два показателя в строке"/>
                                 <RadioButton x:Name="ColumnsThreeRadio" Content="3" GroupName="MetricColumns" Checked="OnDraftChanged" AutomationProperties.Name="Три показателя в строке"/>
                             </StackPanel>
-                            <TextBlock Text="Чтобы переставить или отделить блоки, выберите «Редактировать HUD…» в меню капсулы или трея." Style="{StaticResource Caption}" Margin="0,10,0,0"/>
-
-                        </StackPanel></Border></StackPanel>
+                            <TextBlock Text="Чтобы добавить, переставить или отделить элементы, выберите «Редактировать HUD…» в меню капсулы или трея." Style="{StaticResource Caption}" Margin="0,10,0,0"/>
+                        </StackPanel></Border>
+                        <Border Style="{StaticResource SectionCard}"><StackPanel>
+                            <TextBlock Text="Управление HUD" Style="{StaticResource Section}" Margin="0,0,0,8"/>
+                            <CheckBox x:Name="VolumeWheelCheckBox" Content="Громкость колёсиком" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
+                            <TextBlock Text="Прокручивайте колёсико над островком, чтобы изменить системную громкость. Жест работает и со скрытым ползунком."
+                                       Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                        </StackPanel></Border>
+                        </StackPanel>
                     </ScrollViewer></TabItem>
                     <TabItem x:Name="AlertsTab" Header="Предупреждения"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
                         <StackPanel>
@@ -480,37 +486,6 @@
                             </Border>
                         </StackPanel>
                     </ScrollViewer></TabItem>
-                    <TabItem x:Name="ComponentsTab" Header="Показатели"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0"><StackPanel>                        <Border Style="{StaticResource SectionCard}" Margin="0,0,0,14"><StackPanel>
-                            <TextBlock Text="Игра и плавность" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                            <TextBlock Text="Кадры, просадки и мини-графики в HUD." Style="{StaticResource Caption}" Margin="0,0,0,9"/>
-                            <UniformGrid Columns="2"><CheckBox x:Name="FpsCheckBox" Content="FPS" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
-<CheckBox x:Name="LowCheckBox" Content="1% Low" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
-<CheckBox x:Name="FrameTimeCheckBox" Content="Время кадра" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
-<CheckBox x:Name="ChartsCheckBox" Content="Мини-графики" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/></UniformGrid>
-                        </StackPanel></Border>                        <Border Style="{StaticResource SectionCard}" Margin="0,0,0,14"><StackPanel>
-                            <TextBlock Text="Процессор, видеокарта и память" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                            <TextBlock Text="Нагрузка и доступные аппаратные датчики." Style="{StaticResource Caption}" Margin="0,0,0,9"/>
-                            <UniformGrid Columns="2"><CheckBox x:Name="CpuCheckBox" Content="Нагрузка CPU" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
-<CheckBox x:Name="CpuTemperatureCheckBox" Content="Температура CPU" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
-<CheckBox x:Name="GpuCheckBox" Content="Нагрузка GPU" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
-<CheckBox x:Name="GpuTemperatureCheckBox" Content="Температура GPU" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
-<CheckBox x:Name="MemoryCheckBox" Content="Память RAM" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
-<CheckBox x:Name="MemoryTemperatureCheckBox" Content="Температура RAM" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/></UniformGrid>
-                        </StackPanel></Border>                        <Border Style="{StaticResource SectionCard}" Margin="0,0,0,14"><StackPanel>
-                            <TextBlock Text="Музыка и звук" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                            <TextBlock Text="Управление плеером и системной громкостью Windows." Style="{StaticResource Caption}" Margin="0,0,0,9"/>
-                            <CheckBox x:Name="MusicCheckBox" Content="Музыка" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
-                            <CheckBox x:Name="VolumeCheckBox" Content="Ползунок громкости" Checked="OnDraftChanged" Unchecked="OnDraftChanged"
-                                      ToolTip="Показывает ползунок и кнопку отключения звука в HUD."/>
-                            <CheckBox x:Name="VolumeWheelCheckBox" Content="Громкость колёсиком" Checked="OnDraftChanged" Unchecked="OnDraftChanged"
-                                      ToolTip="Меняет громкость, когда курсор наведён на островок. Работает и со скрытым ползунком."/>
-                        </StackPanel></Border>                        <Border Style="{StaticResource SectionCard}" Margin="0,0,0,14"><StackPanel>
-                            <TextBlock Text="Время и питание" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                            <TextBlock Text="Батарея автоматически скрывается при работе от сети." Style="{StaticResource Caption}" Margin="0,0,0,9"/>
-                            <UniformGrid Columns="2"><CheckBox x:Name="TimeCheckBox" Content="Время" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
-<CheckBox x:Name="DateCheckBox" Content="Дата" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
-<CheckBox x:Name="BatteryCheckBox" Content="Батарея" Checked="OnDraftChanged" Unchecked="OnDraftChanged" ToolTip="Автоматически скрывается при работе от сети."/></UniformGrid>
-                        </StackPanel></Border></StackPanel></ScrollViewer></TabItem>
                     <TabItem x:Name="PlacementTab" Header="Положение"/>
                     <TabItem x:Name="ProfilesTab" Header="Профили игр"/>
                     <TabItem x:Name="ApplicationTab" Header="Приложение"/>

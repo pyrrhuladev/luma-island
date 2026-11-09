@@ -15,7 +15,8 @@ public partial class MainWindow
     public ComponentSettings Components { get; private set; } = ComponentSettings.Default;
     public event Action<ComponentSettings>? ComponentsChanged;
     public bool HasPerformance => Components.Cpu || Components.Gpu || Components.Memory || Components.Fps
-        || Components.GpuTemperature || Components.CpuTemperature || Components.MemoryTemperature || Components.OnePercentLow || Components.FrameTime;
+        || Components.GpuTemperature || Components.CpuTemperature || Components.MemoryTemperature || Components.OnePercentLow || Components.FrameTime
+        || Components.HasCharts;
     private bool HasHardwareMetrics => PresentedComponents.Cpu || PresentedComponents.Gpu || PresentedComponents.Memory
         || PresentedComponents.GpuTemperature || PresentedComponents.CpuTemperature || PresentedComponents.MemoryTemperature;
     private double TemperatureRowHeight => (PresentedComponents.Gpu && PresentedComponents.GpuTemperature)

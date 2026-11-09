@@ -9,6 +9,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="../../src/Luma.Island/Services/AlertSettings.cs" Link="AlertSettings.cs" />
     <Compile Include="../../src/Luma.Island/Services/ComponentStore.cs" Link="ComponentStore.cs" />
+    <Compile Include="../../src/Luma.Island/Services/MonitorRequirements.cs" Link="MonitorRequirements.cs" />
   </ItemGroup>
 </Project>

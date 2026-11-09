@@ -58,7 +58,7 @@ internal static class Program
         var appearance = new AppearanceSettings(.4, ClickThrough: true) { Layout = originalLayout };
         var components = ComponentSettings.Default with
         {
-            Cpu = true, Gpu = true, Memory = true, Fps = true, Charts = true,
+            Music = false, Cpu = true, Gpu = true, Memory = true, Fps = true, Charts = true,
             CpuTemperature = true, GpuTemperature = true, MemoryTemperature = true,
             OnePercentLow = true, FrameTime = true
         };
@@ -91,7 +91,6 @@ internal static class Program
             Check(editor.FindName("LayoutTab") is null && editor.FindName("DetachedMusicCheckBox") is null &&
                   editor.FindName("BlockOrderList") is null && editor.FindName("MetricOrderList") is null,
                 "Settings leaves the screen editor as the only entry point for moving blocks");
-            Named<CheckBox>(editor, "MusicCheckBox").IsChecked = false;
             Named<CheckBox>(editor, "AlertsEnabledCheckBox").IsChecked = true;
             Named<CheckBox>(editor, "AlertMemoryCheckBox").IsChecked = true;
             Named<Slider>(editor, "CpuThresholdSlider").Value = 96;
@@ -111,14 +110,12 @@ internal static class Program
                   Math.Abs(editor.DraftAppearance.GlassOpacity - .1) < 1e-10,
                 "Scale and transparency controls participate in the same draft");
             Check(editor.DraftAppearance.ClickThrough, "Editing the HUD leaves the independent click-through preference intact");
-            Check(!editor.DraftComponents.Music && editor.DraftComponents.Fps && editor.DraftComponents.OnePercentLow &&
-                  editor.DraftComponents.FrameTime && editor.DraftComponents.CpuTemperature,
-                "Component edits retain unrelated enabled measurements");
+            Check(editor.DraftComponents == components, "Appearance and alert edits preserve the complete widget selection");
             Check(editor.DraftAppearance.Alerts.Enabled && editor.DraftAppearance.Alerts.MemoryTemperature &&
                   editor.DraftAppearance.Alerts.CpuThreshold == 96 && editor.DraftAppearance.Alerts.GpuThreshold == 89 &&
                   editor.DraftAppearance.Alerts.MemoryThreshold == 74 && editor.DraftAppearance.Alerts.FrameTimeThreshold == 55 &&
                   editor.DraftAppearance.Alerts.StutterCount == 4, "Master switch and every warning threshold are kept in the local draft");
-            Check(appearance.Layout == originalLayout && !appearance.Alerts.Enabled && components.Music,
+            Check(appearance.Layout == originalLayout && !appearance.Alerts.Enabled && !components.Music,
                 "Editing does not mutate the original records or nested defaults");
             await Settle();
             Check(Named<Slider>(editor, "MemoryThresholdSlider").IsEnabled,
@@ -152,7 +149,7 @@ internal static class Program
         }
         finally { editor.Close(); }
 
-        await CheckAllComponentsAsync();
+        await CheckWheelVolumeAsync();
         await CheckCancellationAsync();
         await CheckAutomaticPreviewAsync();
         await CheckPreviewFailureAsync();
@@ -165,36 +162,25 @@ internal static class Program
             "Native test windows do not take foreground focus, including when the user changes apps during the checks");
     }
 
-    private static async Task CheckAllComponentsAsync()
+    private static async Task CheckWheelVolumeAsync()
     {
-        var empty = new ComponentSettings(false, false, false, false, false);
-        var editor = Create(AppearanceSettings.Default, empty, "Общий HUD");
+        var components = new ComponentSettings(Music: false, Volume: false, Date: false, Battery: false,
+            Cpu: true, Charts: true, GpuTemperature: true, FrameTime: true);
+        var editor = Create(AppearanceSettings.Default, components, "Общий HUD");
         try
         {
             var wheel = Named<CheckBox>(editor, "VolumeWheelCheckBox");
-            var slider = Named<CheckBox>(editor, "VolumeCheckBox");
-            Check(wheel.IsChecked == false && slider.IsChecked == false, "Opening loads both volume controls independently");
-            Check(editor.SearchSections("громкость колесиком").Any(section => section.Id == "components"),
+            Check(wheel.IsChecked == false && editor.FindName("ComponentsTab") is null &&
+                  editor.FindName("VolumeCheckBox") is null && editor.FindName("FpsCheckBox") is null,
+                "Settings expose the wheel preference while widget choices live in the HUD editor");
+            Check(editor.SearchSections("громкость колесиком").Single().Id == "appearance",
                 "Wheel volume is discoverable through settings search");
             wheel.IsChecked = true;
-            Check(editor.DraftComponents.VolumeWheel && !editor.DraftComponents.Volume,
-                "Turning on wheel volume leaves the slider hidden");
-            slider.IsChecked = true;
+            Check(editor.CommitDraft() && editor.DraftComponents == components with { VolumeWheel = true },
+                "Turning on wheel volume preserves all selected widgets and leaves the slider hidden");
             wheel.IsChecked = false;
-            Check(editor.DraftComponents.Volume && !editor.DraftComponents.VolumeWheel,
-                "Turning off wheel volume leaves the slider visible");
-            foreach (string name in new[] { "Music", "Volume", "VolumeWheel", "Time", "Date", "Battery", "Cpu", "Gpu", "Memory", "Fps", "Charts",
-                "GpuTemperature", "CpuTemperature", "MemoryTemperature", "Low", "FrameTime" })
-                Named<CheckBox>(editor, name + "CheckBox").IsChecked = true;
-            Check(editor.CommitDraft(), "An initially empty HUD can enable all components together");
-            Check(editor.DraftComponents == ComponentSettings.Default with { Cpu = true, Gpu = true, Memory = true, Fps = true,
-                Charts = true, GpuTemperature = true, CpuTemperature = true, MemoryTemperature = true, OnePercentLow = true, FrameTime = true,
-                VolumeWheel = true }, "All component checkboxes map to their corresponding stored fields");
-            foreach (string name in new[] { "Music", "Volume", "VolumeWheel", "Time", "Date", "Battery", "Cpu", "Gpu", "Memory", "Fps", "Charts",
-                "GpuTemperature", "CpuTemperature", "MemoryTemperature", "Low", "FrameTime" })
-                Named<CheckBox>(editor, name + "CheckBox").IsChecked = false;
-            Check(editor.CommitDraft() && editor.DraftComponents == empty,
-                "All components can be disabled without breaking the production preview");
+            Check(editor.CommitDraft() && editor.DraftComponents == components,
+                "Turning off wheel volume restores the original component snapshot");
         }
         finally { editor.Close(); }
         await Settle();

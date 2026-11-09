@@ -45,7 +45,37 @@ File.WriteAllText(path, "{\"music\":false,\"volume\":true,\"time\":false,\"date\
 Check(store.Load() == (mixed with { Charts = false, GpuTemperature = false }), "legacy JSON without charts/temperature retains settings and keeps new flags off");
 File.WriteAllText(path, "{\"music\":false,\"volume\":true,\"time\":false,\"date\":true,\"battery\":false,\"cpu\":true,\"gpu\":false,\"memory\":true,\"fps\":true,\"charts\":true}");
 Check(store.Load() == (mixed with { GpuTemperature = false }), "legacy JSON with charts leaves GPU temperature disabled");
-Check(store.Load().Volume && !store.Load().VolumeWheel, "Legacy JSON keeps the volume row without enabling wheel volume");
+var legacyCharts = store.Load();
+Check(legacyCharts.Volume && !legacyCharts.VolumeWheel, "Legacy JSON keeps the volume row without enabling wheel volume");
+Check(legacyCharts.ShowCpuChart && !legacyCharts.ShowGpuChart && legacyCharts.ShowMemoryChart && legacyCharts.ShowFpsChart,
+    "Legacy charts follow the enabled numeric widgets");
+var separateCharts = legacyCharts with { CpuChart = false, GpuChart = true, FpsChart = false };
+Check(store.Save(separateCharts) && store.Load() == separateCharts, "Independent chart overrides roundtrip");
+Check(!separateCharts.ShowCpuChart && separateCharts.Cpu && separateCharts.ShowGpuChart && !separateCharts.Gpu &&
+    separateCharts.ShowMemoryChart && !separateCharts.ShowFpsChart && separateCharts.Fps,
+    "Chart overrides take precedence while absent overrides inherit the legacy setting");
+using (var json = JsonDocument.Parse(File.ReadAllText(path)))
+{
+    Check(!json.RootElement.GetProperty("cpuChart").GetBoolean() && json.RootElement.GetProperty("gpuChart").GetBoolean() &&
+        !json.RootElement.GetProperty("fpsChart").GetBoolean() && !json.RootElement.TryGetProperty("memoryChart", out _) &&
+        !json.RootElement.TryGetProperty("showCpuChart", out _) && !json.RootElement.TryGetProperty("hasCharts", out _),
+        "Only explicit chart overrides are written");
+}
+var noMonitors = MonitorRequirements.Resolve(allOff, null, visible: true);
+foreach (var (settings, required) in new[]
+{
+    (allOff with { CpuChart = true }, noMonitors with { Cpu = true }),
+    (allOff with { GpuChart = true }, noMonitors with { Gpu = true }),
+    (allOff with { MemoryChart = true }, noMonitors with { Memory = true }),
+    (allOff with { FpsChart = true }, noMonitors with { Fps = true })
+})
+{
+    Check(store.Save(settings) && store.Load() == settings && settings.HasCharts && !settings.Charts,
+        "A standalone chart survives save and reopen without the legacy charts switch");
+    Check(MonitorRequirements.Resolve(settings, null, visible: true) == required &&
+        MonitorRequirements.Resolve(settings, null, visible: false) == noMonitors,
+        "Each standalone chart starts only its required collector while the HUD is visible");
+}
 var wheelOnly = allOff with { VolumeWheel = true };
 Check(store.Save(wheelOnly) && new ComponentStore(path).Load() == wheelOnly,
     "Wheel volume persists independently of the volume row");

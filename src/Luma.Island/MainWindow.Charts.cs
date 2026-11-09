@@ -17,19 +17,19 @@ public partial class MainWindow
     private int EnabledChartCount => (PresentsChart("cpu") ? 1 : 0) + (PresentsChart("gpu") ? 1 : 0) +
         (PresentsChart("memory") ? 1 : 0) + (PresentsChart("fps") ? 1 : 0);
     private double ChartCardHeight => 64 + (LayoutGrowth - 1) * 32;
-    public double ChartsHeight => !Components.Charts || EnabledChartCount == 0 ? 0
+    public double ChartsHeight => EnabledChartCount == 0 ? 0
         : EnabledChartCount <= 2 ? ChartCardHeight + 6 : 2 * ChartCardHeight + 12;
 
     internal void RecordPerformanceHistory(PerformanceSnapshot snapshot)
     {
         VerifyAccess();
-        if (!Components.Charts || _closed) return;
+        if (_closed || !(Components.ShowCpuChart || Components.ShowGpuChart || Components.ShowMemoryChart)) return;
         double now = ChartTime();
         if (_islandOwner is null)
         {
-            if (Components.Cpu || PresentsChart("cpu")) _cpuHistory.Add(now, CpuUtilityValue(snapshot.CpuPercent));
-            if (Components.Gpu || PresentsChart("gpu")) _gpuHistory.Add(now, PercentValue(snapshot.GpuPercent));
-            if (Components.Memory || PresentsChart("memory")) _memoryHistory.Add(now, PercentValue(snapshot.MemoryPercent));
+            if (Components.ShowCpuChart) _cpuHistory.Add(now, CpuUtilityValue(snapshot.CpuPercent));
+            if (Components.ShowGpuChart) _gpuHistory.Add(now, PercentValue(snapshot.GpuPercent));
+            if (Components.ShowMemoryChart) _memoryHistory.Add(now, PercentValue(snapshot.MemoryPercent));
         }
         UpdatePerformanceChartValues(snapshot);
         if (PresentsChart("cpu")) DrawCpuChart(now);
@@ -59,10 +59,10 @@ public partial class MainWindow
     internal void RecordFpsHistory(FpsSnapshot snapshot)
     {
         VerifyAccess();
-        if (!Components.Charts || _closed) return;
+        if (_closed || !Components.ShowFpsChart) return;
         double now = ChartTime();
         double? value = snapshot.Fps is >= 0 && double.IsFinite(snapshot.Fps.Value) ? snapshot.Fps : null;
-        if (_islandOwner is null && (Components.Fps || PresentsChart("fps")))
+        if (_islandOwner is null)
         {
             string? stream = snapshot.StreamId ?? snapshot.ProcessName;
             if (!string.Equals(_fpsHistoryProcess, stream, StringComparison.OrdinalIgnoreCase))
@@ -84,10 +84,10 @@ public partial class MainWindow
         ChartsPanel.Visibility = ChartsHeight > 0 ? Visibility.Visible : Visibility.Collapsed;
         var cards = new (string Metric, Border Card, bool Enabled, MetricHistory History, ShapePath Line, TextBlock Value)[]
         {
-            ("cpu", CpuChartCard, Components.Cpu, _cpuHistory, CpuChartLine, CpuChartValue),
-            ("gpu", GpuChartCard, Components.Gpu, _gpuHistory, GpuChartLine, GpuChartValue),
-            ("memory", MemoryChartCard, Components.Memory, _memoryHistory, MemoryChartLine, MemoryChartValue),
-            ("fps", FpsChartCard, Components.Fps, _fpsHistory, FpsChartLine, FpsChartValue)
+            ("cpu", CpuChartCard, Components.ShowCpuChart, _cpuHistory, CpuChartLine, CpuChartValue),
+            ("gpu", GpuChartCard, Components.ShowGpuChart, _gpuHistory, GpuChartLine, GpuChartValue),
+            ("memory", MemoryChartCard, Components.ShowMemoryChart, _memoryHistory, MemoryChartLine, MemoryChartValue),
+            ("fps", FpsChartCard, Components.ShowFpsChart, _fpsHistory, FpsChartLine, FpsChartValue)
         };
         int visible = 0;
         if (PresentationCapsuleItems is { } order)
@@ -98,7 +98,7 @@ public partial class MainWindow
             card.Card.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
             if (!enabled)
             {
-                if (_islandOwner is null && !(Components.Charts && card.Enabled)) card.History.Clear();
+                if (_islandOwner is null && !card.Enabled) card.History.Clear();
                 card.Line.Data = null;
                 card.Value.Text = "—";
                 continue;
@@ -108,8 +108,8 @@ public partial class MainWindow
             Grid.SetColumnSpan(card.Card, EnabledChartCount == 1 ? 3 : 1);
             visible++;
         }
-        if (_islandOwner is null && (!Components.Charts || !Components.Fps && !PresentsChart("fps"))) _fpsHistoryProcess = null;
-        if (Components.Charts)
+        if (_islandOwner is null && !Components.ShowFpsChart) _fpsHistoryProcess = null;
+        if (visible > 0)
         {
             if (IsCapsuleLayoutActive) UpdatePerformanceChartValues(_lastPerformance);
             DrawAllCharts();
@@ -130,12 +130,12 @@ public partial class MainWindow
 
     private void OnChartSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (Components.Charts && !_closed && e.NewSize.Width > 0 && e.NewSize.Height > 0) DrawAllCharts();
+        if (!_closed && e.NewSize.Width > 0 && e.NewSize.Height > 0 && EnabledChartCount > 0) DrawAllCharts();
     }
 
     private void OnChartsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (e.NewValue is true && Components.Charts && !_closed) DrawAllCharts();
+        if (e.NewValue is true && !_closed && EnabledChartCount > 0) DrawAllCharts();
     }
 
     private void DrawAllCharts()

@@ -80,19 +80,17 @@ public partial class MainWindow
         }
     }
 
-    private bool PresentsChart(string metric) => PresentedComponents.Charts &&
-        (PresentationCapsuleItems is { } items
-            ? items.Contains(ChartId(metric))
-            : MetricEnabled(PresentedComponents, metric));
+    private bool PresentsChart(string metric) => ChartEnabled(PresentedComponents, metric);
 
     private static string ChartId(string metric) => metric switch
     {
         "cpu" => "cpu-chart", "gpu" => "gpu-chart", "memory" => "memory-chart", "fps" => "fps-chart", _ => string.Empty
     };
 
-    private static bool MetricEnabled(ComponentSettings components, string metric) => metric switch
+    private static bool ChartEnabled(ComponentSettings components, string metric) => metric switch
     {
-        "cpu" => components.Cpu, "gpu" => components.Gpu, "memory" => components.Memory, "fps" => components.Fps, _ => false
+        "cpu" => components.ShowCpuChart, "gpu" => components.ShowGpuChart,
+        "memory" => components.ShowMemoryChart, "fps" => components.ShowFpsChart, _ => false
     };
 
     internal static (AppearanceSettings Appearance, ComponentSettings Components, string Items, string? Rows) ProjectCapsule(
@@ -118,7 +116,11 @@ public partial class MainWindow
             MemoryTemperature = memory && components.MemoryTemperature,
             Fps = items.Contains("fps") && components.Fps,
             OnePercentLow = items.Contains("low") && components.OnePercentLow,
-            FrameTime = items.Contains("frame-time") && components.FrameTime
+            FrameTime = items.Contains("frame-time") && components.FrameTime,
+            CpuChart = items.Contains("cpu-chart") && components.ShowCpuChart,
+            GpuChart = items.Contains("gpu-chart") && components.ShowGpuChart,
+            MemoryChart = items.Contains("memory-chart") && components.ShowMemoryChart,
+            FpsChart = items.Contains("fps-chart") && components.ShowFpsChart
         };
         var layout = HudLayoutSettings.Normalize(appearance.Layout with
         {
@@ -129,7 +131,7 @@ public partial class MainWindow
             Capsules = null
         });
         string presentedItems = string.Join(',', items.Where(item => !HudCapsuleLayout.IsChart(item) ||
-            components.Charts && MetricEnabled(components, item[..^"-chart".Length])));
+            ChartEnabled(projected, item[..^"-chart".Length])));
         return (appearance with { Layout = layout, Alerts = primary ? appearance.Alerts : AlertSettings.Default },
             projected, presentedItems, capsule.Rows);
     }
@@ -150,7 +152,7 @@ public partial class MainWindow
             if (!(components.Music || components.Volume || components.Cpu || components.Gpu || components.Memory ||
                 components.CpuTemperature || components.GpuTemperature || components.MemoryTemperature ||
                 components.Fps || components.OnePercentLow || components.FrameTime || components.Time || components.Date ||
-                components.Battery && (BatteryAvailable || IsCapsuleLayoutEditing) || items.Split(',').Any(HudCapsuleLayout.IsChart))) continue;
+                components.Battery && (BatteryAvailable || IsCapsuleLayoutEditing) || components.HasCharts)) continue;
 
             retained.Add(capsule.Id);
             if (!_capsuleWindows.TryGetValue(capsule.Id, out var child))

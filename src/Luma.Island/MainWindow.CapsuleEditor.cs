@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -13,6 +14,28 @@ public partial class MainWindow
     private bool IsCapsuleLayoutEditing => (_islandOwner ?? this)._capsuleEdit is not null;
     private double CapsuleEditBarHeight => _islandOwner is null && IsCapsuleLayoutEditing ? 38 : 0;
     private HudCapsuleLayout CapsuleDraft => Appearance.Layout.Capsules!;
+
+    private static readonly Dictionary<string, (Func<ComponentSettings, bool> Read, Func<ComponentSettings, bool, ComponentSettings> Write)> CapsuleWidgets = new(StringComparer.Ordinal)
+    {
+        ["cpu"] = (s => s.Cpu, (s, v) => s with { Cpu = v, CpuChart = s.CpuChart ?? (s.Charts ? s.ShowCpuChart : null) }),
+        ["gpu"] = (s => s.Gpu, (s, v) => s with { Gpu = v, GpuChart = s.GpuChart ?? (s.Charts ? s.ShowGpuChart : null) }),
+        ["memory"] = (s => s.Memory, (s, v) => s with { Memory = v, MemoryChart = s.MemoryChart ?? (s.Charts ? s.ShowMemoryChart : null) }),
+        ["fps"] = (s => s.Fps, (s, v) => s with { Fps = v, FpsChart = s.FpsChart ?? (s.Charts ? s.ShowFpsChart : null) }),
+        ["cpu-chart"] = (s => s.ShowCpuChart, (s, v) => s with { CpuChart = v }),
+        ["gpu-chart"] = (s => s.ShowGpuChart, (s, v) => s with { GpuChart = v }),
+        ["memory-chart"] = (s => s.ShowMemoryChart, (s, v) => s with { MemoryChart = v }),
+        ["fps-chart"] = (s => s.ShowFpsChart, (s, v) => s with { FpsChart = v }),
+        ["cpu-temp"] = (s => s.CpuTemperature, (s, v) => s with { CpuTemperature = v }),
+        ["gpu-temp"] = (s => s.GpuTemperature, (s, v) => s with { GpuTemperature = v }),
+        ["memory-temp"] = (s => s.MemoryTemperature, (s, v) => s with { MemoryTemperature = v }),
+        ["low"] = (s => s.OnePercentLow, (s, v) => s with { OnePercentLow = v }),
+        ["frame-time"] = (s => s.FrameTime, (s, v) => s with { FrameTime = v }),
+        ["time"] = (s => s.Time, (s, v) => s with { Time = v }),
+        ["battery"] = (s => s.Battery, (s, v) => s with { Battery = v }),
+        ["date"] = (s => s.Date, (s, v) => s with { Date = v }),
+        ["music"] = (s => s.Music, (s, v) => s with { Music = v }),
+        ["volume"] = (s => s.Volume, (s, v) => s with { Volume = v })
+    };
 
     private sealed record CapsuleEdit(HudProfileSettings Original, HudCapsuleLayout InitialDraft, bool RestoreClickThrough)
     {
@@ -120,9 +143,31 @@ public partial class MainWindow
     {
         if (!IsCapsuleLayoutEditing || e.Key != Key.Escape) return;
         var owner = _islandOwner ?? this;
-        if (owner.IsCapsuleGestureActive) owner.CancelCapsuleGesture();
+        if (owner.IsCapsuleWidgetPickerOpen) owner.CloseCapsuleWidgetPicker();
+        else if (owner.IsCapsuleGestureActive) owner.CancelCapsuleGesture();
         else owner.EndCapsuleEdit(save: false);
         e.Handled = true;
+    }
+
+    private static bool CapsuleWidgetEnabled(ComponentSettings settings, string id) =>
+        CapsuleWidgets.TryGetValue(id, out var widget) && widget.Read(settings);
+
+    private void SetCapsuleWidget(string id, bool enabled)
+    {
+        if (_capsuleEdit is null || !CapsuleWidgets.TryGetValue(id, out var widget) || widget.Read(Components) == enabled) return;
+        CancelCapsuleGesture();
+        var previous = Components;
+        Components = widget.Write(previous, enabled);
+        ApplyCapsuleDraft(CapsuleDraft);
+        NotifyCapsuleComponentsChanged(previous);
+    }
+
+    private void NotifyCapsuleComponentsChanged(ComponentSettings previous)
+    {
+        if (previous == Components) return;
+        if (previous.Time != Components.Time || previous.Date != Components.Date || previous.Battery != Components.Battery)
+            UpdateClockAndBattery();
+        ComponentsChanged?.Invoke(Components);
     }
 
     private void OnCapsuleEditDone(object sender, RoutedEventArgs e) => EndCapsuleEdit(save: true);
@@ -139,39 +184,46 @@ public partial class MainWindow
     private void EndCapsuleEdit(bool save)
     {
         if (_capsuleEdit is not { } edit || _placement is null) return;
+        CloseCapsuleWidgetPicker();
         CancelCapsuleGesture();
-        bool changed = CapsuleDraft != edit.InitialDraft || _placement.Settings != edit.Original.Placement;
-        if (save && changed)
+        var draft = CaptureHudSettings();
+        if (CapsuleDraft == edit.InitialDraft)
+            draft = draft with { Appearance = draft.Appearance with { Layout = edit.Original.Appearance.Layout } };
+        if (save && (draft != edit.Original || edit.SaveAttempted))
         {
-            edit.SaveAttempted = true;
-            if (!SaveCapsuleEdit(CaptureHudSettings(), edit.Original.Placement))
+            var previous = edit.SaveAttempted ? null : edit.Original;
+            bool saved = SaveCapsuleEdit(draft, previous);
+            edit.SaveAttempted = !saved && !SaveCapsuleEdit(edit.Original, previous is null ? null : draft);
+            RecordProfileSaveResult(saved);
+            if (!saved)
             {
                 ShowProfileSaveWarning();
                 return;
             }
-            _savedAppearance = Appearance;
+            _savedAppearance = draft.Appearance;
+        }
+        else if (!save && edit.SaveAttempted)
+        {
+            bool restored = SaveCapsuleEdit(edit.Original, previous: null);
+            RecordProfileSaveResult(restored);
+            if (!restored) ShowProfileSaveWarning();
         }
 
+        var next = save ? draft : edit.Original;
+        var previousComponents = Components;
         _capsuleEdit = null;
-        if (!save || !changed)
-        {
-            var draftPlacement = _placement.Settings;
-            Appearance = Appearance with { Layout = edit.Original.Appearance.Layout };
-            _placement.ApplySettings(edit.Original.Placement);
-            if (edit.SaveAttempted && !SaveCapsuleEdit(edit.Original, draftPlacement)) ShowProfileSaveWarning();
-        }
+        Appearance = next.Appearance;
+        Components = next.Components;
+        if (_placement.Settings != next.Placement) _placement.ApplySettings(next.Placement);
         ApplyCapsuleDraft(Appearance.Layout.Capsules);
         if (edit.RestoreClickThrough && InputRecoveryAvailable) SetClickThroughCore(true, persist: false);
+        NotifyCapsuleComponentsChanged(previousComponents);
         ProfileInteractionEnded?.Invoke();
     }
 
-    private bool SaveCapsuleEdit(HudProfileSettings snapshot, PlacementSettings oldPlacement)
-    {
-        bool saved = _profiles is not null
-            ? _profiles.CaptureCurrent(snapshot)
-            : _appearanceStore.Save(snapshot.Appearance) &
-              (oldPlacement == snapshot.Placement || _placementStore.Save(snapshot.Placement));
-        RecordProfileSaveResult(saved);
-        return saved;
-    }
+    private bool SaveCapsuleEdit(HudProfileSettings snapshot, HudProfileSettings? previous) => _profiles is not null
+        ? _profiles.CaptureCurrent(snapshot)
+        : (previous?.Appearance == snapshot.Appearance || _appearanceStore.Save(snapshot.Appearance)) &
+          (previous?.Components == snapshot.Components || _componentStore.Save(snapshot.Components)) &
+          (previous?.Placement == snapshot.Placement || _placementStore.Save(snapshot.Placement));
 }

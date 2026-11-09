@@ -7,11 +7,13 @@ public sealed record MonitorRequirements(bool Cpu, bool Gpu, bool Memory, bool G
     public static MonitorRequirements Resolve(ComponentSettings components, AlertSettings? alerts, bool visible)
     {
         alerts = AlertSettings.Normalize(alerts);
-        return new(visible && components.Cpu, visible && components.Gpu, visible && components.Memory,
+        return new(visible && (components.Cpu || components.ShowCpuChart),
+            visible && (components.Gpu || components.ShowGpuChart),
+            visible && (components.Memory || components.ShowMemoryChart),
             visible && (components.GpuTemperature || alerts.NeedsGpuTemperature),
             visible && (components.CpuTemperature || alerts.NeedsCpuTemperature),
             visible && (components.MemoryTemperature || alerts.NeedsMemoryTemperature),
-            visible && components.Fps, visible && components.OnePercentLow,
+            visible && (components.Fps || components.ShowFpsChart), visible && components.OnePercentLow,
             visible && (components.FrameTime || alerts.NeedsFrames));
     }
 }

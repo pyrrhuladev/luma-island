@@ -211,7 +211,7 @@ public partial class GameProfilesWindow : Window
         if (settings.CpuTemperature) labels.Add("температура CPU");
         if (settings.GpuTemperature) labels.Add("температура GPU");
         if (settings.MemoryTemperature) labels.Add("температура RAM");
-        if (settings.Charts) labels.Add("мини-графики");
+        if (settings.HasCharts) labels.Add("мини-графики");
         return labels.Count == 0 ? "Показатели выключены" : "Компоненты: " + string.Join(", ", labels);
     }
 }

@@ -330,6 +330,10 @@
                         Style="{StaticResource QuietButton}" Click="OnCapsuleEditCancel"/>
                 <Button DockPanel.Dock="Right" Content="Сброс" Width="56" Height="25" ToolTip="Собрать блоки в одну капсулу в исходном порядке"
                         AutomationProperties.Name="Сбросить раскладку" Style="{StaticResource QuietButton}" Click="OnCapsuleEditReset"/>
+                <Button x:Name="CapsuleAddWidgetButton" DockPanel.Dock="Left" Width="26" Height="25" Margin="0,0,5,0"
+                        Content="+" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Mint}"
+                        ToolTip="Добавить или убрать блок" AutomationProperties.Name="Блоки HUD"
+                        Style="{StaticResource QuietButton}" Click="OnCapsuleWidgetPickerClick"/>
                 <Border x:Name="CapsuleEditDropZone" Margin="0,2,5,2" CornerRadius="7">
                     <TextBlock x:Name="CapsuleEditHint" Text="Перетащите блок" Foreground="#D9E9E5" FontSize="11"
                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>

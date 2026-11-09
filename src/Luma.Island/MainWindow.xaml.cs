@@ -299,6 +299,7 @@ public partial class MainWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         if (!IsCapsuleLayoutEditing) SaveCurrentProfileEdits();
+        if (_islandOwner is null) CloseCapsuleWidgetPicker();
         CancelCapsuleGesture();
         _closed = true;
         DisposeIslandLifecycle();

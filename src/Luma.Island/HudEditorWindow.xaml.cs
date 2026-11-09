@@ -105,22 +105,7 @@ public partial class HudEditorWindow : Window
         TransparencySlider.Value = (1 - appearance.GlassOpacity) * 100;
         ScaleSlider.Value = appearance.Scale * 100;
         LoadLayout(layout);
-        MusicCheckBox.IsChecked = DraftComponents.Music;
-        VolumeCheckBox.IsChecked = DraftComponents.Volume;
         VolumeWheelCheckBox.IsChecked = DraftComponents.VolumeWheel;
-        TimeCheckBox.IsChecked = DraftComponents.Time;
-        DateCheckBox.IsChecked = DraftComponents.Date;
-        BatteryCheckBox.IsChecked = DraftComponents.Battery;
-        CpuCheckBox.IsChecked = DraftComponents.Cpu;
-        GpuCheckBox.IsChecked = DraftComponents.Gpu;
-        MemoryCheckBox.IsChecked = DraftComponents.Memory;
-        FpsCheckBox.IsChecked = DraftComponents.Fps;
-        ChartsCheckBox.IsChecked = DraftComponents.Charts;
-        GpuTemperatureCheckBox.IsChecked = DraftComponents.GpuTemperature;
-        CpuTemperatureCheckBox.IsChecked = DraftComponents.CpuTemperature;
-        MemoryTemperatureCheckBox.IsChecked = DraftComponents.MemoryTemperature;
-        LowCheckBox.IsChecked = DraftComponents.OnePercentLow;
-        FrameTimeCheckBox.IsChecked = DraftComponents.FrameTime;
         AlertsEnabledCheckBox.IsChecked = alerts.Enabled;
         AlertCpuCheckBox.IsChecked = alerts.CpuTemperature;
         AlertGpuCheckBox.IsChecked = alerts.GpuTemperature;
@@ -174,16 +159,7 @@ public partial class HudEditorWindow : Window
             Scale = KeepEquivalent(DraftAppearance.Scale, ScaleSlider.Value / 100),
             Layout = layout, Alerts = alerts
         });
-        DraftComponents = DraftComponents with
-        {
-            Music = Checked(MusicCheckBox), Volume = Checked(VolumeCheckBox), VolumeWheel = Checked(VolumeWheelCheckBox),
-            Time = Checked(TimeCheckBox), Date = Checked(DateCheckBox), Battery = Checked(BatteryCheckBox),
-            Cpu = Checked(CpuCheckBox), Gpu = Checked(GpuCheckBox), Memory = Checked(MemoryCheckBox),
-            Fps = Checked(FpsCheckBox), Charts = Checked(ChartsCheckBox),
-            GpuTemperature = Checked(GpuTemperatureCheckBox), CpuTemperature = Checked(CpuTemperatureCheckBox),
-            MemoryTemperature = Checked(MemoryTemperatureCheckBox),
-            OnePercentLow = Checked(LowCheckBox), FrameTime = Checked(FrameTimeCheckBox)
-        };
+        DraftComponents = DraftComponents with { VolumeWheel = Checked(VolumeWheelCheckBox) };
     }
 
     private static double KeepEquivalent(double previous, double value) => Math.Abs(previous - value) < 1e-10 ? previous : value;
@@ -314,10 +290,8 @@ public partial class HudEditorWindow : Window
 
     private void InitializeSections()
     {
-        RegisterBuiltIn("appearance", "Внешний вид", "Прозрачность стекла, масштаб, текст и расстояния между блоками.",
-            "стекло прозрачность фон размер шрифт интервалы строки колонки раскладка", AppearanceTab);
-        RegisterBuiltIn("components", "Показатели", "Выберите, что показывать в HUD, и настройте управление громкостью.",
-            "музыка громкость звук ползунок колёсиком прокрутка мышь время дата часы батарея fps фпс low кадр фреймтайм cpu gpu ram процессор видеокарта оперативка озу нагрузка температура память графики", ComponentsTab);
+        RegisterBuiltIn("appearance", "Внешний вид", "Прозрачность стекла, размеры, интервалы и громкость колёсиком.",
+            "стекло фон масштаб текст шрифт расстояния строки колонки раскладка звук прокрутка мышь управление", AppearanceTab);
         RegisterBuiltIn("alerts", "Предупреждения", "Тихий индикатор температуры и серий просадок.",
             "порог температура перегрев просадки задержки кадры фреймтайм фриз статтер уведомления", AlertsTab);
         RegisterBuiltIn("placement", "Положение", "Монитор, точка привязки и защита от случайного перемещения.",

@@ -60,7 +60,7 @@ internal static class Program
             (appearance, components) => { previews++; return MainWindow.RenderHudPreview(appearance, components); }, context);
         try
         {
-            Check(editor.Sections.Select(section => section.Id).SequenceEqual(new[] { "appearance", "components", "alerts", "placement", "profiles", "application" }), "Six settings sections leave arrangement to the screen editor");
+            Check(editor.Sections.Select(section => section.Id).SequenceEqual(new[] { "appearance", "alerts", "placement", "profiles", "application" }), "Five settings sections leave widget selection and arrangement to the screen editor");
             Check(editor.SelectedSectionId == "appearance" && !editor.HasUnsavedChanges, "Opening the default page leaves every draft unchanged");
             Check(editor.DraftApplication?.Placement == placement && editor.DraftApplication.Profiles.Profiles.SequenceEqual(profiles.Profiles), "Application draft preserves exact position and profile records");
             Check(editor.FindSettingsControl("PlacementMonitorCombo") is null && editor.FindSettingsControl("AppAutostartCheckBox") is null, "Application page trees remain unconstructed until first navigation");
@@ -82,10 +82,11 @@ internal static class Program
                 "The themed monitor picker renders its display label in readable foreground colors");
             Check(((CheckBox)editor.FindSettingsControl("AppAutostartCheckBox")!).IsChecked == true && editor.DraftApplication?.AutostartChanged == false,
                 "A Windows-disabled registration stays registered without an implicit startup change");
-            Check(editor.SearchSections("ТЕМПЕРАТУРА").Select(section => section.Id).OrderBy(id => id).SequenceEqual(new[] { "alerts", "components" }), "Search matches Russian setting keywords regardless of case");
+            Check(editor.SearchSections("ТЕМПЕРАТУРА").Single().Id == "alerts", "Search matches Russian setting keywords regardless of case");
             Check(editor.SearchSections("горячие клавиши").Single().Id == "application" && editor.SelectedSectionId == "application", "Multi-word search navigates directly to the matching section");
-            Check(editor.SearchSections("оперативка").Single().Id == "components", "Common Russian RAM wording finds component settings");
-            Check(editor.SearchSections("фпс").Single().Id == "components", "Russian FPS wording finds the frame counter");
+            Check(editor.SearchSections("громкость колесиком").Single().Id == "appearance", "Search finds the relocated wheel volume preference");
+            Check(editor.SearchSections("оперативка").Count == 0 && editor.SearchSections("фпс").Count == 0,
+                "Settings search omits widget choices from the screen editor");
             Check(editor.SearchSections("прозрачность стекла").Single().Id == "appearance", "Glass transparency remains discoverable through search");
             Check(editor.SearchSections("матовый фон").Count == 0 && editor.SearchSections("плотная раскладка").Count == 0,
                 "Search omits the removed appearance modes");
@@ -95,24 +96,24 @@ internal static class Program
             var search = Named<TextBox>(editor, "SettingsSearchBox");
             var clearSearch = Named<Button>(editor, "ClearSearchButton");
             var resultLabel = Named<TextBlock>(editor, "SearchResultLabel");
-            Check(clearSearch.IsVisible && resultLabel.Text.EndsWith("· 2", StringComparison.Ordinal),
+            Check(clearSearch.IsVisible && resultLabel.Text.EndsWith("· 1", StringComparison.Ordinal),
                 "A matching query offers a clear action and shows the number of matching sections");
             var enterSearch = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(search), Environment.TickCount, Key.Enter)
                 { RoutedEvent = Keyboard.PreviewKeyDownEvent };
             search.RaiseEvent(enterSearch);
             Check(enterSearch.Handled && editor.IsVisible && editor.DialogResult is null &&
-                  editor.SelectedSectionId == "components" && !editor.HasUnsavedChanges,
+                  editor.SelectedSectionId == "alerts" && !editor.HasUnsavedChanges,
                 "Enter in search accepts the matching section without invoking the default Save action");
             Click(clearSearch);
-            Check(search.Text.Length == 0 && editor.FilteredSections.Count == 6 && !clearSearch.IsVisible &&
-                  resultLabel.Text == "РАЗДЕЛЫ" && editor.SelectedSectionId == "components",
+            Check(search.Text.Length == 0 && editor.FilteredSections.Count == 5 && !clearSearch.IsVisible &&
+                  resultLabel.Text == "РАЗДЕЛЫ" && editor.SelectedSectionId == "alerts",
                 "Clearing search restores all sections and keeps the current page selected");
             editor.SelectSection("application");
             string? previous = editor.SelectedSectionId;
             Check(editor.SearchSections("нет-такого-раздела-123").Count == 0 && Named<TextBlock>(editor, "NoSearchResults").Visibility == Visibility.Visible,
                 "An unmatched query shows a clear empty search state");
             Check(editor.SelectedSectionId == previous && previews == 1 && !editor.HasUnsavedChanges, "Empty search preserves current content and drafts");
-            Check(editor.SearchSections(null).Count == 6 && Named<TextBlock>(editor, "NoSearchResults").Visibility == Visibility.Collapsed, "Clearing search restores all sections");
+            Check(editor.SearchSections(null).Count == 5 && Named<TextBlock>(editor, "NoSearchResults").Visibility == Visibility.Collapsed, "Clearing search restores all sections");
             Check(!editor.SelectSection("missing"), "Unknown section IDs do not alter navigation");
             var profileName = (TextBox)editor.FindSettingsControl("SettingsProfileNameBox")!;
             editor.SelectSection("profiles"); await Settle();
@@ -146,7 +147,7 @@ internal static class Program
 
             editor.SelectSection("appearance");
             Named<RadioButton>(editor, "ColumnsTwoRadio").IsChecked = true;
-            editor.SelectSection("components"); editor.SelectSection("appearance");
+            editor.SelectSection("alerts"); editor.SelectSection("appearance");
             Check(Named<RadioButton>(editor, "ColumnsTwoRadio").IsChecked == true && editor.HasUnsavedChanges, "Unsaved page values survive navigation");
             await Task.Delay(180); await Settle();
             Check(previews == 2 && !editor.HasPendingPreview, "A HUD edit renders one debounced preview after navigation");
@@ -160,7 +161,6 @@ internal static class Program
             Check(Named<Grid>(editor, "SettingsContentPanel").Visibility == Visibility.Collapsed && Named<Image>(editor, "HudPreviewImage").ActualWidth > sidePreviewWidth,
                 "The side preview can expand into a readable full-width view");
             Inside(Named<Image>(editor, "HudPreviewImage"), (FrameworkElement)editor.Content, "The enlarged wide preview stays inside the window");
-            editor.SelectSection("components"); await Settle(); Save(editor, "settings-components.png");
             editor.SelectSection("placement"); await Settle(); Save(editor, "settings-placement.png");
             editor.SelectSection("profiles"); await Settle(); Save(editor, "settings-profiles.png");
             editor.SelectSection("application"); await Settle(); Save(editor, "settings-application.png");
@@ -183,7 +183,7 @@ internal static class Program
             Inside(Named<Image>(editor, "HudPreviewImage"), (FrameworkElement)editor.Content, "The small preview image fits above the footer");
             Inside(Named<TextBlock>(editor, "PreviewDataCaption"), (FrameworkElement)editor.Content, "The small preview keeps its demonstration-data caption visible");
             Save(editor, "settings-small-preview.png");
-            Check(editor.SelectSection("components") && Named<Grid>(editor, "SettingsContentPanel").Visibility == Visibility.Visible, "Sidebar navigation returns from small preview to settings");
+            Check(editor.SelectSection("appearance") && Named<Grid>(editor, "SettingsContentPanel").Visibility == Visibility.Visible, "Sidebar navigation returns from small preview to settings");
             Save(editor, "settings-small.png");
             Check(editor.CommitDraft() && editor.DraftApplication?.Placement == placement, "Saving the local draft preserves fractional placement without moving a real HUD");
         }
@@ -202,8 +202,7 @@ internal static class Program
         {
             Prepare(editor); editor.Width = 800; editor.Height = 420; editor.Show(); await Settle();
             string before = DraftSnapshot(editor);
-            var cases = new[] { ("appearance", "ColumnsThreeRadio"),
-                ("components", "BatteryCheckBox"), ("alerts", "StutterCountSlider"),
+            var cases = new[] { ("appearance", "VolumeWheelCheckBox"), ("alerts", "StutterCountSlider"),
                 ("placement", "PlacementLockCheckBox"), ("profiles", "CopyProfileButton"), ("application", "SettingsVersionText") };
             foreach (var (section, bottomName) in cases)
             {
@@ -218,7 +217,7 @@ internal static class Program
                 InViewport(bottom, scroll, "Wheel scrolling reaches the last control: " + section);
                 if (section is "placement" or "profiles" or "application") Save(editor, "settings-" + section + "-short-bottom.png");
             }
-            Check(DraftSnapshot(editor) == before, "Scrolling all six sections does not alter any preference draft");
+            Check(DraftSnapshot(editor) == before, "Scrolling all five sections does not alter any preference draft");
 
             editor.SelectSection("appearance"); await Settle();
             var appearanceScroll = PageScroll(editor);

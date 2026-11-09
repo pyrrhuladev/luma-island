@@ -44,6 +44,8 @@ internal static partial class Program
                 await RunCapsuleEditChecks();
                 await RunAllTilesChecks();
                 await RunContainerChecks();
+                await RunWidgetPickerUiChecks();
+                await RunWidgetDraftChecks();
                 await RunCapsuleProfileChecks();
                 Check(preferences.OrderBy(p => p.Key).SequenceEqual(RealPreferences().OrderBy(p => p.Key)),
                     "All actual user preference files remain byte-for-byte unchanged");
@@ -583,6 +585,8 @@ internal static partial class Program
 
         Call(window, "BeginCapsuleEdit");
         Call(window, "MoveCapsuleItem", "memory", "music", 0, new Point()); await Settle();
+        Call(window, "SetCapsuleWidget", "fps-chart", true);
+        Call(window, "SetCapsuleWidget", "time", false);
         var layout = window.Appearance.Layout.Capsules!;
         Check(layout.Islands.Single(capsule => capsule.Id == "music") == new HudCapsule("music", "memory,music,volume", musicAnchor) &&
               !window.ActivateGameProfile(second) && window.ActiveGameProfileId == first,
@@ -591,10 +595,11 @@ internal static partial class Program
             "A profile draft writes neither the ordinary stores nor profiles.json");
         Call(window, "EndCapsuleEdit", true); await Settle();
         var saved = fixture.Profiles.Load().Profiles;
-        Check(saved.Single(profile => profile.Id == first).Settings.Appearance.Layout.Capsules == layout &&
+        var firstSaved = saved.Single(profile => profile.Id == first).Settings;
+        Check(firstSaved.Appearance.Layout.Capsules == layout && firstSaved.Components.ShowFpsChart && !firstSaved.Components.Time &&
               saved.Single(profile => profile.Id == second).Settings == secondHud &&
               fixture.BaseHashes().SequenceEqual(ordinaryBytes),
-            "Saving commits only the active game's capsule layout");
+            "Saving commits the active game's capsule layout and widget selection together");
         Check(window.ActivateGameProfile(second) && CapsuleWindows(window).Length == 1 &&
               window.ActivateGameProfile(first),
             "Switching profiles restores the independent capsule arrangement");

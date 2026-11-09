@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Luma.Island.Services;
 
@@ -20,9 +21,19 @@ public sealed record ComponentSettings(
     bool MemoryTemperature = false,
     bool OnePercentLow = false,
     bool FrameTime = false,
-    bool VolumeWheel = false)
+    bool VolumeWheel = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? CpuChart = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? GpuChart = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? MemoryChart = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? FpsChart = null)
 {
     public static ComponentSettings Default { get; } = new();
+
+    [JsonIgnore] public bool ShowCpuChart => CpuChart ?? (Charts && Cpu);
+    [JsonIgnore] public bool ShowGpuChart => GpuChart ?? (Charts && Gpu);
+    [JsonIgnore] public bool ShowMemoryChart => MemoryChart ?? (Charts && Memory);
+    [JsonIgnore] public bool ShowFpsChart => FpsChart ?? (Charts && Fps);
+    [JsonIgnore] public bool HasCharts => ShowCpuChart || ShowGpuChart || ShowMemoryChart || ShowFpsChart;
 }
 
 /// <summary>Component choices only; reading settings does not start any system monitors.</summary>
