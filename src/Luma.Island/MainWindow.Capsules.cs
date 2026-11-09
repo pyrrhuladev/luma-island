@@ -10,11 +10,14 @@ public partial class MainWindow
 {
     private readonly string? _capsuleId;
     private string? _capsuleItems;
+    private string? _capsuleRows;
     private readonly Dictionary<string, MainWindow> _capsuleWindows = new(StringComparer.Ordinal);
     private ComponentSettings? _presentedComponents;
     private HudLayoutSettings? _presentationLayout;
     private string? _presentationItemsKey;
+    private string? _presentationRowsKey;
     private string[]? PresentationCapsuleItems { get; set; }
+    private string[][]? PresentationRows { get; set; }
 
     private ComponentSettings PresentedComponents => _presentedComponents ?? Components;
     private HudLayoutSettings PresentationLayout => _presentationLayout ?? LayoutSettings;
@@ -53,20 +56,28 @@ public partial class MainWindow
         {
             _presentedComponents = null;
             _presentationLayout = null;
-            SetPresentationItems(_capsuleItems);
+            SetPresentationOrder(_capsuleItems, _capsuleRows);
             return;
         }
         var projection = ProjectCapsule(Appearance, Components, layout.Islands[0]);
         _presentedComponents = projection.Components;
         _presentationLayout = projection.Appearance.Layout;
-        SetPresentationItems(projection.Items);
+        SetPresentationOrder(projection.Items, projection.Rows);
     }
 
-    private void SetPresentationItems(string? items)
+    private void SetPresentationOrder(string? items, string? rows)
     {
-        if (_presentationItemsKey == items) return;
-        _presentationItemsKey = items;
-        PresentationCapsuleItems = items?.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        if (_presentationItemsKey != items)
+        {
+            _presentationItemsKey = items;
+            PresentationCapsuleItems = items?.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        }
+        if (_presentationRowsKey != rows)
+        {
+            _presentationRowsKey = rows;
+            PresentationRows = rows?.Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .Select(row => row.Split(',', StringSplitOptions.RemoveEmptyEntries)).ToArray();
+        }
     }
 
     private bool PresentsChart(string metric) => PresentedComponents.Charts &&
@@ -84,7 +95,7 @@ public partial class MainWindow
         "cpu" => components.Cpu, "gpu" => components.Gpu, "memory" => components.Memory, "fps" => components.Fps, _ => false
     };
 
-    internal static (AppearanceSettings Appearance, ComponentSettings Components, string Items) ProjectCapsule(
+    internal static (AppearanceSettings Appearance, ComponentSettings Components, string Items, string? Rows) ProjectCapsule(
         AppearanceSettings appearance, ComponentSettings components, HudCapsule capsule)
     {
         string[] items = capsule.GetItems();
@@ -119,7 +130,8 @@ public partial class MainWindow
         });
         string presentedItems = string.Join(',', items.Where(item => !HudCapsuleLayout.IsChart(item) ||
             components.Charts && MetricEnabled(components, item[..^"-chart".Length])));
-        return (appearance with { Layout = layout, Alerts = primary ? appearance.Alerts : AlertSettings.Default }, projected, presentedItems);
+        return (appearance with { Layout = layout, Alerts = primary ? appearance.Alerts : AlertSettings.Default },
+            projected, presentedItems, capsule.Rows);
     }
 
     private void SynchronizeCapsules(HudCapsuleLayout layout)
@@ -134,7 +146,7 @@ public partial class MainWindow
         foreach (var capsule in layout.Islands)
         {
             if (capsule.Id == HudCapsuleLayout.MainId) continue;
-            var (appearance, components, items) = ProjectCapsule(Appearance with { ClickThrough = IsClickThrough }, Components, capsule);
+            var (appearance, components, items, rows) = ProjectCapsule(Appearance with { ClickThrough = IsClickThrough }, Components, capsule);
             if (!(components.Music || components.Volume || components.Cpu || components.Gpu || components.Memory ||
                 components.CpuTemperature || components.GpuTemperature || components.MemoryTemperature ||
                 components.Fps || components.OnePercentLow || components.FrameTime || components.Time || components.Date ||
@@ -145,7 +157,7 @@ public partial class MainWindow
             {
                 child = new MainWindow(_media, _system, new CapsulePlacementStore(this, capsule.Id),
                     new CapsuleAppearanceStore(appearance), new CapsuleComponentStore(components),
-                    new AutostartService(readOnly: true), islandOwner: this, capsuleId: capsule.Id, capsuleItems: items)
+                    new AutostartService(readOnly: true), islandOwner: this, capsuleId: capsule.Id, capsuleItems: items, capsuleRows: rows)
                 {
                     Owner = this,
                     Title = "Luma Island · Капсула",
@@ -159,11 +171,12 @@ public partial class MainWindow
                 child.Closed += OnCapsuleClosed;
             }
             bool appearanceChanged = child.Appearance != appearance;
-            if (appearanceChanged || child.Components != components || child._capsuleItems != items || !child.IsLoaded)
+            if (appearanceChanged || child.Components != components || child._capsuleItems != items || child._capsuleRows != rows || !child.IsLoaded)
             {
                 child.Appearance = appearance;
                 child.Components = components;
                 child._capsuleItems = items;
+                child._capsuleRows = rows;
                 child._lastPerformance = _lastPerformance;
                 child._lastBattery = _lastBattery;
                 child._lastFrameMetrics = _lastFrameMetrics;

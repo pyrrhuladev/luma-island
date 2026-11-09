@@ -104,7 +104,10 @@ public partial class MainWindow
         var target = moved ? owner.FindCapsuleDropTarget(drag.Item, screenPoint) : null;
         CancelCapsuleGesture();
         // Applying the draft can close the window that just released the pointer.
-        if (moved) owner.MoveCapsuleItem(drag.Item, target?.Id, target?.InsertIndex ?? 0, screenPoint);
+        if (!moved) return;
+        if (target?.Row is { } row)
+            owner.MoveCapsuleItemToRow(drag.Item, target.Id, row.RowIndex, row.ColumnIndex, row.NewRow);
+        else owner.MoveCapsuleItem(drag.Item, target?.Id, target?.InsertIndex ?? 0, screenPoint);
     }
 
     private void OnCapsuleCaptureLost(object sender, MouseEventArgs e)
@@ -133,20 +136,98 @@ public partial class MainWindow
         IntPtr hit = WindowFromCapsulePoint(new CapsuleScreenPoint((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y)));
         foreach (var (id, window) in LayoutWindows())
         {
-            if (!window.IsVisible || !window.IslandSurface.IsVisible || new WindowInteropHelper(window).Handle != hit) continue;
-            var local = window.IslandSurface.PointFromScreen(screenPoint);
-            if (!new Rect(window.IslandSurface.RenderSize).Contains(local)) continue;
+            if (!window.IsVisible || new WindowInteropHelper(window).Handle != hit) continue;
             var capsule = draft.Islands.FirstOrDefault(candidate => candidate.Id == id);
-            if (capsule is not null) return window.CapsuleInsertion(capsule, item, local);
+            if (capsule is not null) return window.CapsuleDropTargetAt(capsule, item, screenPoint);
         }
         return null;
+    }
+
+    private CapsuleDropTarget? CapsuleDropTargetAt(HudCapsule capsule, string item, Point screenPoint)
+    {
+        if (IslandSurface.IsVisible)
+        {
+            Point local = IslandSurface.PointFromScreen(screenPoint);
+            if (!new Rect(IslandSurface.RenderSize).Contains(local)) return null;
+            return CapsuleRowInsertion(capsule, item, local) ?? CapsuleInsertion(capsule, item, local);
+        }
+        if (capsule.Id == HudCapsuleLayout.MainId && CapsuleEditDropZone.IsVisible &&
+            new Rect(CapsuleEditDropZone.RenderSize).Contains(CapsuleEditDropZone.PointFromScreen(screenPoint)))
+            return new(capsule.Id, CapsuleEditDropZone, 0, Rect.Empty);
+        return null;
+    }
+
+    private CapsuleDropTarget? CapsuleRowInsertion(HudCapsule capsule, string item, Point local)
+    {
+        string[][] rows = capsule.GetRows();
+        bool explicitRows = capsule.HasExplicitRows;
+        int nearest = -1;
+        Rect nearestBounds = Rect.Empty;
+        double nearestDistance = double.PositiveInfinity;
+        for (int rowIndex = 0; rowIndex < rows.Length; rowIndex++)
+        {
+            string[] row = rows[rowIndex];
+            if (row.Length == 0) continue;
+            Rect bounds = Rect.Empty;
+            if (explicitRows)
+            {
+                foreach (string widget in row) bounds.Union(CapsuleWidgetBounds(widget));
+            }
+            else bounds = CapsuleElementBounds(PresentedWidgetGroup(HudCapsuleLayout.Group(row[0])));
+            if (bounds.IsEmpty) continue;
+            double distance = Math.Abs(local.Y - Math.Clamp(local.Y, bounds.Top, bounds.Bottom));
+            if (distance >= nearestDistance) continue;
+            nearest = rowIndex;
+            nearestBounds = bounds;
+            nearestDistance = distance;
+        }
+        if (nearest < 0) return null;
+
+        double sideBand = Math.Clamp(nearestBounds.Width * .2, 12, 48);
+        double rowBand = Math.Clamp(nearestBounds.Height * .2, 3, 9);
+        bool nearSide = local.X <= nearestBounds.Left + sideBand || local.X >= nearestBounds.Right - sideBand;
+        bool insideRow = local.Y >= nearestBounds.Top && local.Y <= nearestBounds.Bottom;
+        bool nearRowEdge = local.Y < nearestBounds.Top + rowBand || local.Y > nearestBounds.Bottom - rowBand;
+        string group = HudCapsuleLayout.Group(item);
+        bool canSeparate = explicitRows || group != item && rows.Any(row =>
+            row.Any(widget => widget != item && HudCapsuleLayout.Group(widget) == group));
+
+        if (nearRowEdge && canSeparate && (!nearSide || !insideRow))
+        {
+            bool below = local.Y >= CapsuleCenter(nearestBounds).Y;
+            return new(capsule.Id, IslandSurface, 0, CapsuleRowMarker(nearestBounds, below),
+                new(nearest + (below ? 1 : 0), 0, NewRow: true));
+        }
+        if (!insideRow || !explicitRows && !nearSide) return null;
+
+        Rect closest = Rect.Empty;
+        int column = -1;
+        double closestDistance = double.PositiveInfinity;
+        string[] widgets = rows[nearest];
+        for (int index = 0; index < widgets.Length; index++)
+        {
+            Rect bounds = CapsuleWidgetBounds(widgets[index]);
+            if (bounds.IsEmpty) continue;
+            Point within = new(Math.Clamp(local.X, bounds.Left, bounds.Right), Math.Clamp(local.Y, bounds.Top, bounds.Bottom));
+            double distance = (within - local).LengthSquared;
+            if (distance >= closestDistance) continue;
+            closest = bounds;
+            closestDistance = distance;
+            column = index;
+        }
+        if (column < 0) return null;
+
+        bool after = local.X >= CapsuleCenter(closest).X;
+        double x = after ? closest.Right : closest.Left;
+        return new(capsule.Id, IslandSurface, 0, new Rect(x - 1, closest.Top + 1, 2, Math.Max(1, closest.Height - 2)),
+            new(nearest, column + (after ? 1 : 0), NewRow: false));
     }
 
     private CapsuleDropTarget CapsuleInsertion(HudCapsule capsule, string item, Point local)
     {
         string[] items = capsule.GetItems();
         string group = HudCapsuleLayout.Group(item);
-        CapsuleDropTarget At(int index, Rect marker) => new(capsule.Id, this, capsule.GetInsertionIndex(item, index), marker);
+        CapsuleDropTarget At(int index, Rect marker) => new(capsule.Id, IslandSurface, capsule.GetInsertionIndex(item, index), marker);
 
         // A group occupies one row or grid. Drop between its arranged tiles if
         // the destination already holds other members of that group.
@@ -202,8 +283,8 @@ public partial class MainWindow
         int insertIndex = capsule.GetInsertionIndex(item, rawIndex);
         foreach (var row in rows)
             if (insertIndex <= row.First)
-                return new(capsule.Id, this, insertIndex, CapsuleRowMarker(row.Bounds, below: false));
-        return new(capsule.Id, this, insertIndex, CapsuleRowMarker(rows[^1].Bounds, below: true));
+                return new(capsule.Id, IslandSurface, insertIndex, CapsuleRowMarker(row.Bounds, below: false));
+        return new(capsule.Id, IslandSurface, insertIndex, CapsuleRowMarker(rows[^1].Bounds, below: true));
     }
 
     private Rect CapsuleRowMarker(Rect row, bool below)
@@ -214,6 +295,7 @@ public partial class MainWindow
 
     private Rect CapsuleWidgetBounds(string item)
     {
+        if (CapsuleContainerCell(item) is { } cell) return CapsuleElementBounds(cell);
         FrameworkElement? element = PresentedWidget(item);
         Rect visible = CapsuleElementBounds(element);
         string group = HudCapsuleLayout.Group(item);
@@ -281,25 +363,26 @@ public partial class MainWindow
     private static void PositionCapsuleDragPreview(Window preview, Point screenPoint)
         => DisplayService.MoveWindow(preview, screenPoint.X + 16, screenPoint.Y + 18);
 
-    private sealed record CapsuleDropTarget(string Id, MainWindow Window, int InsertIndex, Rect Marker);
+    private sealed record CapsuleRowDrop(int RowIndex, int ColumnIndex, bool NewRow);
+    private sealed record CapsuleDropTarget(string Id, FrameworkElement Surface, int InsertIndex, Rect Marker, CapsuleRowDrop? Row = null);
 
     private sealed class CapsuleGesture(string item, Point origin)
     {
         private AdornerLayer? _layer;
         private CapsuleDropAdorner? _adorner;
-        private MainWindow? _targetWindow;
+        private FrameworkElement? _targetSurface;
         public string Item { get; } = item;
         public Point Origin { get; } = origin;
         public Window? Preview { get; set; }
 
         public void ShowTarget(CapsuleDropTarget? target)
         {
-            if (_targetWindow != target?.Window)
+            if (_targetSurface != target?.Surface)
             {
                 if (_adorner is not null) _layer?.Remove(_adorner);
-                _targetWindow = target?.Window;
-                _layer = target is null ? null : AdornerLayer.GetAdornerLayer(target.Window.IslandSurface);
-                _adorner = _layer is null || target is null ? null : new CapsuleDropAdorner(target.Window.IslandSurface);
+                _targetSurface = target?.Surface;
+                _layer = _targetSurface is null ? null : AdornerLayer.GetAdornerLayer(_targetSurface);
+                _adorner = _layer is null || _targetSurface is null ? null : new CapsuleDropAdorner(_targetSurface);
                 if (_adorner is not null) _layer?.Add(_adorner);
             }
             if (target is not null) _adorner?.SetMarker(target.Marker);

@@ -44,9 +44,14 @@ public partial class MainWindow
 
     private void RefreshCapsuleEditChrome()
     {
-        CapsuleMoveGrip.Visibility = Show(IsCapsuleLayoutEditing);
+        bool empty = IslandSurface.Visibility != Visibility.Visible;
+        CapsuleMoveGrip.Visibility = Show(IsCapsuleLayoutEditing && (!empty || _islandOwner is null));
         CapsuleMoveGrip.IsEnabled = !IsPositionLocked;
+        CapsuleMoveGrip.VerticalAlignment = empty ? VerticalAlignment.Bottom : VerticalAlignment.Top;
+        CapsuleMoveGrip.Height = empty ? CapsuleEditBar.Height : 36;
+        CapsuleMoveGrip.Margin = empty ? new Thickness(1, 0, 0, 6) : new Thickness(1, 22, 0, 0);
         CapsuleEditBar.Visibility = Show(CapsuleEditBarHeight > 0);
+        CapsuleEditHint.Text = empty ? "Вернуть блок сюда" : "Перетащите блок";
     }
 
     private void OnCapsuleGripDown(object sender, MouseButtonEventArgs e)
@@ -101,6 +106,14 @@ public partial class MainWindow
         var target = new Rect(point.X - size.Width / 2, point.Y - size.Height / 2, size.Width, size.Height);
         var fractions = PlacementMath.Capture(display.WorkArea, target, margin);
         return new(display.Id, fractions.X, fractions.Y);
+    }
+
+    private void MoveCapsuleItemToRow(string item, string targetId, int rowIndex, int columnIndex, bool newRow)
+    {
+        if (_capsuleEdit is null) return;
+        var previous = CapsuleDraft;
+        var moved = previous.MoveToRow(item, targetId, rowIndex, columnIndex, newRow);
+        if (moved != previous) ApplyCapsuleDraft(moved);
     }
 
     private void OnCapsuleEditorKeyDown(object sender, KeyEventArgs e)

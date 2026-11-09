@@ -33,6 +33,7 @@ public partial class MainWindow
     {
         get
         {
+            if (_containerContentSize is { } content) return content.Width + 60;
             if (_capsuleId is null || MusicInThisIsland) return 408;
             double header = (PresentedComponents.Fps ? 108 : 0) + (PresentedComponents.OnePercentLow ? 56 : 0)
                 + (PresentedComponents.Time ? 52 : 0) + (_batteryVisible ? 48 : 0);
@@ -43,7 +44,8 @@ public partial class MainWindow
     }
     private double CollapsedSurfaceWidth => BaseCollapsedWindowWidth - 32;
     private double BaseCollapsedWindowHeight => 38 + Math.Max(20,
-        HudHeaderHeight + HudMetricsHeight + HudMusicHeight + ChartsHeight + LayoutFrameTimeHeight + HudVolumeHeight + HudDateHeight);
+        _containerContentSize?.Height ??
+        (HudHeaderHeight + HudMetricsHeight + HudMusicHeight + ChartsHeight + LayoutFrameTimeHeight + HudVolumeHeight + HudDateHeight));
     public double CollapsedWindowHeight => ScaledHudDimension(BaseCollapsedWindowHeight);
     public double CollapsedWindowWidth => ScaledHudDimension(BaseCollapsedWindowWidth);
 
@@ -98,12 +100,10 @@ public partial class MainWindow
         RefreshChartsVisibility();
         RefreshComponentSize();
         SynchronizeMusicIsland();
-        RefreshCapsuleEditChrome();
     }
 
     private void RefreshComponentSize()
     {
-        CompactContentGrid.Width = CollapsedSurfaceWidth - 28;
         ApplyHudLayout();
         UpdateHudScaleTransform();
         HudHeaderRow.Height = new GridLength(HudHeaderHeight);
@@ -112,10 +112,11 @@ public partial class MainWindow
         HudMusicRow.Height = new GridLength(HudMusicHeight);
         IslandSurface.Height = BaseCollapsedWindowHeight - 24;
         IslandSurface.Width = CollapsedSurfaceWidth;
-        IslandSurface.Visibility = !IsCapsuleLayoutActive || HasCapsuleContent || IsCapsuleLayoutEditing
+        IslandSurface.Visibility = !IsCapsuleLayoutActive || HasCapsuleContent
             ? Visibility.Visible : Visibility.Hidden;
         Height = ScaledHudDimension(BaseCollapsedWindowHeight + CapsuleEditBarHeight);
         Width = CollapsedWindowWidth;
+        RefreshCapsuleEditChrome();
         _placement?.Apply();
     }
 

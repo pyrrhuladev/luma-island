@@ -59,6 +59,16 @@ public partial class MainWindow
         if (!_layoutFontsCaptured && Content is not null) { CaptureLayoutFonts(Content); _layoutFontsCaptured = true; }
         foreach (var item in _layoutBaseFonts) item.Key.FontSize = item.Value * layout.TextScale;
         CompactCpu.LineHeight = CompactGpu.LineHeight = CompactMemory.LineHeight = 16 * layout.TextScale;
+        if (ApplyContainerRows())
+        {
+            CompactLowPanel.Margin = new Thickness(0);
+            CompactMusicRow.Margin = new Thickness(0);
+            CompactCpu.Margin = CompactGpu.Margin = CompactMemory.Margin = new Thickness(0);
+            ResizeChartTextRows(layout.TextScale);
+            FitHeaderText(force: true);
+            return;
+        }
+        CompactContentGrid.Width = CollapsedSurfaceWidth - 28;
 
         string rowKey = _presentationItemsKey ?? layout.BlockOrder;
         if (_appliedBlockOrder != rowKey)
@@ -187,6 +197,22 @@ public partial class MainWindow
         {
             element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             return element.DesiredSize.Width;
+        }
+        if (PresentationRows is not null)
+        {
+            if (CapsuleContainerCell("fps") is { } fpsCell)
+            {
+                double fpsFit = Math.Min(1, fpsCell.Width / Math.Max(1, Width(CompactFpsPanel)));
+                CompactFps.FontSize *= fpsFit;
+                CompactFpsUnit.FontSize *= fpsFit;
+            }
+            if (CapsuleContainerCell("low") is { } lowCell)
+            {
+                double lowFit = Math.Min(1, lowCell.Width / Math.Max(1, Width(CompactLowPanel)));
+                CompactOnePercentLow.FontSize *= lowFit;
+                if (CompactLowPanel.Children[0] is TextBlock lowTitle) lowTitle.FontSize *= lowFit;
+            }
+            return;
         }
         double right = 0;
         if (PresentedComponents.Time) right += Width(CompactClock);

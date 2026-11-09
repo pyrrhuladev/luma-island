@@ -29,7 +29,7 @@ public partial class MainWindow : Window
 
     public MainWindow(MediaService media, SystemService system, PlacementStore? placementStore = null, AppearanceStore? appearanceStore = null,
         ComponentStore? componentStore = null, AutostartService? autostart = null, GameProfileController? profiles = null,
-        MainWindow? islandOwner = null, string? capsuleId = null, string? capsuleItems = null)
+        MainWindow? islandOwner = null, string? capsuleId = null, string? capsuleItems = null, string? capsuleRows = null)
     {
         _media = media;
         _system = system;
@@ -39,6 +39,7 @@ public partial class MainWindow : Window
         _islandOwner = islandOwner;
         _capsuleId = capsuleId;
         _capsuleItems = capsuleItems;
+        _capsuleRows = capsuleRows;
         _cpuHistory = islandOwner?._cpuHistory ?? new MetricHistory();
         _gpuHistory = islandOwner?._gpuHistory ?? new MetricHistory();
         _memoryHistory = islandOwner?._memoryHistory ?? new MetricHistory();

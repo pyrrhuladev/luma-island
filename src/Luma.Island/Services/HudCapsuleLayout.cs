@@ -7,8 +7,21 @@ namespace Luma.Island.Services;
 
 public sealed record HudCapsule(string Id, string Items, HudIslandPosition? Position = null)
 {
-    public string[] GetItems() => Items is { Length: <= 256 }
-        ? Items.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+    private const int MaxLayoutTextLength = 256;
+    private const StringSplitOptions SplitOptions = StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries;
+
+    public string? Rows { get; init; }
+
+    internal bool HasExplicitRows => Rows is { Length: <= MaxLayoutTextLength };
+
+    public string[] GetItems() => SplitItems(HasExplicitRows ? Rows!.Replace(';', ',') : Items);
+
+    public string[][] GetRows() => HasExplicitRows
+        ? Rows!.Split(';', SplitOptions).Select(SplitItems).Where(row => row.Length > 0).ToArray()
+        : GetItems().GroupBy(HudCapsuleLayout.Group).Select(group => group.ToArray()).ToArray();
+
+    private static string[] SplitItems(string? items) => items is { Length: <= MaxLayoutTextLength }
+        ? items.Split(',', SplitOptions)
         : [];
 
     // Each visual group occupies one row or grid. Snap unrelated tiles to its edge.
@@ -16,6 +29,7 @@ public sealed record HudCapsule(string Id, string Items, HudIslandPosition? Posi
     {
         string[] items = GetItems();
         int index = Math.Clamp(insertIndex, 0, items.Length);
+        if (HasExplicitRows) return index;
         string group = HudCapsuleLayout.Group(item);
         int first = Array.FindIndex(items, key => key != item && HudCapsuleLayout.Group(key) == group);
         if (first >= 0)
@@ -78,27 +92,27 @@ public sealed record HudCapsuleLayout(ImmutableArray<HudCapsule> Islands)
         var islands = layout.Islands.IsDefault ? ImmutableArray<HudCapsule>.Empty : layout.Islands;
         var main = islands.FirstOrDefault(island => CanonicalId(island?.Id) == MainId);
         var usedItems = new HashSet<string>(StringComparer.Ordinal);
-        List<string> mainItems = ReadItems(main, expandLegacyHeader: true, usedItems);
-        var accepted = new List<(string Id, List<string> Items, HudIslandPosition? Position)>
+        var (mainItems, mainRows) = ReadCapsule(main, expandLegacyHeader: true, usedItems);
+        var accepted = new List<(string Id, List<string> Items, List<string[]>? Rows, HudIslandPosition? Position)>
         {
-            (MainId, mainItems, null)
+            (MainId, mainItems, mainRows, null)
         };
         var usedIds = new HashSet<string>(StringComparer.Ordinal) { MainId };
         foreach (HudCapsule island in islands)
         {
             string? id = CanonicalId(island?.Id);
             if (id is null || usedIds.Contains(id)) continue;
-            var items = ReadItems(island, expandLegacyHeader: false, usedItems);
+            var (items, rows) = ReadCapsule(island, expandLegacyHeader: false, usedItems);
             if (items.Count != 0)
             {
                 usedIds.Add(id);
-                accepted.Add((id, items, HudIslandPosition.Normalize(island!.Position)));
+                accepted.Add((id, items, rows, HudIslandPosition.Normalize(island!.Position)));
             }
         }
 
         mainItems.AddRange(DefaultItems.Where(usedItems.Add));
         var normalized = ImmutableArray.CreateBuilder<HudCapsule>(accepted.Count);
-        foreach (var (id, items, position) in accepted)
+        foreach (var (id, items, rows, position) in accepted)
         {
             // Older layouts implicitly drew mini charts and volume with their owners.
             foreach (var (metric, chart) in Charts)
@@ -106,7 +120,15 @@ public sealed record HudCapsuleLayout(ImmutableArray<HudCapsule> Islands)
             if (id == MainId && usedItems.Add("frame-time")) items.Add("frame-time");
             if (items.Contains("music") && usedItems.Add("volume")) items.Add("volume");
             if (id == MainId && usedItems.Add("date")) items.Add("date");
-            normalized.Add(new(id, string.Join(',', items.GroupBy(Group).SelectMany(group => group)), position));
+            if (rows is null)
+            {
+                normalized.Add(new(id, string.Join(',', items.GroupBy(Group).SelectMany(group => group)), position));
+            }
+            else
+            {
+                var added = items.Skip(rows.Sum(row => row.Length)).GroupBy(Group).Select(group => group.ToArray());
+                normalized.Add(WithRows(new(id, string.Empty, position), rows.Concat(added)));
+            }
         }
         var result = new HudCapsuleLayout(normalized.MoveToImmutable());
         return layout.Equals(result) ? layout : result;
@@ -126,7 +148,7 @@ public sealed record HudCapsuleLayout(ImmutableArray<HudCapsule> Islands)
         {
             if (position is null) return this;
             if (source.Id != MainId && sourceItems.Count == 0) return WithPosition(source.Id, position);
-            var moved = Islands.SetItem(sourceIndex, source with { Items = string.Join(',', sourceItems) })
+            var moved = Islands.SetItem(sourceIndex, WithoutItem(source, item, sourceItems))
                 .Add(new(Guid.NewGuid().ToString("N"), item, HudIslandPosition.Normalize(position)));
             return new(moved);
         }
@@ -135,6 +157,14 @@ public sealed record HudCapsuleLayout(ImmutableArray<HudCapsule> Islands)
         if (targetIndex < 0) return this;
         HudCapsule target = Islands[targetIndex];
         int index = target.GetInsertionIndex(item, insertIndex);
+        if (target.HasExplicitRows)
+        {
+            string[][] rows = target.GetRows();
+            int row = 0;
+            while (row < rows.Length - 1 && index >= rows[row].Length)
+                index -= rows[row++].Length;
+            return MoveToRow(item, destinationId, row, index, newRow: false);
+        }
         if (sourceIndex == targetIndex)
         {
             if (itemIndex < index) index--;
@@ -148,7 +178,55 @@ public sealed record HudCapsuleLayout(ImmutableArray<HudCapsule> Islands)
         var reassigned = Islands.SetItem(targetIndex, target with { Items = string.Join(',', targetItems) });
         return new(sourceItems.Count == 0 && source.Id != MainId
             ? reassigned.RemoveAt(sourceIndex)
-            : reassigned.SetItem(sourceIndex, source with { Items = string.Join(',', sourceItems) }));
+            : reassigned.SetItem(sourceIndex, WithoutItem(source, item, sourceItems)));
+    }
+
+    /// <summary>Move into a row or insert a new row before the supplied destination index.</summary>
+    public HudCapsuleLayout MoveToRow(string item, string destinationId, int rowIndex, int columnIndex, bool newRow)
+    {
+        if (!IsMovable(item) || Islands.IsDefaultOrEmpty) return this;
+        int sourceIndex = FindSource(item);
+        int targetIndex = FindIsland(destinationId);
+        if (sourceIndex < 0 || targetIndex < 0) return this;
+
+        HudCapsule source = Islands[sourceIndex];
+        HudCapsule target = Islands[targetIndex];
+        bool sameCapsule = sourceIndex == targetIndex;
+        var sourceRows = source.GetRows().Select(row => row.ToList()).ToList();
+        var targetRows = sameCapsule ? sourceRows : target.GetRows().Select(row => row.ToList()).ToList();
+        var sourceRow = sourceRows.First(row => row.Contains(item));
+        int sourceColumn = sourceRow.IndexOf(item);
+
+        // Keep the source row in the list until after insertion so the destination
+        // row index still describes the pre-removal layout seen by the pointer.
+        if (newRow || targetRows.Count == 0)
+        {
+            sourceRow.RemoveAt(sourceColumn);
+            targetRows.Insert(Math.Clamp(rowIndex, 0, targetRows.Count), [item]);
+        }
+        else
+        {
+            var targetRow = targetRows[Math.Clamp(rowIndex, 0, targetRows.Count - 1)];
+            int index = Math.Clamp(columnIndex, 0, targetRow.Count);
+            if (ReferenceEquals(sourceRow, targetRow) && sourceColumn < index) index--;
+            sourceRow.RemoveAt(sourceColumn);
+            targetRow.Insert(index, item);
+        }
+        sourceRows.RemoveAll(row => row.Count == 0);
+
+        HudCapsule updatedTarget = WithRows(target, targetRows);
+        if (sameCapsule)
+        {
+            if (updatedTarget.Rows == EncodeRows(target.GetRows())) return this;
+            return new(Islands.SetItem(targetIndex, updatedTarget));
+        }
+
+        var reassigned = Islands.SetItem(targetIndex, updatedTarget);
+        if (sourceRows.Count == 0 && source.Id != MainId) return new(reassigned.RemoveAt(sourceIndex));
+        HudCapsule updatedSource = source.HasExplicitRows
+            ? WithRows(source, sourceRows)
+            : source with { Items = string.Join(',', sourceRows.SelectMany(row => row)) };
+        return new(reassigned.SetItem(sourceIndex, updatedSource));
     }
 
     public HudCapsuleLayout WithPosition(string id, HudIslandPosition position)
@@ -185,10 +263,39 @@ public sealed record HudCapsuleLayout(ImmutableArray<HudCapsule> Islands)
         return -1;
     }
 
-    private static List<string> ReadItems(HudCapsule? island, bool expandLegacyHeader, HashSet<string> used)
+    private static HudCapsule WithoutItem(HudCapsule source, string item, List<string> remaining) => source.HasExplicitRows
+        ? WithRows(source, source.GetRows().Select(row => row.Where(value => value != item).ToArray()).Where(row => row.Length > 0))
+        : source with { Items = string.Join(',', remaining) };
+
+    private static HudCapsule WithRows(HudCapsule capsule, IEnumerable<IEnumerable<string>> rows)
+    {
+        string encoded = EncodeRows(rows);
+        return capsule with { Items = encoded.Replace(';', ','), Rows = encoded };
+    }
+
+    private static string EncodeRows(IEnumerable<IEnumerable<string>> rows) =>
+        string.Join(';', rows.Select(row => string.Join(',', row)));
+
+    private static (List<string> Items, List<string[]>? Rows) ReadCapsule(HudCapsule? island, bool expandLegacyHeader, HashSet<string> used)
+    {
+        if (island?.HasExplicitRows != true) return (ReadItems(island?.GetItems() ?? [], expandLegacyHeader, used), null);
+
+        var rows = new List<string[]>();
+        var items = new List<string>();
+        foreach (string[] row in island.GetRows())
+        {
+            var accepted = ReadItems(row, expandLegacyHeader, used);
+            if (accepted.Count == 0) continue;
+            rows.Add(accepted.ToArray());
+            items.AddRange(accepted);
+        }
+        return (items, rows);
+    }
+
+    private static List<string> ReadItems(IEnumerable<string> input, bool expandLegacyHeader, HashSet<string> used)
     {
         var items = new List<string>();
-        foreach (string raw in island?.GetItems() ?? [])
+        foreach (string raw in input)
         {
             string item = raw.ToLowerInvariant();
             if (expandLegacyHeader && item == "header") items.AddRange(HeaderItems.Where(used.Add));

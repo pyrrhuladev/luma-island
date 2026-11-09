@@ -43,6 +43,7 @@ internal static partial class Program
                 await RunProfileChecks();
                 await RunCapsuleEditChecks();
                 await RunAllTilesChecks();
+                await RunContainerChecks();
                 await RunCapsuleProfileChecks();
                 Check(preferences.OrderBy(p => p.Key).SequenceEqual(RealPreferences().OrderBy(p => p.Key)),
                     "All actual user preference files remain byte-for-byte unchanged");
@@ -678,16 +679,48 @@ internal static partial class Program
         Call(window, "BeginCapsuleEdit");
         foreach (string item in draft.Islands[0].GetItems())
             Call(window, "MoveCapsuleItem", item, volumeId, int.MaxValue, drop);
+        await Settle();
+        var surface = Named<Border>(window, "IslandSurface");
+        var editBar = Named<Border>(window, "CapsuleEditBar");
+        var returnZone = Named<FrameworkElement>(window, "CapsuleEditDropZone");
+        var hint = Named<TextBlock>(window, "CapsuleEditHint");
+        Check(!surface.IsVisible && editBar.IsVisible && returnZone.IsVisible && hint.Text == "Вернуть блок сюда",
+            "Moving the last tile out hides the empty surface immediately and leaves the editor controls and return hint visible");
+
         Call(window, "EndCapsuleEdit", true); await Settle();
-        Check(window.Appearance.Layout.Capsules!.Islands[0].Items.Length == 0 &&
-              !Named<Border>(window, "IslandSurface").IsVisible && window.IsHudPresentationVisible,
+        var emptyMainLayout = window.Appearance.Layout.Capsules!;
+        var emptyMain = emptyMainLayout.Islands[0];
+        string[] emptyMainBytes = fixture.BaseHashes();
+        Check(emptyMain.Items.Length == 0 && !surface.IsVisible && !editBar.IsVisible && window.IsHudPresentationVisible,
             "An empty main capsule disappears while its remaining windows keep the HUD visible");
+
         Call(window, "BeginCapsuleEdit"); await Settle();
-        Check(Named<Border>(window, "IslandSurface").IsVisible, "Live editing brings back the empty main drop target");
-        Call(window, "MoveCapsuleItem", "time", HudCapsuleLayout.MainId, 0, drop); await Settle();
-        Check(Named<TextBlock>(window, "CompactClock").IsVisible && CapsuleWindows(window).All(capsule => capsule.Id != timeId),
-            "Dropping a clock into the empty main capsule closes its previous window");
+        Check(!surface.IsVisible && editBar.IsVisible && returnZone.IsVisible && hint.Text == "Вернуть блок сюда",
+            "Reopening the editor keeps the saved empty surface hidden and exposes its compact return zone");
+        var grip = Named<Border>(window, "CapsuleMoveGrip");
+        Point gripCenter = grip.TranslatePoint(new Point(grip.ActualWidth / 2, grip.ActualHeight / 2), editBar);
+        Check(grip.IsVisible && gripCenter.Y >= 0 && gripCenter.Y <= editBar.ActualHeight,
+            "The move grip stays with the editor bar while the main surface is hidden");
+
+        Point formerSurfacePoint = surface.PointToScreen(new Point(surface.ActualWidth / 2, 4));
+        Point hintCenter = hint.PointToScreen(new Point(hint.ActualWidth / 2, hint.ActualHeight / 2));
+        Check(Call(window, "CapsuleDropTargetAt", emptyMain, "time", formerSurfacePoint) is null,
+            "The hidden main surface no longer intercepts drops in its former bounds");
+        object? returnTarget = Call(window, "CapsuleDropTargetAt", emptyMain, "time", hintCenter);
+        var targetType = returnTarget?.GetType();
+        Check(ReferenceEquals(targetType?.GetProperty("Surface")?.GetValue(returnTarget), returnZone) &&
+              Equals(targetType?.GetProperty("InsertIndex")?.GetValue(returnTarget), 0),
+            "The arranged return hint targets the empty main capsule at insertion index zero");
+        var targetId = (string)targetType!.GetProperty("Id")!.GetValue(returnTarget)!;
+        Call(window, "MoveCapsuleItem", "time", targetId, 0, hintCenter); await Settle();
+        Check(surface.IsVisible && Named<TextBlock>(window, "CompactClock").IsVisible &&
+              CapsuleWindows(window).All(capsule => capsule.Id != timeId),
+            "Returning the clock restores the main surface and closes its previous window");
+
         Call(window, "EndCapsuleEdit", false); await Settle();
+        Check(window.Appearance.Layout.Capsules == emptyMainLayout && !surface.IsVisible && !editBar.IsVisible &&
+              CapsuleWindows(window).Any(capsule => capsule.Id == timeId) && fixture.BaseHashes().SequenceEqual(emptyMainBytes),
+            "Cancel restores the saved empty main capsule and separate clock without writing the draft");
     }
 
     private static object? Call(MainWindow window, string method, params object?[] args) =>

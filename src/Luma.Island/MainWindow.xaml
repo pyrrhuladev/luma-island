@@ -330,8 +330,10 @@
                         Style="{StaticResource QuietButton}" Click="OnCapsuleEditCancel"/>
                 <Button DockPanel.Dock="Right" Content="Сброс" Width="56" Height="25" ToolTip="Собрать блоки в одну капсулу в исходном порядке"
                         AutomationProperties.Name="Сбросить раскладку" Style="{StaticResource QuietButton}" Click="OnCapsuleEditReset"/>
-                <TextBlock Text="Перетащите блок" Foreground="#D9E9E5" FontSize="11"
-                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                <Border x:Name="CapsuleEditDropZone" Margin="0,2,5,2" CornerRadius="7">
+                    <TextBlock x:Name="CapsuleEditHint" Text="Перетащите блок" Foreground="#D9E9E5" FontSize="11"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                </Border>
             </DockPanel>
         </Border>
     </Grid>

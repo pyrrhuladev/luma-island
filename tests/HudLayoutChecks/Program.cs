@@ -154,4 +154,76 @@ var capsuleSettings = canonicalDetached with { Capsules = reordered };
 string capsuleJson = JsonSerializer.Serialize(capsuleSettings, jsonOptions);
 Check(HudLayoutSettings.Normalize(JsonSerializer.Deserialize<HudLayoutSettings>(capsuleJson, jsonOptions)) == capsuleSettings,
     "Ordered capsules and their independent positions round-trip with value equality through layout JSON");
+
+Check(initial.Islands[0].Rows is null && initial.Islands[0].GetRows()[0].SequenceEqual(header.Split(',')) &&
+      initial.Islands[0].GetRows()[1].SequenceEqual(new[] { "cpu", "gpu", "memory" }),
+    "A layout saved without explicit rows retains the existing header and metric groups");
+Check(ReferenceEquals(initial.MoveToRow("time", "main", 0, 2, newRow: false), initial) &&
+      ReferenceEquals(initial.MoveToRow("time", "main", 0, 3, newRow: false), initial),
+    "Dropping on either side of an unchanged tile does not convert its legacy capsule to explicit rows");
+
+var dateBesideTime = initial.MoveToRow("date", "main", 0, 3, newRow: false);
+var dateBesideTimeRoot = dateBesideTime.Islands[0];
+Check(dateBesideTimeRoot.GetRows()[0].SequenceEqual(new[] { "fps", "low", "time", "date", "battery" }) &&
+      dateBesideTimeRoot.GetRows().Length == initial.Islands[0].GetRows().Length - 1 &&
+      dateBesideTimeRoot.Items == string.Join(',', dateBesideTimeRoot.GetRows().SelectMany(row => row)),
+    "Dropping the date beside the clock combines different widget types in one row and removes the vacated row");
+Check(ReferenceEquals(HudCapsuleLayout.Normalize(dateBesideTime), dateBesideTime),
+    "An explicit mixed row is not regrouped by widget type during normalization");
+
+var dateAboveMetrics = dateBesideTime.MoveToRow("date", "main", 1, 0, newRow: true);
+Check(dateAboveMetrics.Islands[0].GetRows()[0].SequenceEqual(header.Split(',')) &&
+      dateAboveMetrics.Islands[0].GetRows()[1].SequenceEqual(new[] { "date" }) &&
+      dateAboveMetrics.Islands[0].GetRows()[2].SequenceEqual(new[] { "cpu", "gpu", "memory" }),
+    "Dropping between rows creates a full-width row at the pre-removal destination index");
+Check(ReferenceEquals(dateAboveMetrics.MoveToRow("date", "main", 2, 0, newRow: true), dateAboveMetrics) &&
+      dateAboveMetrics.MoveToRow("date", "main", 0, 3, newRow: false) == dateBesideTime,
+    "A no-op at a neighboring row boundary preserves the draft and a real move returns the prior value");
+var dateBelowMusic = dateAboveMetrics.MoveToRow("date", "main", 4, 0, newRow: true);
+Check(dateBelowMusic.Islands[0].GetRows()[2].SequenceEqual(new[] { "music" }) &&
+      dateBelowMusic.Islands[0].GetRows()[3].SequenceEqual(new[] { "date" }),
+    "Moving a singleton row down accounts for the source row being removed before the destination");
+
+var explicitSplit = dateBesideTime.Move("date", null, 0, canonicalPosition);
+var detachedDate = explicitSplit.Islands[1];
+Check(detachedDate.Items == "date" && detachedDate.Position == canonicalPosition &&
+      explicitSplit.Islands[0].GetRows()[0].SequenceEqual(header.Split(',')) &&
+      explicitSplit.Islands[0].Rows is not null,
+    "A free drop preserves existing explicit rows and creates an independent capsule at the requested position");
+var repositionedDate = explicitSplit.WithPosition(detachedDate.Id, new("DISPLAY1", .1, .2));
+Check(repositionedDate.Islands[0] == explicitSplit.Islands[0] && repositionedDate.Islands[1].Position == new HudIslandPosition("DISPLAY1", .1, .2),
+    "Moving a detached capsule's window does not edit either capsule's rows");
+Check(explicitSplit.MoveToRow("date", "main", 0, 3, newRow: false) == dateBesideTime &&
+      explicitSplit.Move("date", "main", 3) == dateBesideTime,
+    "Both precise and legacy flat reinsertions respect explicit rows and remove the empty detached capsule");
+
+var dateInFloatingRow = splitCpu.MoveToRow("date", cpu.Id, 0, 1, newRow: false);
+Check(dateInFloatingRow.Islands[0].Rows is null && dateInFloatingRow.Islands[1].Rows == "cpu,date" &&
+      dateInFloatingRow.Islands[1].Position == canonicalPosition,
+    "A cross-capsule drop converts only the destination to explicit rows and keeps its position");
+var dateBackInLegacy = dateInFloatingRow.Move("date", "main", int.MaxValue);
+Check(dateBackInLegacy.Islands[0].Rows is null && dateBackInLegacy.Islands[1].Rows == "cpu",
+    "A legacy drop from an explicit source updates its rows without changing the destination's grouping");
+var returnedClock = detachedEverything.MoveToRow("time", "main", 0, 0, newRow: false);
+Check(returnedClock.Islands[0].Rows == "time" && returnedClock.Islands[0].GetRows().Length == 1,
+    "A drop in the empty main destination creates its first row");
+
+var malformedRows = new HudCapsuleLayout([
+    new("main", "ignored") { Rows = " DATE , TIME ;; CPU , date ,alien; GPU " },
+    new("floating", "memory", new(" DISPLAY2 ", -1, 2)) { Rows = new string('x', 257) }
+]);
+var repairedRows = HudCapsuleLayout.Normalize(malformedRows);
+Check(repairedRows.Islands[0].GetRows().Take(3).Select(row => string.Join(',', row)).SequenceEqual(new[] { "date,time", "cpu", "gpu" }) &&
+      repairedRows.Islands[0].GetItems().Contains("frame-time") && repairedRows.Islands[0].GetItems().Contains("cpu-chart") &&
+      repairedRows.Islands.SelectMany(island => island.GetItems()).Order().SequenceEqual(items.Order()),
+    "Normalization retains valid explicit rows, repairs malformed entries and migrates every missing tile exactly once");
+Check(repairedRows.Islands[1].Rows is null && repairedRows.Islands[1].Position == new HudIslandPosition("DISPLAY2", 0, 1),
+    "Oversized rows fall back to the legacy items and keep normalized floating coordinates");
+
+var explicitSettings = canonicalDetached with { Capsules = dateAboveMetrics };
+var explicitJson = JsonSerializer.Serialize(explicitSettings, jsonOptions);
+var explicitRestored = HudLayoutSettings.Normalize(JsonSerializer.Deserialize<HudLayoutSettings>(explicitJson, jsonOptions));
+Check(explicitRestored == explicitSettings && explicitRestored.GetHashCode() == explicitSettings.GetHashCode() &&
+      explicitRestored.Capsules != dateBesideTime,
+    "JSON round-trips explicit rows and compares both widget order and row boundaries by value");
 Console.WriteLine($"PASS: {count} HUD layout settings checks.");

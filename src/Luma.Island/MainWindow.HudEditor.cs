@@ -174,11 +174,12 @@ public partial class MainWindow
         }
 
         public BitmapSource Render(AppearanceSettings appearance, ComponentSettings components) =>
-            Render(appearance, components, capsuleItems: null);
+            Render(appearance, components, capsuleItems: null, capsuleRows: null);
 
-        private BitmapSource Render(AppearanceSettings appearance, ComponentSettings components, string? capsuleItems)
+        private BitmapSource Render(AppearanceSettings appearance, ComponentSettings components, string? capsuleItems, string? capsuleRows)
         {
             _window._capsuleItems = capsuleItems;
+            _window._capsuleRows = capsuleRows;
             _window.Appearance = AppearanceStore.Normalize(appearance);
             _window.Components = components;
             _window.ApplyComponentVisibility();
@@ -214,7 +215,7 @@ public partial class MainWindow
                 {
                     var projected = ProjectCapsule(_window.Appearance, components, capsule);
                     _capsulePreview ??= new HudPreviewSession(capsuleId: "preview");
-                    BitmapSource picture = _capsulePreview.Render(projected.Appearance, projected.Components, projected.Items);
+                    BitmapSource picture = _capsulePreview.Render(projected.Appearance, projected.Components, projected.Items, projected.Rows);
                     if (_capsulePreview._window.HasCapsuleContent) pictures.Add(picture);
                 }
                 return pictures.Count == 0 ? bitmap : Compose(pictures);
