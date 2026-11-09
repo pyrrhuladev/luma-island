@@ -109,36 +109,32 @@ internal static class Program
                 (Name: "ram-load-temp", Settings: Empty with { Memory = true, MemoryTemperature = true }, Cpu: "CPU", Ram: "RAM42%41°C", Columns: 1),
                 (Name: "all-metrics", Settings: Empty with { Cpu = true, Gpu = true, Memory = true, Fps = true, CpuTemperature = true, GpuTemperature = true, MemoryTemperature = true, Charts = true }, Cpu: "CPU18%68°C", Ram: "RAM42%41°C", Columns: 3)
             };
-            foreach (bool compact in new[] { false, true })
+            foreach (var item in cases)
             {
-                window.SetCompactMode(compact);
-                foreach (var item in cases)
-                {
-                    window.SetComponents(item.Settings);
-                    window.ApplyPerformance(Snapshot(68, 41));
-                    window.ApplyFps(new FpsSnapshot(144, "Synthetic", "Fixture"));
-                    await Settle(window);
-                    var panel = (UniformGrid)window.FindName("CompactPerformance");
-                    bool expectCharts = item.Settings.Charts &&
-                        (item.Settings.Cpu || item.Settings.Memory || item.Settings.Gpu || item.Settings.Fps);
-                    Check(window.HasPerformance && panel.Columns == item.Columns &&
-                        Normalize(Text(window, "CompactCpu").Text) == item.Cpu &&
-                        Normalize(Text(window, "CompactMemory").Text) == item.Ram &&
-                        ((FrameworkElement)window.FindName("ChartsPanel")).IsVisible == expectCharts &&
-                        (window.ChartsHeight > 0) == expectCharts,
-                        $"{item.Name} keeps labels, columns and chart visibility in dense={compact}");
-                }
-                // Worst-case labels exercise the three-digit values in every metric column.
-                window.ApplyPerformance(Snapshot(150, 125) with { CpuPercent = 100, GpuPercent = 100, MemoryPercent = 100, GpuTemperatureCelsius = 150 });
+                window.SetComponents(item.Settings);
+                window.ApplyPerformance(Snapshot(68, 41));
+                window.ApplyFps(new FpsSnapshot(144, "Synthetic", "Fixture"));
                 await Settle(window);
-                foreach (double scale in new[] { 1d, 1.5, 2d })
-                {
-                    BitmapSource bitmap = Render(window, scale);
-                    Check(LabelsFit(window, "CompactPerformance", scale) && bitmap.PixelWidth == (int)Math.Ceiling(window.Width * scale) &&
-                        bitmap.PixelHeight == (int)Math.Ceiling(window.Height * scale),
-                        $"Worst-case CPU/RAM/GPU labels fit at {scale * 100:0}% in dense={compact}");
-                    if (scale == 2 && compact) Save(bitmap, Path.Combine(Output, "temperatures-compact.png"));
-                }
+                var panel = (UniformGrid)window.FindName("CompactPerformance");
+                bool expectCharts = item.Settings.Charts &&
+                    (item.Settings.Cpu || item.Settings.Memory || item.Settings.Gpu || item.Settings.Fps);
+                Check(window.HasPerformance && panel.Columns == item.Columns &&
+                    Normalize(Text(window, "CompactCpu").Text) == item.Cpu &&
+                    Normalize(Text(window, "CompactMemory").Text) == item.Ram &&
+                    ((FrameworkElement)window.FindName("ChartsPanel")).IsVisible == expectCharts &&
+                    (window.ChartsHeight > 0) == expectCharts,
+                    $"{item.Name} keeps labels, columns and chart visibility");
+            }
+            // Worst-case labels exercise the three-digit values in every metric column.
+            window.ApplyPerformance(Snapshot(150, 125) with { CpuPercent = 100, GpuPercent = 100, MemoryPercent = 100, GpuTemperatureCelsius = 150 });
+            await Settle(window);
+            foreach (double scale in new[] { 1d, 1.5, 2d })
+            {
+                BitmapSource bitmap = Render(window, scale);
+                Check(LabelsFit(window, "CompactPerformance", scale) && bitmap.PixelWidth == (int)Math.Ceiling(window.Width * scale) &&
+                    bitmap.PixelHeight == (int)Math.Ceiling(window.Height * scale),
+                    $"Worst-case CPU/RAM/GPU labels fit at {scale * 100:0}%");
+                if (scale == 2) Save(bitmap, Path.Combine(Output, "temperatures.png"));
             }
             window.SetComponents(Empty with { CpuTemperature = true, MemoryTemperature = true });
             foreach (var invalid in new (double? Cpu, double? Ram)[]

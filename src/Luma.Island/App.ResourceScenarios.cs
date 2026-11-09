@@ -15,7 +15,7 @@ public partial class App
     {
         var events = new List<object>();
         string phaseFile = Path.Combine(directory, "phase.json");
-        _island!.SetAppearance(IslandAppearance.Glass, .76);
+        _island!.SetGlassOpacity(.76);
         _island.Placement.SetPreset(IslandPlacement.TopRight);
         try
         {
@@ -66,7 +66,7 @@ public partial class App
         _island.SetComponents(ComponentSettings.Default with { Cpu = true, Gpu = true, Memory = true, Fps = true, Charts = true });
         await Task.Delay(TimeSpan.FromSeconds(12));
         SavePreview(_island.CapturePreview(), Path.Combine(directory, "charts-on.png"));
-        _island.SetAppearance(IslandAppearance.Glass, .25);
+        _island.SetGlassOpacity(.25);
         await Dispatcher.InvokeAsync(_island.UpdateLayout);
         SavePreview(_island.CapturePreview(), Path.Combine(directory, "charts-transparent.png"));
         _island.SetComponents(_island.Components with { Charts = false });

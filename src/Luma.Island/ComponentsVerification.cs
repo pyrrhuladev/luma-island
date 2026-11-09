@@ -99,11 +99,11 @@ public static class ComponentsVerification
             Check(window.FindName("MemoryChartLine") is System.Windows.Shapes.Path memoryLine && memoryLine.Data is not null && !memoryLine.Data.IsEmpty(),
                 "График памяти не получил реальные отсчёты.");
             await CaptureAsync(window, Path.Combine(dir, "charts-compact.png"), errors);
-            var appearance = window.Appearance;
-            window.SetAppearance(IslandAppearance.Glass, .25);
+            double opacity = window.Appearance.GlassOpacity;
+            window.SetGlassOpacity(.25);
             await window.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ApplicationIdle);
             await CaptureAsync(window, Path.Combine(dir, "charts-transparent.png"), errors);
-            window.SetAppearance(appearance.Mode, appearance.GlassOpacity);
+            window.SetGlassOpacity(opacity);
             window.SetComponents(allOff);
             await fps.Completion.WaitAsync(TimeSpan.FromSeconds(5));
             await Task.Delay(250);

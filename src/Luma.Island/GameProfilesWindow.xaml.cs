@@ -173,10 +173,8 @@ public partial class GameProfilesWindow : Window
             get
             {
                 AppearanceSettings appearance = Snapshot.Appearance;
-                string surface = appearance.Mode == IslandAppearance.Glass
-                    ? $"Стекло · прозрачность {(1 - appearance.GlassOpacity) * 100:0}%" : "Матовое оформление";
-                string size = appearance.Compact ? "Компактный" : "Обычный";
-                return PlacementLabel(Snapshot.Placement.Placement) + "\n" + surface + "\n" + size + " · масштаб "
+                string surface = $"Стекло · прозрачность {(1 - appearance.GlassOpacity) * 100:0}%";
+                return PlacementLabel(Snapshot.Placement.Placement) + "\n" + surface + "\nМасштаб "
                     + (appearance.Scale * 100).ToString("0", CultureInfo.CurrentCulture) + "%\n" + ComponentSummary(Snapshot.Components);
             }
         }

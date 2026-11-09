@@ -126,15 +126,6 @@
                 </ContextMenu>
             </Border.ContextMenu>
             <Grid>
-                <Border x:Name="GlassSheen" IsHitTestVisible="False" Visibility="Collapsed" CornerRadius="27">
-                    <Border.Background>
-                        <LinearGradientBrush StartPoint="0,0" EndPoint=".8,1">
-                            <GradientStop Color="#05FFFFFF" Offset="0"/>
-                            <GradientStop Color="#00FFFFFF" Offset=".52"/>
-                            <GradientStop Color="#0200D9CE" Offset="1"/>
-                        </LinearGradientBrush>
-                    </Border.Background>
-                </Border>
                 <Grid x:Name="CompactView" Margin="13,6" AutomationProperties.Name="Luma Island">
                     <Grid x:Name="CompactContentGrid" Width="348">
                         <Grid.RowDefinitions>

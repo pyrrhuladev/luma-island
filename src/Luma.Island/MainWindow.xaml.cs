@@ -144,7 +144,7 @@ public partial class MainWindow : Window
             CompactMusicRow.ToolTip = null;
             return;
         }
-        CompactArtist.Visibility = Appearance.Compact ? Visibility.Collapsed : Visibility.Visible;
+        CompactArtist.Visibility = Visibility.Visible;
         CompactTitle.Text = state.HasSession && !string.IsNullOrWhiteSpace(state.Title)
             ? state.Title : "Откройте музыку";
         CompactArtist.Text = state.HasSession && !string.IsNullOrWhiteSpace(state.Artist) ? state.Artist : "Системный плеер";

@@ -228,7 +228,7 @@ public partial class App : System.Windows.Application
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
         SavePreview(_island!.CapturePreview(), Path.Combine(directory, "compact.png"));
         _island.UpdateClockAndBattery();
-        string initialAppearance = _island.Appearance.Mode.ToString();
+        double initialOpacity = _island.Appearance.GlassOpacity;
         var appearanceChecks = await AppearanceVerification.RunAsync(_island, directory, errors);
         var componentChecks = await ComponentsVerification.RunAsync(_island, _performance!, _fps!, _media!, directory, errors);
         var storedAppearance = new AppearanceStore(Path.Combine(directory, "test-appearance.json")).Load();
@@ -274,7 +274,7 @@ public partial class App : System.Windows.Application
             mediaEvents, hasSession,
             volume = _system.Volume, muted = _system.IsMuted,
             trayRegistered = _tray?.IsRegistered,
-            initialAppearance, appearanceChecks,
+            initialOpacity, appearanceChecks,
             componentChecks,
             positionChecks = new { restoredPosition, initialPlacement, current = persistedPlacement, cycles = 12,
                 customDrag = true, menuItems = menu.Items.Count },

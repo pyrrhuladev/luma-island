@@ -60,7 +60,7 @@ internal static class Program
         Check(GameProfileStore.TryNormalizeExecutablePath(@"\\?\C:\Games\Alpha\alpha.exe", out string extended) && extended == Alpha.ExecutablePath,
             "Extended Win32 paths compare with ordinary file-picker paths");
 
-        var snapshot = new HudProfileSettings(new AppearanceSettings(IslandAppearance.Glass, .05, true, true, 1.25),
+        var snapshot = new HudProfileSettings(new AppearanceSettings(.05, ClickThrough: true, Scale: 1.25),
             ComponentSettings.Default with { Cpu = true, MemoryTemperature = true, Charts = true },
             new PlacementSettings(" Synthetic monitor ", IslandPlacement.Custom, .27, .71, true));
         var original = new GameProfileSettings(true, new[] { Alpha with { Name = " Alpha profile ", Settings = snapshot }, Beta });
@@ -69,13 +69,45 @@ internal static class Program
         Check(loaded.Enabled && loaded.Profiles.Length == 2 && loaded.Profiles[0].Id == Alpha.Id && loaded.Profiles[1].Id == Beta.Id,
             "Fresh store preserves enabled state, profile IDs and configured order");
         Check(loaded.Profiles[0].Name == "Alpha profile" && loaded.Profiles[0].Settings.Appearance.GlassOpacity == .05 &&
-            loaded.Profiles[0].Settings.Appearance.Compact && loaded.Profiles[0].Settings.Appearance.Scale == 1.25 && !loaded.Profiles[0].Settings.Appearance.ClickThrough,
-            "Profile snapshots retain transparency, scale and density but cannot change global click-through mode");
+            loaded.Profiles[0].Settings.Appearance.Scale == 1.25 && !loaded.Profiles[0].Settings.Appearance.ClickThrough,
+            "Profile snapshots retain transparency and scale with the global click-through mode reserved");
         Check(loaded.Profiles[0].Settings.Components == snapshot.Components && loaded.Profiles[0].Settings.Placement == snapshot.Placement with { MonitorId = "Synthetic monitor" },
             "Every component and custom monitor-aware position survives recreation");
         using (var json = JsonDocument.Parse(File.ReadAllText(path)))
-            Check(json.RootElement.GetProperty("profiles")[0].GetProperty("settings").GetProperty("appearance").GetProperty("mode").GetString() == "Glass",
-                "Enums are stored by name inside the nested snapshot");
+        {
+            JsonElement settings = json.RootElement.GetProperty("profiles")[0].GetProperty("settings");
+            JsonElement appearance = settings.GetProperty("appearance");
+            Check(!appearance.TryGetProperty("mode", out _) && !appearance.TryGetProperty("compact", out _),
+                "Retired appearance fields are omitted in saved profiles");
+            Check(settings.GetProperty("placement").GetProperty("placement").GetString() == "Custom",
+                "Placement enums are still stored by name inside the nested snapshot");
+        }
+
+        const string legacyProfile = """
+            {"enabled":true,"profiles":[{
+              "id":"11111111-1111-1111-1111-111111111111","name":"Alpha profile","executablePath":"C:\\Games\\Alpha\\alpha.exe",
+              "settings":{
+                "appearance":{"mode":"Matte","compact":true,"glassOpacity":0.25,"clickThrough":true,"scale":0.8,
+                  "layout":{"detachedMusic":true,"musicPosition":{"monitorId":"Other","xFraction":0.7,"yFraction":0.9}},
+                  "alerts":{"enabled":true,"cpuThreshold":94}},
+                "components":{"fps":true,"date":false,"volumeWheel":true},
+                "placement":{"monitorId":"Synthetic monitor","placement":"Custom","xFraction":0.27,"yFraction":0.71,"locked":true}
+              }
+            }]}
+            """;
+        File.WriteAllText(path, legacyProfile);
+        GameProfileSettings imported = store.Load();
+        var expectedAppearance = new AppearanceSettings(.25, Scale: .8)
+        {
+            Layout = HudLayoutSettings.Default with { DetachedMusic = true, MusicPosition = new("Other", .7, .9) },
+            Alerts = AlertSettings.Default with { Enabled = true, CpuThreshold = 94 }
+        };
+        var expectedSnapshot = new HudProfileSettings(expectedAppearance,
+            ComponentSettings.Default with { Fps = true, Date = false, VolumeWheel = true },
+            new PlacementSettings("Synthetic monitor", IslandPlacement.Custom, .27, .71, true));
+        Check(imported.Enabled && imported.Profiles.SequenceEqual(new[] { Alpha with { Name = "Alpha profile", Settings = expectedSnapshot } }),
+            "Legacy matte and dense profile loads with its transparency, scale, islands, alerts, components and placement");
+        Check(File.ReadAllText(path) == legacyProfile, "Loading an old profile does not rewrite its file");
 
         var duplicatePath = Beta with { ExecutablePath = Alpha.ExecutablePath.ToUpperInvariant() };
         var duplicateId = Beta with { Id = Alpha.Id.ToUpperInvariant() };
@@ -90,10 +122,10 @@ internal static class Program
             "Profile count is bounded independently of the input JSON");
         Check(GameProfileStore.Normalize(new(true, new[] { Alpha with { Name = new string('x', 120) } })).Profiles[0].Name.Length == GameProfileStore.MaxNameLength,
             "Visible profile names cannot grow beyond the layout limit");
-        var invalidSnapshot = new HudProfileSettings(new AppearanceSettings((IslandAppearance)99, double.NaN, true, true, double.NaN), null!,
+        var invalidSnapshot = new HudProfileSettings(new AppearanceSettings(double.NaN, ClickThrough: true, Scale: double.NaN), null!,
             new PlacementSettings(" ", (IslandPlacement)99, double.PositiveInfinity, -2));
         var validSnapshot = GameProfileStore.NormalizeSnapshot(invalidSnapshot);
-        Check(validSnapshot.Appearance.Mode == IslandAppearance.Matte && double.IsFinite(validSnapshot.Appearance.GlassOpacity) && validSnapshot.Appearance.Scale == 1 && !validSnapshot.Appearance.ClickThrough &&
+        Check(validSnapshot.Appearance.GlassOpacity == AppearanceSettings.Default.GlassOpacity && validSnapshot.Appearance.Scale == 1 && !validSnapshot.Appearance.ClickThrough &&
             validSnapshot.Components == ComponentSettings.Default && validSnapshot.Placement.MonitorId is null && validSnapshot.Placement.XFraction == .5 && validSnapshot.Placement.YFraction == 0,
             "Unsafe nested values fall back without allowing profile input-lock changes");
         Check(GameProfileStore.NormalizeSnapshot(snapshot with { Appearance = snapshot.Appearance with { Scale = 99 } }).Appearance.Scale == AppearanceStore.MaxScale,

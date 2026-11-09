@@ -107,9 +107,6 @@ public partial class HudEditorWindow : Window
         AppearanceSettings appearance = DraftAppearance;
         HudLayoutSettings layout = appearance.Layout;
         AlertSettings alerts = appearance.Alerts;
-        CompactCheckBox.IsChecked = appearance.Compact;
-        GlassRadio.IsChecked = appearance.Mode == IslandAppearance.Glass;
-        MatteRadio.IsChecked = appearance.Mode == IslandAppearance.Matte;
         TransparencySlider.Value = (1 - appearance.GlassOpacity) * 100;
         ScaleSlider.Value = appearance.Scale * 100;
         LoadLayout(layout);
@@ -195,10 +192,9 @@ public partial class HudEditorWindow : Window
         });
         DraftAppearance = AppearanceStore.Normalize(DraftAppearance with
         {
-            Mode = GlassRadio.IsChecked == true ? IslandAppearance.Glass : IslandAppearance.Matte,
             GlassOpacity = KeepEquivalent(DraftAppearance.GlassOpacity, 1 - TransparencySlider.Value / 100),
             Scale = KeepEquivalent(DraftAppearance.Scale, ScaleSlider.Value / 100),
-            Compact = Checked(CompactCheckBox), Layout = layout, Alerts = alerts
+            Layout = layout, Alerts = alerts
         });
         DraftComponents = DraftComponents with
         {
@@ -308,7 +304,7 @@ public partial class HudEditorWindow : Window
 
     private void OnTransparencyPreset(object sender, RoutedEventArgs e)
     {
-        if (GlassRadio.IsChecked == true && sender is Button { Tag: string value } && int.TryParse(value, out int percent))
+        if (sender is Button { Tag: string value } && int.TryParse(value, out int percent))
             TransparencySlider.Value = percent;
     }
 
@@ -389,8 +385,8 @@ public partial class HudEditorWindow : Window
 
     private void InitializeSections()
     {
-        RegisterBuiltIn("appearance", "Внешний вид", "Фон, масштаб, текст и расстояния между блоками.",
-            "стекло матовое прозрачность размер шрифт компактная капсула плотность плотная раскладка", AppearanceTab);
+        RegisterBuiltIn("appearance", "Внешний вид", "Прозрачность стекла, масштаб, текст и расстояния между блоками.",
+            "стекло прозрачность фон размер шрифт интервалы", AppearanceTab);
         RegisterBuiltIn("layout", "Раскладка", "Отдельные островки, порядок блоков и число показателей в строке.",
             "порядок музыка заголовок cpu gpu ram строки колонки расположение островок островки раздельные разделить отдельно перетаскивать", LayoutTab);
         RegisterBuiltIn("components", "Показатели", "Выберите, что показывать в HUD, и настройте управление громкостью.",

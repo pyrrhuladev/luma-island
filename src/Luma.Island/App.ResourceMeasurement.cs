@@ -35,7 +35,7 @@ public partial class App
         samples[0] = initial with { Processes = initial.Processes.Select(p => p with { ExistingAtStart = !p.IsApp }).ToArray() };
         _island!.WindowState = WindowState.Normal;
         _island.Show();
-        _island.SetAppearance(IslandAppearance.Glass, .76);
+        _island.SetGlassOpacity(.76);
 
         try
         {

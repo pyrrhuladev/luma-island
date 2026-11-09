@@ -23,10 +23,10 @@ public partial class MainWindow
         ApplyAppearance();
     }
 
-    public void SetAppearance(IslandAppearance mode, double? opacity = null)
+    public void SetGlassOpacity(double opacity)
     {
         VerifyAccess();
-        Appearance = AppearanceStore.Normalize(Appearance with { Mode = mode, GlassOpacity = opacity ?? Appearance.GlassOpacity });
+        Appearance = AppearanceStore.Normalize(Appearance with { GlassOpacity = opacity });
         ApplyAppearance();
         SaveAppearance();
     }
@@ -41,39 +41,20 @@ public partial class MainWindow
 
     private void ApplyAppearance()
     {
-        bool glass = Appearance.Mode == IslandAppearance.Glass;
-        // A flat translucent surface keeps the game visible without a blur pass or sheen layer.
-        GlassSheen.Visibility = Visibility.Collapsed;
-        Resources["GlassTextShadow"] = glass && Appearance.GlassOpacity <= .50 ? StrongGlassTextShadow : null;
-        if (glass)
-        {
-            byte alpha = (byte)Math.Round(Appearance.GlassOpacity * 255);
-            var fill = new SolidColorBrush(Color.FromArgb(alpha, 18, 23, 28));
-            fill.Freeze();
-            Resources["SurfaceFill"] = fill;
-            SetBrush("SurfaceStroke", "#00000000");
-            SetBrush("TextPrimary", "#FFFFFF");
-            SetBrush("TextSecondary", "#F0F4F8");
-            SetBrush("Muted", "#E4EBF2");
-            SetBrush("Subtle", "#DCE6EF");
-            SetBrush("ButtonHover", "#38000000");
-            SetBrush("ButtonPressed", "#60000000");
-            SetBrush("AlbumSurface", "#D925332E");
-            SetBrush("VolumeTrack", "#70DCE7EF");
-        }
-        else
-        {
-            SetBrush("SurfaceFill", "#12171C");
-            SetBrush("SurfaceStroke", "#00000000");
-            SetBrush("TextPrimary", "#F0F3F5");
-            SetBrush("TextSecondary", "#C7CFD5");
-            SetBrush("Muted", "#989FA8");
-            SetBrush("Subtle", "#7F8A94");
-            SetBrush("ButtonHover", "#293038");
-            SetBrush("ButtonPressed", "#343D45");
-            SetBrush("AlbumSurface", "#25332E");
-            SetBrush("VolumeTrack", "#343B42");
-        }
+        Resources["GlassTextShadow"] = Appearance.GlassOpacity <= .50 ? StrongGlassTextShadow : null;
+        byte alpha = (byte)Math.Round(Appearance.GlassOpacity * 255);
+        var fill = new SolidColorBrush(Color.FromArgb(alpha, 18, 23, 28));
+        fill.Freeze();
+        Resources["SurfaceFill"] = fill;
+        SetBrush("SurfaceStroke", "#00000000");
+        SetBrush("TextPrimary", "#FFFFFF");
+        SetBrush("TextSecondary", "#F0F4F8");
+        SetBrush("Muted", "#E4EBF2");
+        SetBrush("Subtle", "#DCE6EF");
+        SetBrush("ButtonHover", "#38000000");
+        SetBrush("ButtonPressed", "#60000000");
+        SetBrush("AlbumSurface", "#D925332E");
+        SetBrush("VolumeTrack", "#70DCE7EF");
         RefreshAlerts();
         ApplyHudScale();
         SynchronizeMusicIsland();
@@ -105,13 +86,6 @@ public partial class MainWindow
         void Populate()
         {
             menu.Items.Clear();
-            var matte = new MenuItem { Header = "Матовое", IsCheckable = true, IsChecked = Appearance.Mode == IslandAppearance.Matte };
-            matte.Click += (_, _) => SetAppearance(IslandAppearance.Matte);
-            var glass = new MenuItem { Header = "Стекло", IsCheckable = true, IsChecked = Appearance.Mode == IslandAppearance.Glass };
-            glass.Click += (_, _) => SetAppearance(IslandAppearance.Glass);
-            menu.Items.Add(matte);
-            menu.Items.Add(glass);
-            menu.Items.Add(new Separator());
             foreach (var preset in new[]
             {
                 ("Прозрачность 10%", .90), ("Прозрачность 24%", .76), ("Прозрачность 35%", .65),
@@ -121,16 +95,12 @@ public partial class MainWindow
             })
             {
                 var item = new MenuItem { Header = preset.Item1, IsCheckable = true,
-                    IsChecked = Appearance.Mode == IslandAppearance.Glass && Math.Abs(Appearance.GlassOpacity - preset.Item2) < .005 };
-                item.Click += (_, _) => SetAppearance(IslandAppearance.Glass, preset.Item2);
+                    IsChecked = Math.Abs(Appearance.GlassOpacity - preset.Item2) < .005 };
+                item.Click += (_, _) => SetGlassOpacity(preset.Item2);
                 menu.Items.Add(item);
             }
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateTransparencyControl());
-            menu.Items.Add(new Separator());
-            var compact = new MenuItem { Header = "Плотная раскладка", IsCheckable = true, IsChecked = Appearance.Compact };
-            compact.Click += (_, _) => SetCompactMode(compact.IsChecked);
-            menu.Items.Add(compact);
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateScaleControl());
         }
@@ -142,8 +112,7 @@ public partial class MainWindow
 
     private MenuItem CreateTransparencyControl()
     {
-        double transparency = Appearance.Mode == IslandAppearance.Glass
-            ? Math.Round((1 - Appearance.GlassOpacity) * 100) : 0;
+        double transparency = Math.Round((1 - Appearance.GlassOpacity) * 100);
         var label = new TextBlock { Text = $"Прозрачность фона: {transparency:0}%", Margin = new Thickness(0, 0, 0, 6) };
         var slider = new Slider
         {
@@ -157,10 +126,7 @@ public partial class MainWindow
         {
             double value = Math.Round(slider.Value);
             label.Text = $"Прозрачность фона: {value:0}%";
-            Appearance = AppearanceStore.Normalize(Appearance with
-            {
-                Mode = IslandAppearance.Glass, GlassOpacity = 1 - value / 100
-            });
+            Appearance = AppearanceStore.Normalize(Appearance with { GlassOpacity = 1 - value / 100 });
             ApplyAppearance();
         };
         slider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler((_, _) => SaveAppearance()));

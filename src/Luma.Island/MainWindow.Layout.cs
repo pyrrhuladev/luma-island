@@ -11,7 +11,7 @@ public partial class MainWindow
     private readonly Dictionary<TextBlock, double> _layoutBaseFonts = new();
     private bool _layoutFontsCaptured;
     private string? _appliedBlockOrder, _appliedMetricOrder;
-    private (int Fps, int Low, bool Clock, bool Battery, bool Compact, double TextScale)? _headerFitKey;
+    private (int Fps, int Low, bool Clock, bool Battery, double TextScale)? _headerFitKey;
     private HudLayoutSettings LayoutSettings => Appearance.Layout ?? HudLayoutSettings.Default;
     private double LayoutTextScale => LayoutSettings.TextScale;
     private double LayoutGrowth => Math.Max(1, LayoutTextScale);
@@ -20,7 +20,7 @@ public partial class MainWindow
         + (Components.Gpu || Components.GpuTemperature ? 1 : 0) + (Components.Memory || Components.MemoryTemperature ? 1 : 0);
     private int LayoutMetricColumns => Math.Max(1, Math.Min(VisibleHardwareCount, LayoutSettings.MetricColumns));
     private int LayoutMetricRows => VisibleHardwareCount == 0 ? 0 : (VisibleHardwareCount + LayoutMetricColumns - 1) / LayoutMetricColumns;
-    private double CompactMetricCellHeight => ((Appearance.Compact ? 20 : 28) + TemperatureRowHeight) * LayoutGrowth;
+    private double CompactMetricCellHeight => (28 + TemperatureRowHeight) * LayoutGrowth;
     private double CompactMetricGridHeight => LayoutMetricRows == 0 ? 0
         : CompactMetricCellHeight * LayoutMetricRows + LayoutSpacing * (LayoutMetricRows - 1);
     private double LayoutFrameTimeHeight => Components.FrameTime ? 72 + (LayoutGrowth - 1) * 32 : 0;
@@ -55,13 +55,7 @@ public partial class MainWindow
         var layout = HudLayoutSettings.Normalize(Appearance.Layout);
         if (!_layoutFontsCaptured && Content is not null) { CaptureLayoutFonts(Content); _layoutFontsCaptured = true; }
         foreach (var item in _layoutBaseFonts) item.Key.FontSize = item.Value * layout.TextScale;
-        // Density-dependent sizes are restored from their base values, never from an already scaled font.
-        CompactClock.FontSize = (Appearance.Compact ? 12 : 13) * layout.TextScale;
-        CompactBattery.FontSize = (Appearance.Compact ? 10 : 11) * layout.TextScale;
-        CompactCpu.FontSize = CompactGpu.FontSize = CompactMemory.FontSize = (Appearance.Compact ? 11 : 12) * layout.TextScale;
-        CompactFps.FontSize = (Appearance.Compact ? 28 : 34) * layout.TextScale;
-        CompactOnePercentLow.FontSize = (Components.Fps ? Appearance.Compact ? 16 : 18 : Appearance.Compact ? 20 : 24) * layout.TextScale;
-        CompactCpu.LineHeight = CompactGpu.LineHeight = CompactMemory.LineHeight = (Appearance.Compact ? 14 : 16) * layout.TextScale;
+        CompactCpu.LineHeight = CompactGpu.LineHeight = CompactMemory.LineHeight = 16 * layout.TextScale;
 
         if (_appliedBlockOrder != layout.BlockOrder)
         {
@@ -92,8 +86,9 @@ public partial class MainWindow
         CompactPerformance.Columns = LayoutMetricColumns;
         CompactPerformance.Rows = 0;
         CompactPerformance.Height = CompactMetricGridHeight;
-        double bandMargin = (Appearance.Compact ? 4 : 6) * layout.Spacing / 6;
+        double bandMargin = layout.Spacing;
         HudHeader.Margin = new Thickness(0, LayoutBlockGap("header"), 0, 0);
+        CompactLowPanel.Margin = new Thickness(Components.Fps ? 12 : 0, 0, 0, 0);
         CompactMusicRow.Margin = new Thickness(0, LayoutBlockGap("music"), 0, 0);
         CompactPerformance.Margin = new Thickness(0, bandMargin + LayoutBlockGap("metrics"), 0, bandMargin);
         int visibleIndex = 0;
@@ -120,12 +115,12 @@ public partial class MainWindow
     private void FitHeaderText(bool force = false)
     {
         var key = (Components.Fps ? CompactFps.Text.Length : 0, Components.OnePercentLow ? CompactOnePercentLow.Text.Length : 0,
-            Components.Time, _batteryVisible, Appearance.Compact, LayoutTextScale);
+            Components.Time, _batteryVisible, LayoutTextScale);
         if (!force && _headerFitKey == key) return;
         _headerFitKey = key;
         double factor = LayoutTextScale;
-        CompactFps.FontSize = (Appearance.Compact ? 28 : 34) * factor;
-        CompactOnePercentLow.FontSize = (Components.Fps ? Appearance.Compact ? 16 : 18 : Appearance.Compact ? 20 : 24) * factor;
+        CompactFps.FontSize = 34 * factor;
+        CompactOnePercentLow.FontSize = (Components.Fps ? 18 : 24) * factor;
         CompactFpsUnit.FontSize = 11 * factor;
         if (CompactLowPanel.Children[0] is TextBlock lowLabel) lowLabel.FontSize = 11 * factor;
         if (!Components.Fps && !Components.OnePercentLow) return;

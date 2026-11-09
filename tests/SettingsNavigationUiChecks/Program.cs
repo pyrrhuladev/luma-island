@@ -86,6 +86,9 @@ internal static class Program
             Check(editor.SearchSections("горячие клавиши").Single().Id == "application" && editor.SelectedSectionId == "application", "Multi-word search navigates directly to the matching section");
             Check(editor.SearchSections("оперативка").Single().Id == "components", "Common Russian RAM wording finds component settings");
             Check(editor.SearchSections("фпс").Single().Id == "components", "Russian FPS wording finds the frame counter");
+            Check(editor.SearchSections("прозрачность стекла").Single().Id == "appearance", "Glass transparency remains discoverable through search");
+            Check(editor.SearchSections("матовый фон").Count == 0 && editor.SearchSections("плотная раскладка").Count == 0,
+                "Search omits the removed appearance modes");
             Check(editor.SearchSections("импорт").Count == 0, "Search does not advertise an unavailable import feature");
             editor.SelectSection("application");
             editor.SearchSections("температура");

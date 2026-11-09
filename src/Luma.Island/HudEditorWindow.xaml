@@ -115,33 +115,6 @@
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
-        <Style x:Key="SurfaceOption" TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}">
-            <Setter Property="Margin" Value="0,0,6,3"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton">
-                <Border x:Name="OptionSurface" Background="#151D25" BorderBrush="#374553" BorderThickness="1"
-                        CornerRadius="9" Padding="11,9">
-                    <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="20"/></Grid.ColumnDefinitions>
-                        <ContentPresenter/>
-                        <Ellipse x:Name="OptionMark" Grid.Column="1" Width="8" Height="8" Stroke="#8394A3"
-                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,0,0"/>
-                    </Grid>
-                </Border>
-                <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="OptionSurface" Property="Background" Value="#253241"/></Trigger>
-                    <Trigger Property="IsChecked" Value="True">
-                        <Setter TargetName="OptionSurface" Property="Background" Value="#223832"/>
-                        <Setter TargetName="OptionSurface" Property="BorderBrush" Value="#5A9887"/>
-                        <Setter TargetName="OptionMark" Property="Fill" Value="{StaticResource EditorMint}"/>
-                        <Setter TargetName="OptionMark" Property="Stroke" Value="{StaticResource EditorMint}"/>
-                    </Trigger>
-                    <Trigger Property="IsKeyboardFocused" Value="True">
-                        <Setter TargetName="OptionSurface" Property="BorderBrush" Value="{StaticResource EditorMint}"/>
-                    </Trigger>
-                </ControlTemplate.Triggers>
-            </ControlTemplate></Setter.Value></Setter>
-        </Style>
         <Style TargetType="ScrollBar">
             <Setter Property="Width" Value="8"/>
             <Setter Property="Background" Value="Transparent"/>
@@ -413,36 +386,23 @@
                     <TabItem x:Name="AppearanceTab" Header="Внешний вид"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
                         <StackPanel>
                         <Border Style="{StaticResource SectionCard}" Margin="0,0,0,12"><StackPanel>
-                            <TextBlock Text="Поверхность" Style="{StaticResource Section}" Margin="0,0,0,4"/>
-                            <TextBlock Text="Фон капсулы поверх игры и рабочего стола." Style="{StaticResource Caption}" Margin="0,0,0,12"/>
-                            <UniformGrid Columns="2">
-                                <RadioButton x:Name="GlassRadio" Style="{StaticResource SurfaceOption}" GroupName="SurfaceMode" Checked="OnDraftChanged" AutomationProperties.Name="Стекло">
-                                    <StackPanel><TextBlock Text="Стекло" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Прозрачный фон" Style="{StaticResource Caption}" FontSize="12"/>
-                                    </StackPanel>
-                                </RadioButton>
-                                <RadioButton x:Name="MatteRadio" Style="{StaticResource SurfaceOption}" GroupName="SurfaceMode" Checked="OnDraftChanged" AutomationProperties.Name="Матовое">
-                                    <StackPanel><TextBlock Text="Матовое" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Плотный фон" Style="{StaticResource Caption}" FontSize="12"/>
-                                    </StackPanel>
-                                </RadioButton>
-                            </UniformGrid>
-                            <Grid Margin="0,9,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="Стекло" Style="{StaticResource Section}" Margin="0,0,0,4"/>
+                            <TextBlock Text="Прозрачность фона капсулы поверх игры и рабочего стола." Style="{StaticResource Caption}" Margin="0,0,0,12"/>
+                            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="Прозрачность фона"/>
                                 <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=TransparencySlider, StringFormat={}{0:0}%}" Foreground="#BEEBD6"/>
                             </Grid>
                             <Slider x:Name="TransparencySlider" Minimum="0" Maximum="95" ValueChanged="OnDraftChanged"
-                                    IsEnabled="{Binding IsChecked, ElementName=GlassRadio}" AutomationProperties.Name="Прозрачность фона, проценты"/>
-                            <WrapPanel IsEnabled="{Binding IsChecked, ElementName=GlassRadio}" Margin="0,2,0,0">
+                                    AutomationProperties.Name="Прозрачность фона, проценты"/>
+                            <WrapPanel Margin="0,2,0,0">
                                 <Button Content="30%" Tag="30" Click="OnTransparencyPreset" MinWidth="54" Margin="0,0,6,0" ToolTip="Прозрачность 30%"/>
                                 <Button Content="60%" Tag="60" Click="OnTransparencyPreset" MinWidth="54" Margin="0,0,6,0" ToolTip="Прозрачность 60%"/>
                                 <Button Content="85%" Tag="85" Click="OnTransparencyPreset" MinWidth="54" ToolTip="Прозрачность 85%"/>
                             </WrapPanel>
                         </StackPanel></Border>
                         <Border Style="{StaticResource SectionCard}"><StackPanel>
-                            <TextBlock Text="Размер и плотность" Style="{StaticResource Section}" Margin="0,0,0,6"/>
-                            <CheckBox x:Name="CompactCheckBox" Content="Плотная раскладка" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
-                            <Grid Margin="0,9,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="Размер и интервалы" Style="{StaticResource Section}" Margin="0,0,0,12"/>
+                            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="Масштаб всего HUD"/>
                                 <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=ScaleSlider, StringFormat={}{0:0}%}" Foreground="#BEEBD6"/>
                             </Grid>

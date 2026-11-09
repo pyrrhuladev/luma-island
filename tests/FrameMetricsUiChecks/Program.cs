@@ -61,7 +61,7 @@ internal static class Program
         var appearance = new AppearanceStore(Path.Combine(fixtures, "appearance.json"));
         var components = new ComponentStore(Path.Combine(fixtures, "components.json"));
         var placement = new PlacementStore(Path.Combine(fixtures, "placement.json"));
-        Check(appearance.Save(new AppearanceSettings(IslandAppearance.Glass, .4)) && components.Save(Empty), "Only isolated HUD preference files are prepared");
+        Check(appearance.Save(new AppearanceSettings(.4)) && components.Save(Empty), "Only isolated HUD preference files are prepared");
         using var media = new MediaService();
         using var system = new SystemService();
         system.Dispose();
@@ -132,29 +132,28 @@ internal static class Program
                 !Named<TextBlock>(window, "FrameTimePeak").Text.Contains("40", StringComparison.Ordinal),
                 "A new stream identity clears the old swapchain peak even when the process name is unchanged");
 
-            foreach (bool compact in new[] { false, true })
             foreach (double scale in new[] { .75, 1d, 1.5 })
             {
-                window.SetCompactMode(compact); window.SetHudScale(scale);
+                window.SetHudScale(scale);
                 window.SetComponents(ComponentSettings.Default with { Battery = false, Fps = true, OnePercentLow = true, FrameTime = true,
                     Cpu = true, Gpu = true, Memory = true, CpuTemperature = true, GpuTemperature = true, MemoryTemperature = true, Charts = true });
                 window.ApplyPerformance(new PerformanceSnapshot(58, 78, 42, 1, 2, 61, "Fixture", 58, "Fixture", 41, "Fixture"));
                 window.ApplyFps(Snapshot(184, 123, 5.4, SpikeFrames(), "layout-stream")); await Settle();
-                CheckInside(Named<FrameworkElement>(window, "FrameTimeCard"), Named<FrameworkElement>(window, "IslandSurface"), "Frame-time card fits the all-component HUD: " + compact + "/" + scale);
+                CheckInside(Named<FrameworkElement>(window, "FrameTimeCard"), Named<FrameworkElement>(window, "IslandSurface"), "Frame-time card fits the all-component HUD: " + scale);
                 var line = Named<ShapePath>(window, "FrameTimeLine");
                 var canvas = Named<Canvas>(window, "FrameTimeCanvas");
                 Check(line.Data is Geometry data && data.Bounds.Left >= -2 && data.Bounds.Top >= -2 &&
                     data.Bounds.Right <= canvas.ActualWidth + 2 && data.Bounds.Bottom <= canvas.ActualHeight + 2,
-                    "Per-frame geometry stays inside its own canvas: " + compact + "/" + scale);
+                    "Per-frame geometry stays inside its own canvas: " + scale);
                 foreach (double dpiScale in new[] { 1d, 2d })
                 {
                     var bitmap = Render(window, dpiScale);
-                    Check(bitmap.PixelWidth > 0 && bitmap.PixelHeight > 0, "Frame metrics render at native and double DPI: " + compact + "/" + scale + "/" + dpiScale);
+                    Check(bitmap.PixelWidth > 0 && bitmap.PixelHeight > 0, "Frame metrics render at native and double DPI: " + scale + "/" + dpiScale);
                 }
-                CheckInside(Named<FrameworkElement>(window, "CompactLowPanel"), Named<FrameworkElement>(window, "IslandSurface"), "1% Low fits the HUD surface: " + compact + "/" + scale);
+                CheckInside(Named<FrameworkElement>(window, "CompactLowPanel"), Named<FrameworkElement>(window, "IslandSurface"), "1% Low fits the HUD surface: " + scale);
                 CheckNonOverlapping(Named<FrameworkElement>(window, "CompactLowPanel"), Named<FrameworkElement>(window, "CompactClock"), Named<FrameworkElement>(window, "IslandSurface"),
-                    "Low and clock do not overlap: " + compact + "/" + scale);
-                if (compact && scale == 1) Save(Render(window, 2), Path.Combine(Output, "frame-metrics-compact.png"));
+                    "Low and clock do not overlap: " + scale);
+                if (scale == 1) Save(Render(window, 2), Path.Combine(Output, "frame-metrics.png"));
             }
             window.SetComponents(Empty);
             Check(Named<FrameworkElement>(window, "CompactLowPanel").Visibility == Visibility.Collapsed &&

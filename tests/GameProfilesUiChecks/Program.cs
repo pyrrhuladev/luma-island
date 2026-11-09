@@ -27,7 +27,7 @@ internal static partial class Program
         new GameProfile(SecondId, "Cyberpunk 2077", @"D:\Games\Cyberpunk 2077\Cyberpunk2077.exe", HudProfileSettings.Default)
     });
     private static HudProfileSettings Current => new(
-        new AppearanceSettings(IslandAppearance.Glass, .35, true, true, 1.25),
+        new AppearanceSettings(.35, ClickThrough: true, Scale: 1.25),
         ComponentSettings.Default with { Cpu = true, Gpu = true, Memory = true, Fps = true, CpuTemperature = true,
             GpuTemperature = true, MemoryTemperature = true, Charts = true },
         new PlacementSettings(Placement: IslandPlacement.TopLeft, Locked: true));
@@ -129,8 +129,8 @@ internal static partial class Program
         Check(saveResult == true && accepted.Settings.Enabled, "Saving accepts the complete local automatic-profile choice");
         GameProfile saved = accepted.Settings.Profiles.Single(profile => profile.Id == SecondId);
         Check(saved.Name == "Night City" && saved.ExecutablePath == Fixture.Profiles[1].ExecutablePath, "Accepted renames are trimmed and keep the selected executable binding");
-        Check(saved.Settings.Appearance.Scale == 1.25 && saved.Settings.Appearance.Compact && saved.Settings.Appearance.GlassOpacity == .35,
-            "Copy-current retains scale, compact density and transparency together");
+        Check(saved.Settings.Appearance.Scale == 1.25 && saved.Settings.Appearance.GlassOpacity == .35,
+            "Copy-current retains scale and transparency together");
         Check(saved.Settings.Components == Current.Components && saved.Settings.Placement == Current.Placement,
             "Copy-current retains all components and monitor-aware placement");
         Check(!saved.Settings.Appearance.ClickThrough, "Game profiles do not capture the application's global click-through recovery mode");

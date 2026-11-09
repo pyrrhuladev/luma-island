@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "applicationVersion": "0.18.0",
+  "applicationVersion": "0.19.0",
   "targetRuntime": "win-x64",
   "frameworkRuntimeVersion": "10.0.14",
   "packageVersions": {

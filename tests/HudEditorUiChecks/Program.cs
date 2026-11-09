@@ -54,7 +54,7 @@ internal static class Program
     private static async Task RunAsync()
     {
         var preferenceHashes = Preferences();
-        var appearance = new AppearanceSettings(IslandAppearance.Glass, .4, ClickThrough: true);
+        var appearance = new AppearanceSettings(.4, ClickThrough: true);
         var components = ComponentSettings.Default with
         {
             Cpu = true, Gpu = true, Memory = true, Fps = true, Charts = true,
@@ -69,8 +69,9 @@ internal static class Program
             Check(PreviewCalls == 1 && editor.PreviewAvailable && !editor.HasPendingPreview,
                 "Opening creates exactly one successful production preview without an idle timer");
             Check(Named<TextBlock>(editor, "TargetNameText").Text == "Тестовая игра", "The active save target is visible");
-            Check(Named<RadioButton>(editor, "GlassRadio").IsChecked == true && Named<RadioButton>(editor, "MatteRadio").IsChecked == false,
-                "The initial surface mode is selected without changing the draft");
+            Check(editor.FindName("GlassRadio") is null && editor.FindName("MatteRadio") is null &&
+                  editor.FindName("CompactCheckBox") is null && Named<Slider>(editor, "TransparencySlider").Value == 60,
+                "The appearance editor opens with the saved glass transparency and without obsolete mode controls");
             CheckPixels((BitmapSource)Named<Image>(editor, "HudPreviewImage").Source, "The production HUD preview contains rendered alpha pixels");
             ShowInvisible(editor);
             await Settle();
@@ -85,7 +86,6 @@ internal static class Program
             Named<Slider>(editor, "SpacingSlider").Value = 9;
             Named<Slider>(editor, "ScaleSlider").Value = 125;
             Named<Slider>(editor, "TransparencySlider").Value = 90;
-            Named<CheckBox>(editor, "CompactCheckBox").IsChecked = true;
             Named<RadioButton>(editor, "ColumnsTwoRadio").IsChecked = true;
             Named<ListBox>(editor, "BlockOrderList").SelectedIndex = 2;
             Click(Named<Button>(editor, "BlockUpButton"));
@@ -107,9 +107,9 @@ internal static class Program
                   editor.DraftAppearance.Layout.MetricOrder == "gpu,cpu,memory", "The draft remembers both independent reorder lists");
             Check(editor.DraftAppearance.Layout.MetricColumns == 2 && editor.DraftAppearance.Layout.TextScale == 1.15 &&
                   editor.DraftAppearance.Layout.Spacing == 9, "The draft retains text size, spacing and metrics per row");
-            Check(editor.DraftAppearance.Mode == IslandAppearance.Glass && editor.DraftAppearance.Compact && editor.DraftAppearance.Scale == 1.25 &&
+            Check(editor.DraftAppearance.Scale == 1.25 &&
                   Math.Abs(editor.DraftAppearance.GlassOpacity - .1) < 1e-10,
-                "Existing compact, scale and transparency controls participate in the same draft");
+                "Scale and transparency controls participate in the same draft");
             Check(editor.DraftAppearance.ClickThrough, "Editing the HUD leaves the independent click-through preference intact");
             Check(!editor.DraftComponents.Music && editor.DraftComponents.Fps && editor.DraftComponents.OnePercentLow &&
                   editor.DraftComponents.FrameTime && editor.DraftComponents.CpuTemperature,
@@ -152,8 +152,9 @@ internal static class Program
             ComponentSettings componentDraft = editor.DraftComponents;
             Click(Named<Button>(editor, "ResetLayoutButton"));
             Check(editor.DraftAppearance.Layout == HudLayoutSettings.Default && editor.DraftAppearance.Alerts == alertDraft &&
-                  editor.DraftComponents == componentDraft && editor.DraftAppearance.ClickThrough && editor.DraftAppearance.Compact,
-                "Reset changes only layout and keeps warnings, components and global input choice");
+                  editor.DraftComponents == componentDraft && editor.DraftAppearance.ClickThrough && editor.DraftAppearance.Scale == 1.25 &&
+                  Math.Abs(editor.DraftAppearance.GlassOpacity - .1) < 1e-10,
+                "Reset restores layout while preserving warnings, components, scale, transparency and input preference");
             Check(editor.CommitDraft(), "The default layout can be previewed again after custom arrangement");
             Check(editor.CommitDraft() && PreviewCalls == 3, "An unchanged commit reuses the successfully rendered preview");
         }
@@ -266,7 +267,7 @@ internal static class Program
     {
         foreach (double opacity in new[] { .05, .612345, .4 })
         {
-            var appearance = new AppearanceSettings(IslandAppearance.Glass, opacity, Scale: 1.12345)
+            var appearance = new AppearanceSettings(opacity, Scale: 1.12345)
                 { Layout = new HudLayoutSettings(TextScale: 1.11234, Spacing: 7.25) };
             var editor = Create(appearance, ComponentSettings.Default, "Общий HUD");
             try

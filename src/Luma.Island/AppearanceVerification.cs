@@ -16,7 +16,7 @@ namespace Luma.Island;
 /// <summary>Exercises the actual appearance menu and renders isolated visual evidence.</summary>
 public static class AppearanceVerification
 {
-    public sealed record Result(bool Passed, int GlassAlpha, int MatteAlpha,
+    public sealed record Result(bool Passed, int GlassAlpha, int OpaqueGlassAlpha,
         bool OpaqueText, bool PlacementUnchanged, int MenuItems);
 
     public static async Task<Result> RunAsync(MainWindow window, string directory, List<string> errors)
@@ -29,30 +29,28 @@ public static class AppearanceVerification
         bool placementUnchanged = true;
         bool opaqueText = false;
 
-        // Make the starting opacity deterministic even when reusing an evidence directory.
-        window.SetAppearance(window.Appearance.Mode, .76);
         MenuItem menu = window.CreateAppearanceMenu();
         int menuItems = menu.Items.Count;
-        if (!menu.HasItems || menuItems != 19)
-            errors.Add("Меню оформления не содержит оба режима, пресеты и настройку прозрачности фона.");
+        if (!menu.HasItems || menuItems != 14)
+            errors.Add("Меню оформления должно содержать пресеты прозрачности, ползунок фона и масштаб.");
 
-        Click(menu, 0);
+        Click(menu, 6);
         await SettleAsync(window);
-        BitmapSource mattePreview = window.CapturePreview();
-        int matteAlpha = SurfaceAlpha(window, mattePreview);
-        if (window.Appearance.Mode != IslandAppearance.Matte || matteAlpha != 255)
-            errors.Add($"Матовое оформление не стало непрозрачным: alpha={matteAlpha}.");
-        if (AlphaAt(mattePreview, 0, 0) != 0)
-            errors.Add("Снаружи матовой капсулы потеряна прозрачность окна.");
-        Save(mattePreview, Path.Combine(directory, "matte-compact.png"));
+        BitmapSource opaquePreview = window.CapturePreview();
+        int opaqueGlassAlpha = SurfaceAlpha(window, opaquePreview);
+        if (window.Appearance.GlassOpacity != 1 || opaqueGlassAlpha != 255)
+            errors.Add($"Стекло с прозрачностью 0% не стало непрозрачным: alpha={opaqueGlassAlpha}.");
+        if (AlphaAt(opaquePreview, 0, 0) != 0)
+            errors.Add("Снаружи капсулы с непрозрачным стеклом потеряна прозрачность окна.");
+        Save(opaquePreview, Path.Combine(directory, "opaque-glass-compact.png"));
         placementUnchanged &= SameBounds(hudBounds, DisplayService.GetWindowBounds(window));
 
         Click(menu, 1);
         await SettleAsync(window);
         BitmapSource glassPreview = window.CapturePreview();
         int glassAlpha = SurfaceAlpha(window, glassPreview);
-        if (window.Appearance.Mode != IslandAppearance.Glass || Math.Abs(glassAlpha - 194) > 1)
-            errors.Add($"Переключатель стекла не установил ожидаемую альфу .76: alpha={glassAlpha}.");
+        if (Math.Abs(window.Appearance.GlassOpacity - .76) > .0001 || Math.Abs(glassAlpha - 194) > 1)
+            errors.Add($"Пресет стекла не установил ожидаемую альфу .76: alpha={glassAlpha}.");
         if (AlphaAt(glassPreview, 0, 0) != 0)
             errors.Add("Снаружи стеклянной капсулы потеряна прозрачность окна.");
         Save(glassPreview, Path.Combine(directory, "glass-compact.png"));
@@ -62,7 +60,7 @@ public static class AppearanceVerification
         double[] expectedOpacities = { .90, .76, .65, .50, .35, .25, 1, .40, .15, .05 };
         for (int index = 0; index < presetAlphas.Length; index++)
         {
-            Click(menu, index + 3);
+            Click(menu, index);
             await SettleAsync(window);
             presetAlphas[index] = SurfaceAlpha(window, window.CapturePreview());
             int expectedAlpha = (int)Math.Round(expectedOpacities[index] * 255);
@@ -74,7 +72,7 @@ public static class AppearanceVerification
         for (int i = 1; i < 6; i++)
             if (presetAlphas[i] >= presetAlphas[i - 1]) errors.Add("Пресеты прозрачности не дают последовательно уменьшающуюся альфу.");
 
-        if (menu.Items[14] is not MenuItem { Header: StackPanel sliderPanel } ||
+        if (menu.Items[11] is not MenuItem { Header: StackPanel sliderPanel } ||
             sliderPanel.Children.Count != 2 || sliderPanel.Children[1] is not Slider slider ||
             slider.Minimum != 0 || slider.Maximum != 95)
             errors.Add("В меню нет доступного ползунка прозрачности от 0 до 95 процентов.");
@@ -86,8 +84,7 @@ public static class AppearanceVerification
                 await SettleAsync(window);
                 int alpha = SurfaceAlpha(window, window.CapturePreview());
                 int expected = (int)Math.Round((1 - transparency / 100d) * 255);
-                if (window.Appearance.Mode != IslandAppearance.Glass ||
-                    Math.Abs(window.Appearance.GlassOpacity - (1 - transparency / 100d)) > .0001 ||
+                if (Math.Abs(window.Appearance.GlassOpacity - (1 - transparency / 100d)) > .0001 ||
                     Math.Abs(alpha - expected) > 1)
                     errors.Add($"Ползунок прозрачности {transparency}% не изменил только фон: alpha={alpha}.");
             }
@@ -95,7 +92,7 @@ public static class AppearanceVerification
             placementUnchanged &= SameBounds(hudBounds, DisplayService.GetWindowBounds(window));
         }
 
-        window.SetAppearance(IslandAppearance.Glass, .05);
+        window.SetGlassOpacity(.05);
         await SettleAsync(window);
         BitmapSource transparentPreview = window.CapturePreview();
         Save(transparentPreview, Path.Combine(directory, "transparent-compact.png"));
@@ -109,15 +106,15 @@ public static class AppearanceVerification
         }
         if (!opaqueText) errors.Add("Стеклянный фон сделал основной текст полупрозрачным.");
 
-        Click(menu, 4);
+        Click(menu, 1);
         await SettleAsync(window);
         placementUnchanged &= SameBounds(hudBounds, DisplayService.GetWindowBounds(window)) &&
             window.Placement.Settings == originalPlacement;
-        if (!placementUnchanged) errors.Add("Переключение оформления изменило положение или настройки размещения.");
+        if (!placementUnchanged) errors.Add("Настройка прозрачности изменила положение или настройки размещения.");
         if (window.Opacity != 1) errors.Add("Оформление изменило общую непрозрачность окна.");
 
-        Save(CreateComparison(mattePreview, glassPreview), Path.Combine(directory, "glass-comparison.png"));
-        return new Result(errors.Count == initialErrors, glassAlpha, matteAlpha,
+        Save(CreateComparison(opaquePreview, glassPreview), Path.Combine(directory, "glass-comparison.png"));
+        return new Result(errors.Count == initialErrors, glassAlpha, opaqueGlassAlpha,
             opaqueText, placementUnchanged, menuItems);
     }
 
@@ -167,7 +164,7 @@ public static class AppearanceVerification
         return count;
     }
 
-    private static BitmapSource CreateComparison(BitmapSource matte, BitmapSource glass)
+    private static BitmapSource CreateComparison(BitmapSource opaque, BitmapSource glass)
     {
         const int width = 980, height = 750;
         var visual = new DrawingVisual();
@@ -175,12 +172,12 @@ public static class AppearanceVerification
         {
             drawing.DrawRectangle(Brush("#10151B"), null, new Rect(0, 0, width, height));
             Text(drawing, "Luma Island", 22, "#F4F7F9", new Point(22, 16), FontWeights.SemiBold);
-            Text(drawing, "Сравнение оформления · прозрачность стекла 24%", 12, "#A9B7C2", new Point(23, 48));
-            Text(drawing, "Матовое", 15, "#E8EEF2", new Point(22, 80), FontWeights.SemiBold);
-            Text(drawing, "Стекло", 15, "#B5EAD6", new Point(500, 80), FontWeights.SemiBold);
-            DrawPanel(drawing, matte, new Rect(22, 108, 458, 300), light: true);
+            Text(drawing, "Прозрачность стеклянного фона", 12, "#A9B7C2", new Point(23, 48));
+            Text(drawing, "Прозрачность 0%", 15, "#E8EEF2", new Point(22, 80), FontWeights.SemiBold);
+            Text(drawing, "Прозрачность 24%", 15, "#B5EAD6", new Point(500, 80), FontWeights.SemiBold);
+            DrawPanel(drawing, opaque, new Rect(22, 108, 458, 300), light: true);
             DrawPanel(drawing, glass, new Rect(500, 108, 458, 300), light: true);
-            DrawPanel(drawing, matte, new Rect(22, 426, 458, 300), light: false);
+            DrawPanel(drawing, opaque, new Rect(22, 426, 458, 300), light: false);
             DrawPanel(drawing, glass, new Rect(500, 426, 458, 300), light: false);
         }
         var result = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);

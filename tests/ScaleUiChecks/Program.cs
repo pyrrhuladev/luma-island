@@ -61,12 +61,12 @@ internal static class Program
         Directory.CreateDirectory(fixtures);
         var store = new AppearanceStore(Path.Combine(fixtures, "appearance.json"));
         File.WriteAllText(Path.Combine(fixtures, "appearance.json"), "{\"mode\":\"Glass\",\"glassOpacity\":0.35,\"compact\":true,\"clickThrough\":false}");
-        Check(store.Load().Scale == 1 && store.Load().Compact && store.Load().GlassOpacity == .35, "Legacy appearance preferences keep their values and default to 100% HUD scale");
+        Check(store.Load().Scale == 1 && store.Load().GlassOpacity == .35, "Legacy appearance preferences keep their values and default to 100% HUD scale");
         foreach (double invalid in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
             Check(AppearanceStore.Normalize(store.Load() with { Scale = invalid }).Scale == 1, "Non-finite HUD scale falls back to 100%: " + invalid);
         Check(AppearanceStore.Normalize(store.Load() with { Scale = 0 }).Scale == .75 &&
             AppearanceStore.Normalize(store.Load() with { Scale = 10 }).Scale == 1.5, "Requested scale is constrained to 75–150%");
-        Check(store.Save(new AppearanceSettings(IslandAppearance.Glass, .4)), "Fixture appearance saved");
+        Check(store.Save(new AppearanceSettings(.4)), "Fixture appearance saved");
         var components = new ComponentStore(Path.Combine(fixtures, "components.json"));
         var metrics = ComponentSettings.Default with { Battery = false, Cpu = true, Gpu = true, Memory = true, Fps = true,
             Charts = true, CpuTemperature = true, GpuTemperature = true, MemoryTemperature = true };
@@ -84,28 +84,24 @@ internal static class Program
             await Settle(window);
             Check(window.HudScale == 1 && window.EffectiveHudScale == 1 && window.Width == 408,
                 "Default 100% retains the original native host width");
-            foreach (bool compact in new[] { false, true })
+            foreach (double requested in new[] { .75, 1d, 1.25, 1.5 })
             {
-                window.SetCompactMode(compact);
-                foreach (double requested in new[] { .75, 1d, 1.25, 1.5 })
+                window.SetHudScale(requested);
+                Check(store.Load().Scale == requested && !store.Load().ClickThrough,
+                    "Saved scale preserves the input preference: " + requested);
+                foreach (IslandPlacement preset in new[] { IslandPlacement.TopLeft, IslandPlacement.BottomRight })
                 {
-                    window.SetHudScale(requested);
-                    Check(store.Load().Scale == requested && store.Load().Compact == compact && !store.Load().ClickThrough,
-                        "Saved scale preserves compact density and input mode: " + compact + "/" + requested);
-                    foreach (IslandPlacement preset in new[] { IslandPlacement.TopLeft, IslandPlacement.BottomRight })
-                    {
-                        window.Placement.SetPreset(preset);
-                        var saved = window.Placement.Settings;
-                        await Settle(window);
-                        CheckState(window, compact + "/" + requested + "/" + preset + "/charts");
-                        window.SetComponents(metrics with { Charts = false });
-                        await Settle(window);
-                        CheckState(window, compact + "/" + requested + "/" + preset + "/no charts");
-                        window.SetComponents(metrics);
-                        await Settle(window);
-                        CheckState(window, compact + "/" + requested + "/" + preset + "/restored");
-                        Check(window.Placement.Settings == saved, "Changing scaled content preserves the saved anchor: " + compact + "/" + requested + "/" + preset);
-                    }
+                    window.Placement.SetPreset(preset);
+                    var saved = window.Placement.Settings;
+                    await Settle(window);
+                    CheckState(window, requested + "/" + preset + "/charts");
+                    window.SetComponents(metrics with { Charts = false });
+                    await Settle(window);
+                    CheckState(window, requested + "/" + preset + "/no charts");
+                    window.SetComponents(metrics);
+                    await Settle(window);
+                    CheckState(window, requested + "/" + preset + "/restored");
+                    Check(window.Placement.Settings == saved, "Changing scaled content preserves the saved anchor: " + requested + "/" + preset);
                 }
             }
             window.SetHudScale(1.5);
@@ -130,25 +126,21 @@ internal static class Program
             window.Opacity = 1;
             window.ApplyPerformance(new PerformanceSnapshot(42, 65, 37, 1, 2, 61, "Fixture", 54, "ok", 43, "ok"));
             window.ApplyFps(new FpsSnapshot(184, "Fixture", "Fixture"));
-            foreach (bool compact in new[] { true, false })
+            foreach (double requested in new[] { .75, 1.5 })
             {
-                window.SetCompactMode(compact);
-                foreach (double requested in new[] { .75, 1.5 })
+                window.SetHudScale(requested); await Settle(window);
+                foreach (double outputScale in new[] { 1d, 2d })
                 {
-                    window.SetHudScale(requested); await Settle(window);
-                    foreach (double outputScale in new[] { 1d, 2d })
+                    var image = new RenderTargetBitmap((int)Math.Ceiling(window.Width * outputScale),
+                        (int)Math.Ceiling(window.Height * outputScale), 96 * outputScale, 96 * outputScale, PixelFormats.Pbgra32);
+                    image.Render(window);
+                    Check(image.PixelWidth == (int)Math.Ceiling(window.Width * outputScale) &&
+                        image.PixelHeight == (int)Math.Ceiling(window.Height * outputScale),
+                        "Scaled render bounds at HUD/DPI " + requested + "/" + outputScale);
+                    if (requested == 1.5 && outputScale == 2)
                     {
-                        var image = new RenderTargetBitmap((int)Math.Ceiling(window.Width * outputScale),
-                            (int)Math.Ceiling(window.Height * outputScale), 96 * outputScale, 96 * outputScale, PixelFormats.Pbgra32);
-                        image.Render(window);
-                        Check(image.PixelWidth == (int)Math.Ceiling(window.Width * outputScale) &&
-                            image.PixelHeight == (int)Math.Ceiling(window.Height * outputScale),
-                            "Scaled render bounds at HUD/DPI " + requested + "/" + outputScale + "/compact=" + compact);
-                        if (requested == 1.5 && outputScale == 2)
-                        {
-                            var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(image));
-                            using var file = File.Create(Path.Combine(Output, compact ? "scale-compact.png" : "scale-normal.png")); encoder.Save(file);
-                        }
+                        var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(image));
+                        using var file = File.Create(Path.Combine(Output, "scale-normal.png")); encoder.Save(file);
                     }
                 }
             }
@@ -161,7 +153,7 @@ internal static class Program
     {
         double effective = window.EffectiveHudScale;
         Check(effective > 0 && effective <= window.HudScale + .000001, label + ": effective scale respects saved request");
-        double expectedWidth = (window.Appearance.Compact ? 352 : 408) * effective;
+        double expectedWidth = 408 * effective;
         double expectedHeight = window.CollapsedWindowHeight;
         Check(Math.Abs(window.Width - expectedWidth) < .01 && Math.Abs(window.Height - expectedHeight) < .01,
             label + $": host dimensions scale while base control geometry stays unchanged; actual={window.Width}x{window.Height}, expected={expectedWidth}x{expectedHeight}, effective={effective}");

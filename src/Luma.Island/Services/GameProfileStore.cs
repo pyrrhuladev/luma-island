@@ -33,7 +33,6 @@ public sealed class GameProfileStore
         MaxDepth = 16,
         Converters =
         {
-            new JsonStringEnumConverter<IslandAppearance>(allowIntegerValues: false),
             new JsonStringEnumConverter<IslandPlacement>(allowIntegerValues: false)
         }
     };

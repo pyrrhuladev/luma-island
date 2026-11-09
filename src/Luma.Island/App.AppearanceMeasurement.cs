@@ -5,7 +5,6 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Threading;
-using Luma.Island.Services;
 
 namespace Luma.Island;
 
@@ -15,9 +14,9 @@ public partial class App
     {
         var samples = new List<object>();
         using var process = Process.GetCurrentProcess();
-        foreach (var mode in new[] { IslandAppearance.Matte, IslandAppearance.Glass })
+        foreach (double opacity in new[] { 1, .76 })
         {
-            _island!.SetAppearance(mode, .76);
+            _island!.SetGlassOpacity(opacity);
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             await Task.Delay(2000);
             process.Refresh();
@@ -29,7 +28,7 @@ public partial class App
             double cpuMilliseconds = process.TotalProcessorTime.TotalMilliseconds - before;
             samples.Add(new
             {
-                mode = mode.ToString(), windowVisible = _island.IsVisible,
+                opacity, windowVisible = _island.IsVisible,
                 sampleSeconds = Math.Round(watch.Elapsed.TotalSeconds, 3),
                 cpuMilliseconds,
                 cpuPercentOfMachine = Math.Round(100 * cpuMilliseconds / (watch.Elapsed.TotalMilliseconds * Environment.ProcessorCount), 3),

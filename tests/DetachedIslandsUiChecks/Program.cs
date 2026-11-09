@@ -219,11 +219,10 @@ internal static class Program
         Check(Near(childBeforePrimaryMove, DisplayService.GetWindowBounds(child)) && window.Appearance.Layout.MusicPosition == moved,
             "Moving the primary island leaves the detached placement independent");
 
-        window.SetAppearance(IslandAppearance.Glass, .12); window.SetCompactMode(true); window.SetHudScale(1.25);
+        window.SetGlassOpacity(.12); window.SetHudScale(1.25);
         await Settle();
-        Check(child.Appearance.Mode == IslandAppearance.Glass && child.Appearance.GlassOpacity == .12 &&
-              child.Appearance.Compact && child.Appearance.Scale == 1.25,
-            "Transparency, density and scale changes update the existing detached presentation");
+        Check(child.Appearance.GlassOpacity == .12 && child.Appearance.Scale == 1.25,
+            "Transparency and scale changes update the existing detached presentation");
         Check(window.Appearance.Layout.MusicPosition == moved &&
               child.Placement.Settings.XFraction == moved!.XFraction && child.Placement.Settings.YFraction == moved.YFraction,
             "Shared style changes preserve the exact detached anchor fractions");

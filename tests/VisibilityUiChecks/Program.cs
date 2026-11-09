@@ -142,23 +142,19 @@ internal static class Program
             CheckToolWindow(window, "after tray restoration");
             SameBounds(original, DisplayService.GetWindowBounds(window), "Restoration preserves the saved bottom-right position");
 
-            foreach (bool compact in new[] { false, true })
+            foreach (var preset in new[] { IslandPlacement.TopLeft, IslandPlacement.Center, IslandPlacement.BottomRight })
             {
-                window.SetCompactMode(compact);
-                foreach (var preset in new[] { IslandPlacement.TopLeft, IslandPlacement.Center, IslandPlacement.BottomRight })
+                window.Placement.SetPreset(preset);
+                Rect before = DisplayService.GetWindowBounds(window);
+                for (int i = 0; i < 3; i++)
                 {
-                    window.Placement.SetPreset(preset);
-                    Rect before = DisplayService.GetWindowBounds(window);
-                    for (int i = 0; i < 3; i++)
-                    {
-                        window.ToggleTrayVisibility();
-                        Check(!window.IsVisible, $"Toggle hides density={compact} preset={preset} cycle={i}");
-                        window.ToggleTrayVisibility();
-                        Check(window.IsVisible, $"Toggle restores density={compact} preset={preset} cycle={i}");
-                    }
-                    SameBounds(before, DisplayService.GetWindowBounds(window), $"Visibility cycles keep density={compact} preset={preset} geometry");
-                    CheckToolWindow(window, $"after visibility cycles compact={compact} preset={preset}");
+                    window.ToggleTrayVisibility();
+                    Check(!window.IsVisible, $"Toggle hides preset={preset} cycle={i}");
+                    window.ToggleTrayVisibility();
+                    Check(window.IsVisible, $"Toggle restores preset={preset} cycle={i}");
                 }
+                SameBounds(before, DisplayService.GetWindowBounds(window), $"Visibility cycles keep preset={preset} geometry");
+                CheckToolWindow(window, $"after visibility cycles preset={preset}");
             }
 
             Rect beforeHide = DisplayService.GetWindowBounds(window);

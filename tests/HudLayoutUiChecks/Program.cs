@@ -56,7 +56,7 @@ internal static class Program
         var appearance = new AppearanceStore(Path.Combine(fixtures, "appearance.json"));
         var components = new ComponentStore(Path.Combine(fixtures, "components.json"));
         var placement = new PlacementStore(Path.Combine(fixtures, "placement.json"));
-        appearance.Save(new AppearanceSettings(IslandAppearance.Glass, .3)); components.Save(All);
+        appearance.Save(new AppearanceSettings(.3)); components.Save(All);
         using var media = new MediaService(); using var system = new SystemService(); system.Dispose();
         var window = new MainWindow(media, system, placement, appearance, components, new AutostartService(readOnly: true))
             { Opacity = 0, Topmost = false, ShowInTaskbar = false, ShowActivated = false };
@@ -86,31 +86,30 @@ internal static class Program
                 Check(appearance.Load().Layout == window.Appearance.Layout, "Layout edits persist through the appearance store");
             }
 
-            foreach (bool compact in new[] { false, true })
-                foreach (int columns in new[] { 1, 2, 3 })
-                    foreach (var values in new[] { (Text: .8, Gap: 2d, Scale: .75), (Text: 1d, Gap: 6d, Scale: 1d), (Text: 1.3, Gap: 12d, Scale: 1.5) })
+            foreach (int columns in new[] { 1, 2, 3 })
+                foreach (var values in new[] { (Text: .8, Gap: 2d, Scale: .75), (Text: 1d, Gap: 6d, Scale: 1d), (Text: 1.3, Gap: 12d, Scale: 1.5) })
+                {
+                    window.SetHudScale(values.Scale);
+                    window.SetHudLayout(new("music,header,metrics", "memory,gpu,cpu", columns, values.Text, values.Gap)); Inject(window);
+                    await Settle(window);
+                    var performance = (UniformGrid)window.FindName("CompactPerformance");
+                    Check(performance.Columns == columns && performance.ActualHeight > 0, "Hardware row count follows column choice");
+                    foreach (string name in new[] { "CompactCpu", "CompactGpu", "CompactMemory" }) CheckText(Text(window, name), performance);
+                    var surface = (FrameworkElement)window.FindName("IslandSurface");
+                    foreach (string name in new[] { "HudHeader", "CompactPerformance", "CompactMusicRow", "CompactVolume", "DateLabel", "FrameTimeCard" })
                     {
-                        window.SetCompactMode(compact); window.SetHudScale(values.Scale);
-                        window.SetHudLayout(new("music,header,metrics", "memory,gpu,cpu", columns, values.Text, values.Gap)); Inject(window);
-                        await Settle(window);
-                        var performance = (UniformGrid)window.FindName("CompactPerformance");
-                        Check(performance.Columns == columns && performance.ActualHeight > 0, "Hardware row count follows column choice");
-                        foreach (string name in new[] { "CompactCpu", "CompactGpu", "CompactMemory" }) CheckText(Text(window, name), performance);
-                        var surface = (FrameworkElement)window.FindName("IslandSurface");
-                        foreach (string name in new[] { "HudHeader", "CompactPerformance", "CompactMusicRow", "CompactVolume", "DateLabel", "FrameTimeCard" })
-                        {
-                            var group = (FrameworkElement)window.FindName(name);
-                            Check(group.IsVisible && Inside(Bounds(group, surface), surface.RenderSize),
-                                "Visible group fits inside the HUD: " + name);
-                        }
-                        double font = Text(window, "CompactCpu").FontSize;
-                        window.SetComponents(All); window.SetHudScale(values.Scale); await Settle(window);
-                        Check(Math.Abs(Text(window, "CompactCpu").FontSize - font) < .001, "Repeated component and scale application never compounds font scale");
-                        CheckText(Text(window, "CompactFps"), (FrameworkElement)window.FindName("HudHeader"));
-                        Check(window.Height <= window.Placement.CurrentDisplay.WorkArea.Height / DisplayService.GetWindowScale(window) + 1,
-                            "Custom HUD height fits the monitor without changing saved user scale");
-                        if (compact && columns == 2 && values.Text > 1) Save(MainWindow.RenderHudPreview(window.Appearance, All), "layout-custom.png");
+                        var group = (FrameworkElement)window.FindName(name);
+                        Check(group.IsVisible && Inside(Bounds(group, surface), surface.RenderSize),
+                            "Visible group fits inside the HUD: " + name);
                     }
+                    double font = Text(window, "CompactCpu").FontSize;
+                    window.SetComponents(All); window.SetHudScale(values.Scale); await Settle(window);
+                    Check(Math.Abs(Text(window, "CompactCpu").FontSize - font) < .001, "Repeated component and scale application never compounds font scale");
+                    CheckText(Text(window, "CompactFps"), (FrameworkElement)window.FindName("HudHeader"));
+                    Check(window.Height <= window.Placement.CurrentDisplay.WorkArea.Height / DisplayService.GetWindowScale(window) + 1,
+                        "Custom HUD height fits the monitor without changing saved user scale");
+                    if (columns == 2 && values.Text > 1) Save(MainWindow.RenderHudPreview(window.Appearance, All), "layout-custom.png");
+                }
             foreach (var subset in new[]
             {
                 new ComponentSettings(Music: false, Cpu: false, Gpu: true, Memory: false),
@@ -142,7 +141,7 @@ internal static class Program
             window.SetComponents(All with { Cpu = false, CpuTemperature = false, Gpu = false, GpuTemperature = false, Memory = false, MemoryTemperature = false });
             await Settle(window);
             Check(((FrameworkElement)window.FindName("CompactPerformance")).Visibility == Visibility.Collapsed, "All hidden hardware metrics collapse their custom rows");
-            window.SetHudLayout(HudLayoutSettings.Default); window.SetHudScale(1); window.SetCompactMode(false); window.SetComponents(All); Inject(window); await Settle(window);
+            window.SetHudLayout(HudLayoutSettings.Default); window.SetHudScale(1); window.SetComponents(All); Inject(window); await Settle(window);
             Check(((Grid)window.FindName("CompactContentGrid")).RowDefinitions[0] == window.FindName("HudHeaderRow") && Text(window, "CompactCpu").FontSize == 12,
                 "Reset restores original row ownership and base font sizes");
             Check(PreferenceHashes().OrderBy(p => p.Key).SequenceEqual(original.OrderBy(p => p.Key)), "All actual user preferences remain byte-for-byte unchanged");

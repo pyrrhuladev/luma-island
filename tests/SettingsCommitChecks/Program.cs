@@ -14,7 +14,7 @@ var originalBase = new HudProfileSettings(
     ComponentSettings.Default,
     PlacementSettings.Default with { MonitorId = null, XFraction = .5187165775401069 });
 var edited = new HudProfileSettings(
-    new AppearanceSettings(IslandAppearance.Glass, .173456, true, true, 1.12345)
+    new AppearanceSettings(.173456, ClickThrough: true, Scale: 1.12345)
     {
         Layout = new("music,header,metrics", "memory,gpu,cpu", 2, 1.11234, 9),
         Alerts = new(Enabled: true, CpuThreshold: 94, MemoryTemperature: true)
@@ -23,8 +23,7 @@ var edited = new HudProfileSettings(
     new PlacementSettings("SECOND", IslandPlacement.Custom, .6123456789, .2345678912, true));
 string activeId = "f3d949e7-2ae3-40a9-81c1-81d9224899f3";
 string secondId = "1fe53864-a7fe-4fc1-9e95-f1905a3df16f";
-var activeDraft = new GameProfile(activeId, "Renamed active", @"D:\Games\Alpha\Alpha.exe",
-    HudProfileSettings.Default with { Appearance = AppearanceSettings.Default with { Compact = false } });
+var activeDraft = new GameProfile(activeId, "Renamed active", @"D:\Games\Alpha\Alpha.exe", HudProfileSettings.Default);
 var secondDraft = new GameProfile(secondId, "Other edited profile", @"D:\Games\Beta\Beta.exe",
     new HudProfileSettings(AppearanceSettings.Default with { GlassOpacity = .61 },
         ComponentSettings.Default with { Memory = true }, PlacementSettings.Default with { Placement = IslandPlacement.BottomRight }));
@@ -79,11 +78,11 @@ var canonical = SettingsCommitPlan.Create(originalBase, "{" + activeId.ToUpperIn
 Check(canonical.ActiveProfileId == activeId && canonical.Profiles.Profiles[0].Settings == GameProfileStore.NormalizeSnapshot(edited),
     "Equivalent GUID formats resolve the same active profile");
 
-var malformedHud = new HudProfileSettings(new AppearanceSettings((IslandAppearance)99, double.NaN, Scale: double.PositiveInfinity)
+var malformedHud = new HudProfileSettings(new AppearanceSettings(double.NaN, Scale: double.PositiveInfinity)
     { Layout = null!, Alerts = new(CpuThreshold: double.NaN, FrameTimeThreshold: -1, StutterCount: -4) },
     null!, new PlacementSettings("  ", (IslandPlacement)99, double.NaN, 8));
 var finite = SettingsCommitPlan.Create(originalBase, null, malformedHud, new(true, null!));
-Check(finite.VisibleHud.Appearance.Mode == IslandAppearance.Matte && finite.VisibleHud.Appearance.GlassOpacity == .4 && finite.VisibleHud.Appearance.Scale == 1,
+Check(finite.VisibleHud.Appearance.GlassOpacity == .4 && finite.VisibleHud.Appearance.Scale == 1,
     "Invalid appearance values are normalized before application");
 Check(finite.VisibleHud.Appearance.Layout == HudLayoutSettings.Default && finite.VisibleHud.Appearance.Alerts.CpuThreshold == 90 &&
       finite.VisibleHud.Appearance.Alerts.FrameTimeThreshold == 10 && finite.VisibleHud.Appearance.Alerts.StutterCount == 2,

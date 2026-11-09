@@ -72,10 +72,10 @@ internal static class Program
         var appearance = new AppearanceStore(appearancePath);
         var components = new ComponentStore(Path.Combine(fixtures, "components.json"));
         var placement = new PlacementStore(Path.Combine(fixtures, "placement.json"));
-        var initial = new AppearanceSettings(IslandAppearance.Glass, .4, false);
+        var initial = new AppearanceSettings(.4, false);
         Check(!AppearanceSettings.Default.ClickThrough && !appearance.Load().ClickThrough, "Click-through defaults to off");
         File.WriteAllText(appearancePath, "{\"mode\":\"Glass\",\"glassOpacity\":0.35,\"compact\":true}");
-        Check(appearance.Load() == new AppearanceSettings(IslandAppearance.Glass, .35, true, false),
+        Check(appearance.Load() == new AppearanceSettings(.35),
             "Legacy appearance JSON preserves existing values and defaults the new input preference to off");
         Check(appearance.Save(initial), "Isolated appearance fixture saved");
         Check(components.Save(ComponentSettings.Default with { Music = false, Battery = false }), "Isolated component fixture saved");
@@ -129,16 +129,14 @@ internal static class Program
                 "Input mode does not rewrite position or component choices");
             Check(Named<Button>(window, "CompactPlayButton").Focusable && surface.IsHitTestVisible && window.IsEnabled,
                 "The mode uses native routing rather than disabling the WPF controls needed after unlocking");
-            foreach (bool compact in new[] { false, true })
-                foreach (IslandAppearance mode in Enum.GetValues<IslandAppearance>())
-                {
-                    window.SetCompactMode(compact);
-                    window.SetAppearance(mode, .05);
-                    window.UpdateClockAndBattery();
-                    await Settle();
-                    Check(window.IsClickThrough && appearance.Load().ClickThrough && (Style(hwnd) & InputMask) == InputMask,
-                        $"Density and appearance changes preserve native routing: compact={compact}, mode={mode}");
-                }
+            foreach (double opacity in new[] { .05, 1d })
+            {
+                window.SetGlassOpacity(opacity);
+                window.UpdateClockAndBattery();
+                await Settle();
+                Check(window.IsClickThrough && appearance.Load().ClickThrough && (Style(hwnd) & InputMask) == InputMask,
+                    $"Transparency changes preserve native routing at opacity {opacity}");
+            }
             window.ToggleClickThrough();
             Check(!window.IsClickThrough && (Style(hwnd) & InputMask) == 0 && !appearance.Load().ClickThrough && !capsuleItem.IsChecked && !trayItem.IsChecked,
                 "Toggling restores native input and synchronizes saved preferences and both menus");
@@ -221,7 +219,7 @@ internal static class Program
             window.RestoreForInteraction();
             window.Close();
 
-            var retained = appearance.Load() with { Mode = IslandAppearance.Glass, GlassOpacity = .4, Compact = false, ClickThrough = true };
+            var retained = appearance.Load() with { GlassOpacity = .4, ClickThrough = true };
             Check(appearance.Save(retained), "Saved-enabled startup fixture prepared");
             string beforeStartup = File.ReadAllText(appearancePath);
             window = Create();
@@ -249,7 +247,7 @@ internal static class Program
     private static async Task CheckNativeHitSelection(MainWindow window)
     {
         window.SetClickThrough(false);
-        window.SetAppearance(IslandAppearance.Matte, 1);
+        window.SetGlassOpacity(1);
         await Settle();
         IntPtr hwnd = new WindowInteropHelper(window).Handle;
         var area = window.Placement.CurrentDisplay.WorkArea;

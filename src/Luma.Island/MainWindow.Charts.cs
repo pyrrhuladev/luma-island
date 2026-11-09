@@ -15,7 +15,7 @@ public partial class MainWindow
     private string? _fpsHistoryProcess;
     private int EnabledChartCount => (Components.Cpu ? 1 : 0) + (Components.Gpu ? 1 : 0) +
         (Components.Memory ? 1 : 0) + (Components.Fps ? 1 : 0);
-    private double ChartCardHeight => (Appearance.Compact ? 58 : 64) + (LayoutGrowth - 1) * 32;
+    private double ChartCardHeight => 64 + (LayoutGrowth - 1) * 32;
     public double ChartsHeight => !Components.Charts || EnabledChartCount == 0 ? 0
         : EnabledChartCount <= 2 ? ChartCardHeight + 6 : 2 * ChartCardHeight + 12;
 

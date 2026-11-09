@@ -18,18 +18,21 @@ public partial class MainWindow
         || Components.GpuTemperature || Components.CpuTemperature || Components.MemoryTemperature;
     private double TemperatureRowHeight => (Components.Gpu && Components.GpuTemperature)
         || (Components.Cpu && Components.CpuTemperature) || (Components.Memory && Components.MemoryTemperature) ? 16 : 0;
-    private double HudHeaderContentHeight => (Components.Fps || Components.OnePercentLow ? Appearance.Compact ? 42 : 50
-        : Components.Time || _batteryVisible ? Appearance.Compact ? 20 : 24 : 0) * LayoutGrowth;
-    private double HudMetricsContentHeight => HasHardwareMetrics ? CompactMetricGridHeight + 2 * (Appearance.Compact ? 4 : 6) * LayoutSpacing / 6 : 0;
-    private double HudMusicContentHeight => MusicInThisIsland ? (Appearance.Compact ? 34 : 44) * LayoutGrowth : 0;
+    private double HudHeaderContentHeight => (Components.Fps || Components.OnePercentLow ? 50
+        : Components.Time || _batteryVisible ? 24 : 0) * LayoutGrowth;
+    private double HudMetricsContentHeight => HasHardwareMetrics ? CompactMetricGridHeight + 2 * LayoutSpacing : 0;
+    private double HudMusicContentHeight => MusicInThisIsland ? 44 * LayoutGrowth : 0;
     private double HudHeaderHeight => HudHeaderContentHeight > 0 ? HudHeaderContentHeight + LayoutBlockGap("header") : 0;
     private double HudMetricsHeight => HudMetricsContentHeight > 0 ? HudMetricsContentHeight + LayoutBlockGap("metrics") : 0;
     private double HudMusicHeight => HudMusicContentHeight > 0 ? HudMusicContentHeight + LayoutBlockGap("music") : 0;
-    private double HudVolumeHeight => VolumeInThisIsland ? (Appearance.Compact ? 24 : 28) * LayoutGrowth : 0;
+    private double HudVolumeHeight => VolumeInThisIsland ? 28 * LayoutGrowth : 0;
     private double HudDateHeight => Components.Date ? 19 * LayoutGrowth : 0;
-    private double BaseCollapsedWindowHeight => 26 + (Appearance.Compact ? 10 : 12) + Math.Max(20,
+    private const double BaseCollapsedWindowWidth = 408;
+    private const double CollapsedSurfaceWidth = 376;
+    private double BaseCollapsedWindowHeight => 38 + Math.Max(20,
         HudHeaderHeight + HudMetricsHeight + HudMusicHeight + ChartsHeight + LayoutFrameTimeHeight + HudVolumeHeight + HudDateHeight);
     public double CollapsedWindowHeight => ScaledHudDimension(BaseCollapsedWindowHeight);
+    public double CollapsedWindowWidth => ScaledHudDimension(BaseCollapsedWindowWidth);
 
     private void InitializeComponents(ComponentStore store)
     {
@@ -58,13 +61,12 @@ public partial class MainWindow
     private static Visibility Show(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
     private void ApplyComponentVisibility()
     {
-        ApplyCompactDensity();
         CompactMusicRow.Visibility = Show(MusicInThisIsland);
         CompactArtworkFrame.Visibility = Show(MusicInThisIsland);
-        CompactArtworkColumn.Width = new GridLength(MusicInThisIsland ? Appearance.Compact ? 25 : 30 : 0);
+        CompactArtworkColumn.Width = new GridLength(MusicInThisIsland ? 30 : 0);
         CompactClock.Visibility = Show(Components.Time);
         DateLabel.Visibility = Show(Components.Date);
-        CompactArtist.Visibility = Show(MusicInThisIsland && !Appearance.Compact);
+        CompactArtist.Visibility = Show(MusicInThisIsland);
         CompactPlaybackControls.Visibility = Show(MusicInThisIsland);
         CompactVolume.Visibility = Show(VolumeInThisIsland);
         CompactPerformance.Visibility = Show(HasHardwareMetrics);
@@ -95,7 +97,6 @@ public partial class MainWindow
         IslandSurface.Width = CollapsedSurfaceWidth;
         Height = CollapsedWindowHeight;
         Width = CollapsedWindowWidth;
-        UpdateSurfaceRounding();
         _placement?.Apply();
     }
 

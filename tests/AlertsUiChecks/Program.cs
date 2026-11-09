@@ -59,7 +59,7 @@ internal static class Program
         var appearance = new AppearanceStore(System.IO.Path.Combine(fixtures, "appearance.json"));
         var components = new ComponentStore(System.IO.Path.Combine(fixtures, "components.json"));
         var placement = new PlacementStore(System.IO.Path.Combine(fixtures, "placement.json"));
-        Check(appearance.Save(new AppearanceSettings(IslandAppearance.Glass, .15)) && components.Save(Empty), "Only isolated preference fixtures are prepared");
+        Check(appearance.Save(new AppearanceSettings(.15)) && components.Save(Empty), "Only isolated preference fixtures are prepared");
         using var media = new MediaService();
         using var system = new SystemService(); system.Dispose();
         var window = new MainWindow(media, system, placement, appearance, components, new AutostartService(readOnly: true))
@@ -125,20 +125,19 @@ internal static class Program
             Check(!window.AlertView.Active && window.Appearance.Alerts.Enabled && indicator.Visibility == Visibility.Collapsed,
                 "Visibility/profile reset releases warning state without changing saved preferences");
 
-            foreach (bool compact in new[] { false, true })
             foreach (double scale in new[] { .75, 1d, 1.5 })
             {
-                window.SetCompactMode(compact); window.SetHudScale(scale);
+                window.SetHudScale(scale);
                 window.SetComponents(Empty with { Time = true, Cpu = true, Gpu = true, Memory = true, Fps = true, OnePercentLow = true });
                 window.SetAlertSettings(settings);
                 foreach (double time in new[] { 0d, 2, 4 }) window.ApplyAlertPerformance(Temperature(92), time);
                 await Settle();
                 Check(indicator.Visibility == Visibility.Visible && indicator.Width == 7 && indicator.Height == 7,
-                    "The alert stays one small seven-DIP dot: " + compact + "/" + scale);
-                Inside(window, indicator, "Warning dot stays inside the translucent HUD: " + compact + "/" + scale);
+                    "The alert stays one small seven-DIP dot: " + scale);
+                Inside(window, indicator, "Warning dot stays inside the translucent HUD: " + scale);
                 Check(window.Appearance.GlassOpacity == .15 && indicator.Opacity == 1,
-                    "The background transparency setting does not fade the warning: " + compact + "/" + scale);
-                if (compact && scale == 1)
+                    "The background transparency setting does not fade the warning: " + scale);
+                if (scale == 1)
                 {
                     var snapshot = RenderOffscreen(window);
                     var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(snapshot));

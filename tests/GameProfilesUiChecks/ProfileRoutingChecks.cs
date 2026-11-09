@@ -27,13 +27,13 @@ internal static partial class Program
         var components = new ComponentStore(componentsPath);
         var placement = new PlacementStore(placementPath);
         var profiles = new GameProfileStore(profilesPath);
-        var ordinary = new HudProfileSettings(new AppearanceSettings(IslandAppearance.Glass, .65, false, false, .9),
+        var ordinary = new HudProfileSettings(new AppearanceSettings(.65, Scale: .9),
             new ComponentSettings(Music: false, Volume: false, Time: true, Date: false, Battery: false),
             new PlacementSettings(Placement: IslandPlacement.BottomRight));
-        var gameA = new HudProfileSettings(new AppearanceSettings(IslandAppearance.Glass, .35, true, false, 1.25),
+        var gameA = new HudProfileSettings(new AppearanceSettings(.35, Scale: 1.25),
             ordinary.Components with { Cpu = true, Gpu = true, Fps = true },
             ordinary.Placement with { Placement = IslandPlacement.TopLeft });
-        var gameB = new HudProfileSettings(new AppearanceSettings(IslandAppearance.Matte, .76, false, false, .8),
+        var gameB = new HudProfileSettings(new AppearanceSettings(.76, Scale: .8),
             ordinary.Components with { Time = false, Memory = true },
             ordinary.Placement with { Placement = IslandPlacement.TopRight, Locked = true });
         var configuration = new GameProfileSettings(true, new[]
@@ -55,9 +55,9 @@ internal static partial class Program
                 "Before an automatic selection the ordinary HUD is restored from the existing stores");
             Check(window.ActivateGameProfile(FirstId), "The configured first game profile activates through the production API");
             await Settle();
-            Check(window.ActiveGameProfileId == FirstId && window.Appearance.Scale == 1.25 && window.Appearance.Compact &&
+            Check(window.ActiveGameProfileId == FirstId && window.Appearance.Scale == 1.25 &&
                 window.Appearance.GlassOpacity == .35 && window.Components == gameA.Components,
-                "Game A applies its scale, compactness, transparency and independent component selection");
+                "Game A applies its scale, transparency and independent component selection");
             Check(window.Placement.Settings == gameA.Placement, "Game A applies its own monitor-aware placement");
             CheckNativeProfileBounds(window, "Game A native geometry follows its saved anchor and scaled dimensions");
             double firstWidth = window.Width;
@@ -74,7 +74,7 @@ internal static partial class Program
             scaleSlider.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
             Check(profiles.Load().Profiles.Single(profile => profile.Id == FirstId).Settings.Appearance.Scale == 1.2,
                 "Completing the scale slider saves the selected game's scale");
-            window.SetAppearance(IslandAppearance.Glass, .30);
+            window.SetGlassOpacity(.30);
             window.SetComponents(gameA.Components with { Memory = true });
             window.Placement.SetLocked(false);
             window.Placement.BeginDrag();
@@ -109,9 +109,9 @@ internal static partial class Program
                 "Completing a drag emits the interaction-ended notification used to replay a deferred profile selection");
             Check(window.ActivateGameProfile(SecondId), "The second configured game can replace the active profile");
             await Settle();
-            Check(window.Appearance.Mode == IslandAppearance.Matte && window.Appearance.Scale == .8 && !window.Appearance.Compact &&
+            Check(window.Appearance.GlassOpacity == .76 && window.Appearance.Scale == .8 &&
                 window.Components == gameB.Components && window.Width < firstWidth && window.Placement.Settings == gameB.Placement,
-                "Game B restores its independent matte style, scale, density, indicators and placement");
+                "Game B restores its independent transparency, scale, indicators and placement");
             CheckNativeProfileBounds(window, "Game B geometry matches the new scaled anchor without a stale size");
             Check(window.ActivateGameProfile(FirstId), "Returning to game A activates its saved edited profile");
             await Settle();
@@ -150,8 +150,8 @@ internal static partial class Program
             window.Show(); await Settle();
             Check(!window.GameProfiles.Enabled && window.ActiveGameProfileId is null && window.CaptureHudSettings() == beforeDisable,
                 "Restart restores the kept ordinary HUD when automatic profiles are disabled");
-            window.SetAppearance(IslandAppearance.Matte);
-            Check(appearance.Load().Mode == IslandAppearance.Matte && !profiles.Load().Enabled,
+            window.SetGlassOpacity(.8);
+            Check(appearance.Load().GlassOpacity == .8 && !profiles.Load().Enabled,
                 "Subsequent appearance edits use ordinary persistence while automatic profiles remain off");
         }
         finally { window?.Close(); }

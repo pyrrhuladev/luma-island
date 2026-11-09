@@ -1,13 +1,10 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Luma.Island.Services;
 
-public enum IslandAppearance { Matte, Glass }
-
-public sealed record AppearanceSettings(IslandAppearance Mode = IslandAppearance.Glass, double GlassOpacity = .40, bool Compact = false, bool ClickThrough = false, double Scale = 1)
+public sealed record AppearanceSettings(double GlassOpacity = .40, bool ClickThrough = false, double Scale = 1)
 {
     public static AppearanceSettings Default { get; } = new();
     public HudLayoutSettings Layout { get; init; } = HudLayoutSettings.Default;
@@ -28,8 +25,7 @@ public class AppearanceStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
-        MaxDepth = 16,
-        Converters = { new JsonStringEnumConverter<IslandAppearance>(allowIntegerValues: false) }
+        MaxDepth = 16
     };
 
     public AppearanceStore(string? path = null)
@@ -85,7 +81,6 @@ public class AppearanceStore
         settings ??= AppearanceSettings.Default;
         return settings with
         {
-            Mode = Enum.IsDefined(settings.Mode) ? settings.Mode : IslandAppearance.Matte,
             GlassOpacity = double.IsFinite(settings.GlassOpacity)
                 ? Math.Clamp(settings.GlassOpacity, MinOpacity, MaxOpacity)
                 : AppearanceSettings.Default.GlassOpacity,

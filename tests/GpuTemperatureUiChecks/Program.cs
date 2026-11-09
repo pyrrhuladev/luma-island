@@ -65,7 +65,7 @@ internal static class Program
         var componentStore = new ComponentStore(Path.Combine(fixtures, "components.json"));
         Check(componentStore.Save(Empty), "Isolated component fixture was saved");
         var appearance = new AppearanceStore(Path.Combine(fixtures, "appearance.json"));
-        Check(appearance.Save(new AppearanceSettings(IslandAppearance.Glass, .65)), "Isolated appearance fixture was saved");
+        Check(appearance.Save(new AppearanceSettings(.65)), "Isolated appearance fixture was saved");
         using var media = new MediaService();
         using var system = new SystemService();
         var autostart = new AutostartService(runKey: @"Software\LumaIsland\Tests\GpuTemperatureUi\Run",
@@ -134,20 +134,16 @@ internal static class Program
                 "Three hardware columns and a separate FPS headline remain visible with GPU temperature");
             Check(((FrameworkElement)window.FindName("GpuChartCard")).IsVisible,
                 "GPU load history is visible in the same HUD as the temperature");
-            foreach (bool dense in new[] { false, true })
+            await SettleAsync(window);
+            foreach (double scale in new[] { 1d, 1.5, 2d })
             {
-                window.SetCompactMode(dense);
-                await SettleAsync(window);
-                foreach (double scale in new[] { 1d, 1.5, 2d })
-                {
-                    CheckLabels(window, "CompactPerformance", scale);
-                    BitmapSource bitmap = Render(window, scale);
-                    Check(bitmap.PixelWidth == (int)Math.Ceiling(window.Width * scale) &&
-                        bitmap.PixelHeight == (int)Math.Ceiling(window.Height * scale),
-                        $"HUD render has complete bounds at {scale * 100:0}% DPI in dense={dense}");
-                    DpiChecks.Add(new { dense, dpi = scale * 96, width = bitmap.PixelWidth, height = bitmap.PixelHeight, clipped = false });
-                    if (scale == 2 && dense) Save(bitmap, Path.Combine(Output, "gpu-temperature-compact.png"));
-                }
+                CheckLabels(window, "CompactPerformance", scale);
+                BitmapSource bitmap = Render(window, scale);
+                Check(bitmap.PixelWidth == (int)Math.Ceiling(window.Width * scale) &&
+                    bitmap.PixelHeight == (int)Math.Ceiling(window.Height * scale),
+                    $"HUD render has complete bounds at {scale * 100:0}% DPI");
+                DpiChecks.Add(new { dpi = scale * 96, width = bitmap.PixelWidth, height = bitmap.PixelHeight, clipped = false });
+                if (scale == 2) Save(bitmap, Path.Combine(Output, "gpu-temperature.png"));
             }
             Check(DisplayService.GetWindowBounds(window).X < -10000, "The temporary UI stayed outside the desktop");
         }

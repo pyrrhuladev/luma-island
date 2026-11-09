@@ -76,7 +76,7 @@ internal static class Program
             new WindowInteropHelper(window).EnsureHandle(); window.Show(); await Settle();
             Check(window.ActivateGameProfile(firstId), "First game becomes the editor target");
             string[] baseHashes = BaseHashes(fixture);
-            var draftAppearance = AppearanceSettings.Default with { Compact = true, GlassOpacity = .17,
+            var draftAppearance = AppearanceSettings.Default with { GlassOpacity = .17,
                 Layout = new("music,header,metrics", "memory,cpu,gpu", 2, 1.1, 9), Alerts = new(Enabled: true, Stutters: false) };
             var draftComponents = empty with { Cpu = true, Gpu = true, Fps = true };
             var draftPlacement = window.Placement.Settings with { Placement = IslandPlacement.Custom, XFraction = .22, YFraction = .11, Locked = true };

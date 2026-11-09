@@ -64,7 +64,7 @@ internal static class Program
         var components = new ComponentStore(Path.Combine(fixtures, "components.json"));
         Check(components.Save(settings), "Component settings use an isolated fixture");
         var appearance = new AppearanceStore(Path.Combine(fixtures, "appearance.json"));
-        Check(appearance.Save(new AppearanceSettings(IslandAppearance.Glass, .65)), "Appearance uses an isolated fixture");
+        Check(appearance.Save(new AppearanceSettings(.65)), "Appearance uses an isolated fixture");
         using var media = new MediaService();
         using var system = new SystemService();
         system.Dispose();
@@ -122,44 +122,40 @@ internal static class Program
             typeof(MainWindow).GetField("_busy", Private)!.SetValue(window, false);
             typeof(MainWindow).GetMethod("UpdateMediaAvailability", Private)!.Invoke(window, null);
 
-            foreach (bool compact in new[] { false, true })
+            foreach (bool battery in new[] { false, true })
             {
-                window.SetCompactMode(compact);
-                foreach (bool battery in new[] { false, true })
-                {
-                    typeof(MainWindow).GetMethod("ApplyBattery", Private)!.Invoke(window, new object[] { new BatterySnapshot(battery, 100, false, false) });
-                    Named<TextBlock>(window, "CompactClock").Text = "23:59";
-                    window.ApplyPerformance(new PerformanceSnapshot(100, 100, 100, 1, 2, 99, "Synthetic fixture", 99, "Synthetic fixture", 99, "Synthetic fixture"));
-                    window.ApplyFps(new FpsSnapshot(999, "Synthetic fixture", "Synthetic fixture"));
-                    await Settle(window);
-                    Check(controls.Visibility == Visibility.Visible && previous.ActualWidth == (compact ? 22 : 24),
-                        "Transport buttons fit the selected density: " + compact + "/" + battery);
-                    var title = Named<TextBlock>(window, "CompactTitle");
-                    Check(title.ActualWidth >= 60 && title.TextTrimming == TextTrimming.CharacterEllipsis,
-                        "Track title retains readable width and ellipsis with clock/battery: " + compact + "/" + battery);
-                    var surface = Named<Border>(window, "IslandSurface");
-                    foreach (Button button in new[] { previous, play, next })
-                    {
-                        Rect bounds = button.TransformToAncestor(surface).TransformBounds(new Rect(new Point(), button.RenderSize));
-                        Check(bounds.Left >= 0 && bounds.Right <= surface.ActualWidth && bounds.Top >= 0 && bounds.Bottom <= surface.ActualHeight,
-                            button.Name + " stays inside the capsule: " + compact + "/" + battery);
-                        Point center = button.TranslatePoint(new Point(button.ActualWidth / 2, button.ActualHeight / 2), window);
-                        var hit = window.InputHitTest(center) as DependencyObject;
-                        Check(hit is not null && (ReferenceEquals(hit, button) || Ancestors(hit).Contains(button)),
-                            button.Name + " owns its own hit target: " + compact + "/" + battery);
-                    }
-                }
-                Inject(window, new MediaSnapshot("Night Drive", "Luma Sessions", true, true, true, true, true, Artwork()));
-                Named<TextBlock>(window, "CompactClock").Text = "21:48";
-                typeof(MainWindow).GetMethod("ApplyBattery", Private)!.Invoke(window, new object[] { new BatterySnapshot(true, 82, false, false) });
-                window.ApplyPerformance(new PerformanceSnapshot(18, 34, 42, 28862180229, 68719476736, 54, "Synthetic fixture", 58, "Synthetic fixture", 41, "Synthetic fixture"));
-                window.ApplyFps(new FpsSnapshot(144, "Synthetic fixture", "Synthetic fixture"));
+                typeof(MainWindow).GetMethod("ApplyBattery", Private)!.Invoke(window, new object[] { new BatterySnapshot(battery, 100, false, false) });
+                Named<TextBlock>(window, "CompactClock").Text = "23:59";
+                window.ApplyPerformance(new PerformanceSnapshot(100, 100, 100, 1, 2, 99, "Synthetic fixture", 99, "Synthetic fixture", 99, "Synthetic fixture"));
+                window.ApplyFps(new FpsSnapshot(999, "Synthetic fixture", "Synthetic fixture"));
                 await Settle(window);
-                window.Opacity = 1;
-                Save(window, Path.Combine(Output, compact ? "compact-controls.png" : "normal-controls.png"), 2);
-                window.Opacity = 0;
-                Check(DisplayService.GetWindowBounds(window).Right < 0, "Capture remains offscreen: " + compact);
+                Check(controls.Visibility == Visibility.Visible && previous.ActualWidth == 24,
+                    "Transport buttons fit the capsule: " + battery);
+                var title = Named<TextBlock>(window, "CompactTitle");
+                Check(title.ActualWidth >= 60 && title.TextTrimming == TextTrimming.CharacterEllipsis,
+                    "Track title retains readable width and ellipsis with clock/battery: " + battery);
+                var surface = Named<Border>(window, "IslandSurface");
+                foreach (Button button in new[] { previous, play, next })
+                {
+                    Rect bounds = button.TransformToAncestor(surface).TransformBounds(new Rect(new Point(), button.RenderSize));
+                    Check(bounds.Left >= 0 && bounds.Right <= surface.ActualWidth && bounds.Top >= 0 && bounds.Bottom <= surface.ActualHeight,
+                        button.Name + " stays inside the capsule: " + battery);
+                    Point center = button.TranslatePoint(new Point(button.ActualWidth / 2, button.ActualHeight / 2), window);
+                    var hit = window.InputHitTest(center) as DependencyObject;
+                    Check(hit is not null && (ReferenceEquals(hit, button) || Ancestors(hit).Contains(button)),
+                        button.Name + " owns its own hit target: " + battery);
+                }
             }
+            Inject(window, new MediaSnapshot("Night Drive", "Luma Sessions", true, true, true, true, true, Artwork()));
+            Named<TextBlock>(window, "CompactClock").Text = "21:48";
+            typeof(MainWindow).GetMethod("ApplyBattery", Private)!.Invoke(window, new object[] { new BatterySnapshot(true, 82, false, false) });
+            window.ApplyPerformance(new PerformanceSnapshot(18, 34, 42, 28862180229, 68719476736, 54, "Synthetic fixture", 58, "Synthetic fixture", 41, "Synthetic fixture"));
+            window.ApplyFps(new FpsSnapshot(144, "Synthetic fixture", "Synthetic fixture"));
+            await Settle(window);
+            window.Opacity = 1;
+            Save(window, Path.Combine(Output, "normal-controls.png"), 2);
+            window.Opacity = 0;
+            Check(DisplayService.GetWindowBounds(window).Right < 0, "Capture remains offscreen");
             window.SetComponents(settings with { Music = false });
             await Settle(window);
             Check(controls.Visibility == Visibility.Collapsed && controls.DesiredSize.Width == 0, "Disabling music removes collapsed controls and returns their width to the title");

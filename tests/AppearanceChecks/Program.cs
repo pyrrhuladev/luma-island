@@ -14,26 +14,32 @@ var store = new AppearanceStore(path);
 Check(store.Load() == AppearanceSettings.Default, "missing file returns defaults");
 Check(!File.Exists(path), "reading missing settings does not create a file");
 Check(AppearanceStore.Normalize(null) == AppearanceSettings.Default, "null settings normalize");
-Check(AppearanceSettings.Default == new AppearanceSettings(IslandAppearance.Glass, .40), "new installs default to the quiet HUD with 60% background transparency");
+Check(AppearanceSettings.Default == new AppearanceSettings(.40), "new installs default to the quiet HUD with 60% background transparency");
 Check(AppearanceStore.MinOpacity == .05 && AppearanceStore.MaxOpacity == 1, "supported background transparency range is zero through 95 percent");
-Check(!store.Load().Compact && !AppearanceSettings.Default.Compact, "missing/default settings leave compact mode disabled");
-Check(!new AppearanceSettings(IslandAppearance.Glass, .35).Compact, "legacy two-argument constructor leaves compact mode disabled");
 File.WriteAllText(path, "{\"mode\":\"Glass\",\"glassOpacity\":0.35}");
-Check(new AppearanceStore(path).Load() == new AppearanceSettings(IslandAppearance.Glass, .35, false),
-    "legacy JSON preserves mode/opacity and defaults compact to false");
-File.WriteAllText(path, "{\"mode\":\"Matte\",\"glassOpacity\":0.76,\"compact\":true}");
-Check(new AppearanceStore(path).Load() == new AppearanceSettings(IslandAppearance.Matte, .76, true),
-    "existing matte mode and saved compact density survive the new defaults");
-File.WriteAllText(path, "{\"mode\":\"Glass\",\"glassOpacity\":0.25,\"compact\":true}");
-Check(new AppearanceStore(path).Load() == new AppearanceSettings(IslandAppearance.Glass, .25, true),
-    "existing highest-transparency choice remains exactly as saved");
+Check(new AppearanceStore(path).Load() == new AppearanceSettings(.35), "legacy glass preferences retain their opacity");
+const string legacyMatte = """
+    {"mode":"Matte","compact":true,"glassOpacity":0.76,"clickThrough":true,"scale":1.25,
+     "layout":{"metricColumns":2,"detachedMusic":true},"alerts":{"enabled":true,"cpuThreshold":94}}
+    """;
+File.WriteAllText(path, legacyMatte);
+var restored = new AppearanceSettings(.76, ClickThrough: true, Scale: 1.25)
+{
+    Layout = HudLayoutSettings.Default with { MetricColumns = 2, DetachedMusic = true },
+    Alerts = AlertSettings.Default with { Enabled = true, CpuThreshold = 94 }
+};
+Check(store.Load() == restored, "legacy matte and density fields are skipped while all supported preferences load");
+Check(File.ReadAllText(path) == legacyMatte, "loading legacy preferences leaves the original file intact");
+File.WriteAllText(path, "{\"mode\":999,\"compact\":\"bad\",\"glassOpacity\":0.25}");
+Check(store.Load() == new AppearanceSettings(.25), "unsupported values in obsolete fields cannot discard saved opacity");
 
-var glass = new AppearanceSettings(IslandAppearance.Glass, .82);
+var glass = restored with { GlassOpacity = .82 };
 Check(store.Save(glass), "valid settings save");
-Check(new AppearanceStore(path).Load() == glass, "fresh store restores mode and opacity");
+Check(new AppearanceStore(path).Load() == glass, "fresh store restores all supported preferences");
 using (var json = JsonDocument.Parse(File.ReadAllText(path)))
 {
-    Check(json.RootElement.GetProperty("mode").GetString() == "Glass", "enum stored as string");
+    Check(!json.RootElement.TryGetProperty("mode", out _) && !json.RootElement.TryGetProperty("compact", out _),
+        "retired appearance fields are omitted on the next normal save");
     Check(json.RootElement.GetProperty("glassOpacity").GetDouble() == .82, "camelCase properties");
 }
 foreach (double opacity in new[] { 1.0, .50, .40, .35, .25, .15, .05 })
@@ -42,36 +48,15 @@ foreach (double opacity in new[] { 1.0, .50, .40, .35, .25, .15, .05 })
     Check(store.Save(airy), "high-transparency preset saves: " + opacity);
     Check(new AppearanceStore(path).Load() == airy, "high-transparency preset survives fresh store: " + opacity);
 }
-foreach (var mode in new[] { IslandAppearance.Matte, IslandAppearance.Glass })
-foreach (bool compact in new[] { true, false })
-{
-    var expected = new AppearanceSettings(mode, .35, compact);
-    Check(store.Save(expected), "compact/full mode saves independently of appearance: " + mode + "/" + compact);
-    Check(new AppearanceStore(path).Load() == expected, "compact/full mode roundtrips independently of appearance: " + mode + "/" + compact);
-    using var json = JsonDocument.Parse(File.ReadAllText(path));
-    Check(json.RootElement.GetProperty("compact").GetBoolean() == compact, "compact is stored as a boolean");
-}
-Check(AppearanceStore.Normalize(new AppearanceSettings(IslandAppearance.Glass, -1, true)) ==
-    new AppearanceSettings(IslandAppearance.Glass, AppearanceStore.MinOpacity, true), "lower opacity clamp preserves compact mode");
-Check(AppearanceStore.Normalize(new AppearanceSettings(IslandAppearance.Glass, 9, true)) ==
-    new AppearanceSettings(IslandAppearance.Glass, AppearanceStore.MaxOpacity, true), "upper opacity clamp preserves compact mode");
-Check(AppearanceStore.Normalize(new AppearanceSettings((IslandAppearance)999, .35, true)) ==
-    new AppearanceSettings(IslandAppearance.Matte, .35, true), "invalid appearance mode fallback preserves compact mode");
-foreach (double opacity in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
-{
-    var normalized = new AppearanceSettings(IslandAppearance.Glass, .40, true);
-    Check(AppearanceStore.Normalize(new AppearanceSettings(IslandAppearance.Glass, opacity, true)) == normalized,
-        "non-finite opacity normalization preserves compact mode");
-    Check(store.Save(new AppearanceSettings(IslandAppearance.Glass, opacity, true)) && new AppearanceStore(path).Load() == normalized,
-        "normalized compact settings survive persistence");
-}
+Check(AppearanceStore.Normalize(glass with { GlassOpacity = -1 }) == glass with { GlassOpacity = AppearanceStore.MinOpacity },
+    "lower opacity clamp preserves the other appearance preferences");
+Check(AppearanceStore.Normalize(glass with { GlassOpacity = 9 }) == glass with { GlassOpacity = AppearanceStore.MaxOpacity },
+    "upper opacity clamp preserves the other appearance preferences");
 
 foreach (var content in new[]
 {
     "{}", "null", "{oops", "[]",
-    "{\"mode\":\"Unknown\"}", "{\"mode\":999}",
-    "{\"glassOpacity\":\"NaN\"}", "{\"glassOpacity\":NaN}",
-    "{\"glassOpacity\":\"Infinity\"}", "{\"compact\":\"true\"}", "{\"compact\":1}", "{\"compact\":null}"
+    "{\"glassOpacity\":\"NaN\"}", "{\"glassOpacity\":NaN}", "{\"glassOpacity\":\"Infinity\"}"
 })
 {
     File.WriteAllText(path, content);
@@ -79,16 +64,16 @@ foreach (var content in new[]
 }
 
 File.WriteAllText(path, "{\"mode\":\"Glass\",\"glassOpacity\":0.01}");
-Check(store.Load() == new AppearanceSettings(IslandAppearance.Glass, AppearanceStore.MinOpacity), "load lower bound clamped");
+Check(store.Load() == new AppearanceSettings(AppearanceStore.MinOpacity), "load lower bound clamped");
 File.WriteAllText(path, "{\"mode\":\"Glass\",\"glassOpacity\":2}");
-Check(store.Load() == new AppearanceSettings(IslandAppearance.Glass, AppearanceStore.MaxOpacity), "load upper bound clamped");
+Check(store.Load() == new AppearanceSettings(AppearanceStore.MaxOpacity), "load upper bound clamped");
 File.WriteAllText(path, "{\"glassOpacity\":1e999}");
 Check(store.Load().GlassOpacity == AppearanceSettings.Default.GlassOpacity, "non-finite JSON number defaults");
 
-Check(AppearanceStore.Normalize(new AppearanceSettings((IslandAppearance)999, .82)) ==
-    new AppearanceSettings(IslandAppearance.Matte, .82), "invalid enum normalizes without discarding opacity");
 foreach (double opacity in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
 {
+    Check(AppearanceStore.Normalize(glass with { GlassOpacity = opacity }) == glass with { GlassOpacity = .40 },
+        "non-finite opacity normalization preserves the other appearance preferences");
     Check(store.Save(glass with { GlassOpacity = opacity }), "non-finite value can be saved safely");
     Check(new AppearanceStore(path).Load() == (glass with { GlassOpacity = .40 }), "non-finite opacity normalized before serialization");
 }
@@ -96,8 +81,6 @@ Check(store.Save(glass with { GlassOpacity = -1 }), "save lower bound");
 Check(store.Load().GlassOpacity == AppearanceStore.MinOpacity, "saved lower bound clamped");
 Check(store.Save(glass with { GlassOpacity = 9 }), "save upper bound");
 Check(store.Load().GlassOpacity == AppearanceStore.MaxOpacity, "saved upper bound clamped");
-Check(store.Save(glass with { Mode = (IslandAppearance)(-1) }), "save invalid enum");
-Check(store.Load() == (glass with { Mode = IslandAppearance.Matte }), "saved invalid enum becomes matte");
 
 Check(store.Save(glass), "prepare original file for locked write");
 string before = File.ReadAllText(path);

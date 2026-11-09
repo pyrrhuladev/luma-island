@@ -29,16 +29,16 @@ var appearance = new CountedAppearance(appearancePath);
 var components = new CountedComponents(componentPath);
 var placement = new CountedPlacement(placementPath);
 var profiles = new GameProfileStore(profilePath);
-var originalBase = new HudProfileSettings(new AppearanceSettings(IslandAppearance.Matte, .76, false, true, 1.1),
+var originalBase = new HudProfileSettings(new AppearanceSettings(.76, ClickThrough: true, Scale: 1.1),
     ComponentSettings.Default with { Battery = false, Cpu = true },
     new PlacementSettings(null, IslandPlacement.TopCenter));
 Check(appearance.Save(originalBase.Appearance) && components.Save(originalBase.Components) && placement.Save(originalBase.Placement), "Fixture base files saved");
 var a = new GameProfile(Guid.NewGuid().ToString("D"), "Game A", @"C:\Games\Alpha\alpha.exe",
-    new HudProfileSettings(new AppearanceSettings(IslandAppearance.Glass, .25, true, true, .8),
+    new HudProfileSettings(new AppearanceSettings(.25, ClickThrough: true, Scale: .8),
         ComponentSettings.Default with { Fps = true, Gpu = true, Date = false },
         new PlacementSettings(null, IslandPlacement.BottomLeft)));
 var b = new GameProfile(Guid.NewGuid().ToString("D"), "Game B", @"C:\Games\Beta\beta.exe",
-    new HudProfileSettings(new AppearanceSettings(IslandAppearance.Glass, .54, false, false, 1.4),
+    new HudProfileSettings(new AppearanceSettings(.54, Scale: 1.4),
         ComponentSettings.Default with { Music = false, Memory = true, Charts = true },
         new PlacementSettings(null, IslandPlacement.BottomRight)));
 Check(profiles.Save(new GameProfileSettings(true, new[] { a, b })), "Two isolated game bindings saved");
@@ -49,8 +49,8 @@ Check(appearance.Writes + components.Writes + placement.Writes == 0, "Constructi
 Check(controller.Settings.Profiles.All(profile => !profile.Settings.Appearance.ClickThrough), "Game snapshots never own the global input recovery mode");
 var baseHashes = BaseHashes();
 var selectedA = controller.Activate(a.Id);
-Check(selectedA.Appearance.Scale == .8 && selectedA.Appearance.Compact && selectedA.Appearance.ClickThrough,
-    "Game A loads its own scale/density while keeping the global input mode");
+Check(selectedA.Appearance.Scale == .8 && selectedA.Appearance.GlassOpacity == .25 && selectedA.Appearance.ClickThrough,
+    "Game A loads its own scale and transparency while keeping the global input mode");
 Check(controller.AppearanceStore.Load() == selectedA.Appearance && controller.ComponentStore.Load() == selectedA.Components &&
     controller.PlacementStore.Load() == selectedA.Placement, "All three routed loads agree on the active game snapshot");
 var bBefore = controller.Settings.Profiles.Single(profile => profile.Id == b.Id);
@@ -87,8 +87,8 @@ outer.Dispose(); outer.Dispose();
 Check(controller.PlacementStore.Save(aPlacement with { XFraction = .42 }), "Idempotent suppression disposal restores normal saving exactly once");
 Check(profiles.Load().Profiles.Single(profile => profile.Id == a.Id).Settings.Placement.XFraction == .42, "The first edit after suppression persists in its original game");
 var selectedB = controller.Activate(b.Id);
-Check(selectedB.Appearance.Scale == 1.4 && !selectedB.Appearance.Compact && selectedB.Appearance.ClickThrough,
-    "Switching to Game B selects its independent layout without restoring a game-owned input mode");
+Check(selectedB.Appearance.Scale == 1.4 && selectedB.Appearance.GlassOpacity == .54 && selectedB.Appearance.ClickThrough,
+    "Switching to Game B applies its own scale and transparency with the shared input mode");
 Check(controller.Activate(null) == originalBase && BaseHashes().SequenceEqual(baseHashes), "Returning from games restores the original base snapshot without rewriting it");
 controller.Activate(a.Id);
 string inputComponentsBefore = Hash(componentPath), inputPlacementBefore = Hash(placementPath);
@@ -118,7 +118,7 @@ Check(controller.AppearanceStore.Save(controller.CurrentSettings.Appearance with
     "The restored global input preference can still be changed normally inside a game");
 
 controller.Activate(null);
-var editedBase = new HudProfileSettings(new AppearanceSettings(IslandAppearance.Glass, .65, true, false, 1.2),
+var editedBase = new HudProfileSettings(new AppearanceSettings(.65, Scale: 1.2),
     originalBase.Components with { Gpu = true, Cpu = false },
     originalBase.Placement with { Placement = IslandPlacement.BottomLeft, Locked = true });
 string profilesBeforeBase = Hash(profilePath);

@@ -51,7 +51,7 @@ internal static class Program
         Check(normal.IsFrozen && normal.PixelWidth >= 300 && normal.PixelHeight > 100, "Actual production preview has frozen HUD-sized pixels");
         Check(VisiblePixels(normal) > 1000, "Never-shown production visual preview contains visible text and surface pixels");
         Check(Application.Current.Windows.Count == windowsBefore, "Preview releases its never-shown Window after rendering");
-        var customAppearance = AppearanceSettings.Default with { Compact = true, Scale = 1.5,
+        var customAppearance = AppearanceSettings.Default with { Scale = 1.5,
             Layout = new("music,metrics,header", "memory,gpu,cpu", 1, 1.3, 12),
             Alerts = AlertSettings.Default with { Enabled = true } };
         var custom = MainWindow.RenderHudPreview(customAppearance, components);
