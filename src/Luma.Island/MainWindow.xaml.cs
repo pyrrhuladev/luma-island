@@ -207,6 +207,21 @@ public partial class MainWindow : Window
         catch (Exception ex) { App.Log(ex); VolumeLabel.Text = "—"; }
     }
 
+    private void OnSurfaceMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (!Components.VolumeWheel || IsClickThrough || _closed || !IsVisible || !IsEnabled ||
+            e.Delta == 0 || IslandSurface.InputHitTest(e.GetPosition(IslandSurface)) is null) return;
+
+        // A relative adjustment needs the live level even if audio notifications are still queued.
+        _system.RefreshVolume();
+        if (!_system.IsAvailable) return;
+        _system.SetVolume(VolumeAfterWheel(_system.Volume, e.Delta));
+        e.Handled = true;
+    }
+
+    private static float VolumeAfterWheel(float volume, int delta)
+        => Math.Clamp(volume + .02f * delta / Mouse.MouseWheelDeltaForOneLine, 0f, 1f);
+
     private async Task RunMediaActionAsync(Func<Task> action)
     {
         if (_busy) return;

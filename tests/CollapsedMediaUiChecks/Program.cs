@@ -10,6 +10,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -172,12 +173,44 @@ internal static class Program
             Check(Named<FrameworkElement>(window, "CompactVolume").IsVisible && Named<Slider>(window, "VolumeControl").IsVisible &&
                   Named<Button>(window, "MuteButton").IsVisible,
                 "Volume and mute are available alongside the transport");
+            double heightWithVolume = window.CollapsedWindowHeight;
+            window.SetComponents(settings with { Volume = false, VolumeWheel = true });
+            await Settle(window);
+            Check(!Named<FrameworkElement>(window, "CompactVolume").IsVisible &&
+                  !Named<Slider>(window, "VolumeControl").IsVisible && !Named<Button>(window, "MuteButton").IsVisible &&
+                  window.CollapsedWindowHeight < heightWithVolume,
+                "Hiding the volume row removes both controls and reclaims its height");
+            Check(controls.IsVisible && play.IsVisible && window.Components.VolumeWheel,
+                "Music transport and wheel preference remain available without the volume row");
+
+            var wheel = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, 120)
+                { RoutedEvent = Mouse.PreviewMouseWheelEvent };
+            play.RaiseEvent(wheel);
+            Check(!wheel.Handled, "The wheel event is left unhandled with the isolated audio endpoint unavailable");
+
+            window.SetComponents(settings);
+            await Settle(window);
+            Check(Named<FrameworkElement>(window, "CompactVolume").IsVisible && !window.Components.VolumeWheel,
+                "The volume row can be restored with wheel control disabled");
+            CheckWheelStep();
             Check(media.Current == MediaSnapshot.Empty && typeof(MediaService).GetField("_initialization", Private)!.GetValue(media) is null,
                 "Synthetic UI updates never initialize or change the real media session");
         }
         finally { window.Opacity = 0; window.Close(); }
         Check(closed, "The offscreen window closed cleanly");
         Check(preferences.OrderBy(x => x.Key).SequenceEqual(RealPreferences().OrderBy(x => x.Key)), "Real user preferences are unchanged");
+    }
+
+    private static void CheckWheelStep()
+    {
+        var calculate = typeof(MainWindow).GetMethod("VolumeAfterWheel", BindingFlags.Static | BindingFlags.NonPublic)!;
+        float Adjust(float current, int delta) => (float)calculate.Invoke(null, new object[] { current, delta })!;
+        Check(Math.Abs(Adjust(.50f, 120) - .52f) < .0001f && Math.Abs(Adjust(.50f, -120) - .48f) < .0001f,
+            "One wheel notch increases or decreases volume by two percentage points");
+        Check(Math.Abs(Adjust(.50f, 60) - .51f) < .0001f && Math.Abs(Adjust(.50f, -240) - .46f) < .0001f,
+            "Fractional and multiple wheel notches scale the adjustment");
+        Check(Adjust(.99f, 120) == 1f && Adjust(.01f, -120) == 0f,
+            "Wheel volume is clamped to the endpoint range");
     }
 
     private static void CheckDragTargets(MainWindow window)

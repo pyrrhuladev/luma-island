@@ -117,7 +117,8 @@
     <Grid>
         <Border x:Name="IslandSurface" Width="376" Height="56" VerticalAlignment="Top"
                 Margin="12" Background="{DynamicResource SurfaceFill}" BorderBrush="{DynamicResource SurfaceStroke}" BorderThickness="1"
-                CornerRadius="16" ClipToBounds="True" PreviewMouseLeftButtonDown="OnSurfacePointerDown">
+                CornerRadius="16" ClipToBounds="True" PreviewMouseLeftButtonDown="OnSurfacePointerDown"
+                PreviewMouseWheel="OnSurfaceMouseWheel">
             <Border.ContextMenu>
                 <ContextMenu>
                     <Separator/>

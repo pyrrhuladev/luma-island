@@ -115,6 +115,7 @@ public partial class HudEditorWindow : Window
         LoadLayout(layout);
         MusicCheckBox.IsChecked = DraftComponents.Music;
         VolumeCheckBox.IsChecked = DraftComponents.Volume;
+        VolumeWheelCheckBox.IsChecked = DraftComponents.VolumeWheel;
         TimeCheckBox.IsChecked = DraftComponents.Time;
         DateCheckBox.IsChecked = DraftComponents.Date;
         BatteryCheckBox.IsChecked = DraftComponents.Battery;
@@ -201,7 +202,7 @@ public partial class HudEditorWindow : Window
         });
         DraftComponents = DraftComponents with
         {
-            Music = Checked(MusicCheckBox), Volume = Checked(VolumeCheckBox),
+            Music = Checked(MusicCheckBox), Volume = Checked(VolumeCheckBox), VolumeWheel = Checked(VolumeWheelCheckBox),
             Time = Checked(TimeCheckBox), Date = Checked(DateCheckBox), Battery = Checked(BatteryCheckBox),
             Cpu = Checked(CpuCheckBox), Gpu = Checked(GpuCheckBox), Memory = Checked(MemoryCheckBox),
             Fps = Checked(FpsCheckBox), Charts = Checked(ChartsCheckBox),
@@ -392,8 +393,8 @@ public partial class HudEditorWindow : Window
             "стекло матовое прозрачность размер шрифт компактная капсула плотность плотная раскладка", AppearanceTab);
         RegisterBuiltIn("layout", "Раскладка", "Отдельные островки, порядок блоков и число показателей в строке.",
             "порядок музыка заголовок cpu gpu ram строки колонки расположение островок островки раздельные разделить отдельно перетаскивать", LayoutTab);
-        RegisterBuiltIn("components", "Показатели", "Выберите, какие данные отображать в HUD.",
-            "музыка громкость время дата часы батарея fps фпс low кадр фреймтайм cpu gpu ram процессор видеокарта оперативка озу нагрузка температура память графики", ComponentsTab);
+        RegisterBuiltIn("components", "Показатели", "Выберите, что показывать в HUD, и настройте управление громкостью.",
+            "музыка громкость звук ползунок колёсиком прокрутка мышь время дата часы батарея fps фпс low кадр фреймтайм cpu gpu ram процессор видеокарта оперативка озу нагрузка температура память графики", ComponentsTab);
         RegisterBuiltIn("alerts", "Предупреждения", "Тихий индикатор температуры и серий просадок.",
             "порог температура перегрев просадки задержки кадры фреймтайм фриз статтер уведомления", AlertsTab);
         RegisterBuiltIn("placement", "Положение", "Монитор, точка привязки и защита от случайного перемещения.",

@@ -569,9 +569,12 @@
 <CheckBox x:Name="MemoryTemperatureCheckBox" Content="Температура RAM" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/></UniformGrid>
                         </StackPanel></Border>                        <Border Style="{StaticResource SectionCard}" Margin="0,0,0,14"><StackPanel>
                             <TextBlock Text="Музыка и звук" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                            <TextBlock Text="Название трека, управление плеером и громкость." Style="{StaticResource Caption}" Margin="0,0,0,9"/>
-                            <UniformGrid Columns="2"><CheckBox x:Name="MusicCheckBox" Content="Музыка" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
-<CheckBox x:Name="VolumeCheckBox" Content="Громкость" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/></UniformGrid>
+                            <TextBlock Text="Управление плеером и системной громкостью Windows." Style="{StaticResource Caption}" Margin="0,0,0,9"/>
+                            <CheckBox x:Name="MusicCheckBox" Content="Музыка" Checked="OnDraftChanged" Unchecked="OnDraftChanged"/>
+                            <CheckBox x:Name="VolumeCheckBox" Content="Ползунок громкости" Checked="OnDraftChanged" Unchecked="OnDraftChanged"
+                                      ToolTip="Показывает ползунок и кнопку отключения звука в HUD."/>
+                            <CheckBox x:Name="VolumeWheelCheckBox" Content="Громкость колёсиком" Checked="OnDraftChanged" Unchecked="OnDraftChanged"
+                                      ToolTip="Меняет громкость, когда курсор наведён на островок. Работает и со скрытым ползунком."/>
                         </StackPanel></Border>                        <Border Style="{StaticResource SectionCard}" Margin="0,0,0,14"><StackPanel>
                             <TextBlock Text="Время и питание" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,5"/>
                             <TextBlock Text="Батарея автоматически скрывается при работе от сети." Style="{StaticResource Caption}" Margin="0,0,0,9"/>

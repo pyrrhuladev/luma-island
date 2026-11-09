@@ -240,6 +240,18 @@ internal static class Program
               child.FindName("ExpandedView") is null && child.FindName("CompactExpandButton") is null,
             "Detached volume is available alongside compact transport in the single view");
 
+        double musicHeightWithVolume = child.CollapsedWindowHeight;
+        window.SetComponents(Full with { Volume = false, VolumeWheel = true }); await Settle();
+        Check(ReferenceEquals(child, window.MusicIsland) && child.IsVisible &&
+              Named<Grid>(child, "CompactMusicRow").IsVisible && !Named<FrameworkElement>(child, "CompactVolume").IsVisible &&
+              child.CollapsedWindowHeight < musicHeightWithVolume,
+            "Hiding the volume row shortens the existing music island and keeps its player visible");
+        Check(window.Components.VolumeWheel && child.Components.VolumeWheel,
+            "The independent wheel preference reaches both islands with the volume row hidden");
+        window.SetComponents(Full); await Settle();
+        Check(Named<FrameworkElement>(child, "CompactVolume").IsVisible && !child.Components.VolumeWheel,
+            "Restoring the detached volume row leaves wheel control independently disabled");
+
         window.InitializeInputRecovery(true, true);
         Check(window.SetClickThrough(true) && window.IsClickThrough && child.IsClickThrough &&
               (Style(window) & InputMask) == InputMask && (Style(child) & InputMask) == InputMask,
@@ -293,9 +305,9 @@ internal static class Program
         }
 
         window.SetHudLayout(window.Appearance.Layout with { DetachedMusic = true }); await Settle();
-        window.SetComponents(Full with { Music = false, Volume = false }); await Settle();
-        Check(window.MusicIsland?.IsVisible != true && window.Appearance.Layout.DetachedMusic,
-            "Disabling both media components removes the empty music presentation while retaining the optional mode");
+        window.SetComponents(Full with { Music = false, Volume = false, VolumeWheel = true }); await Settle();
+        Check(window.MusicIsland is null && window.Appearance.Layout.DetachedMusic && window.Components.VolumeWheel,
+            "Wheel control remains enabled without creating an empty detached music island");
         window.SetComponents(Full with { Music = false, Volume = true }); await Settle();
         var volumeOnly = RequireMusicIsland(window);
         Check(volumeOnly.IsVisible && !volumeOnly.Components.Music && volumeOnly.Components.Volume,

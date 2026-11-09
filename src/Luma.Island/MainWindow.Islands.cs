@@ -136,7 +136,8 @@ public partial class MainWindow
     };
 
     private ComponentSettings MusicIslandComponents() => new(
-        Music: Components.Music, Volume: Components.Volume, Time: false, Date: false, Battery: false);
+        Music: Components.Music, Volume: Components.Volume, Time: false, Date: false, Battery: false,
+        VolumeWheel: Components.VolumeWheel);
 
     private PlacementSettings MusicIslandPlacement()
     {

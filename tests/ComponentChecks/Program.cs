@@ -20,6 +20,7 @@ Check(!ComponentSettings.Default.Charts, "charts disabled in defaults and legacy
 Check(!store.Load().GpuTemperature, "missing settings leave GPU temperature disabled");
 Check(!store.Load().CpuTemperature && !store.Load().MemoryTemperature, "CPU and RAM temperatures are opt-in");
 Check(!store.Load().OnePercentLow && !store.Load().FrameTime, "1% Low and frame time are disabled in missing/legacy settings");
+Check(!store.Load().VolumeWheel, "Wheel volume is opt-in");
 Check(!new ComponentSettings(true, true, true, true, true, false, false, false, false, true).GpuTemperature,
     "legacy ten-argument constructor leaves GPU temperature disabled");
 
@@ -44,6 +45,11 @@ File.WriteAllText(path, "{\"music\":false,\"volume\":true,\"time\":false,\"date\
 Check(store.Load() == (mixed with { Charts = false, GpuTemperature = false }), "legacy JSON without charts/temperature retains settings and keeps new flags off");
 File.WriteAllText(path, "{\"music\":false,\"volume\":true,\"time\":false,\"date\":true,\"battery\":false,\"cpu\":true,\"gpu\":false,\"memory\":true,\"fps\":true,\"charts\":true}");
 Check(store.Load() == (mixed with { GpuTemperature = false }), "legacy JSON with charts leaves GPU temperature disabled");
+Check(store.Load().Volume && !store.Load().VolumeWheel, "Legacy JSON keeps the volume row without enabling wheel volume");
+var wheelOnly = allOff with { VolumeWheel = true };
+Check(store.Save(wheelOnly) && new ComponentStore(path).Load() == wheelOnly,
+    "Wheel volume persists independently of the volume row");
+Check(store.Save(allOff) && !new ComponentStore(path).Load().VolumeWheel, "Disabling wheel volume persists");
 foreach (bool enabled in new[] { true, false })
 {
     var temperatureOnly = allOff with { GpuTemperature = enabled };

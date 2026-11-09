@@ -178,14 +178,26 @@ internal static class Program
         var editor = Create(AppearanceSettings.Default, empty, "Общий HUD");
         try
         {
-            foreach (string name in new[] { "Music", "Volume", "Time", "Date", "Battery", "Cpu", "Gpu", "Memory", "Fps", "Charts",
+            var wheel = Named<CheckBox>(editor, "VolumeWheelCheckBox");
+            var slider = Named<CheckBox>(editor, "VolumeCheckBox");
+            Check(wheel.IsChecked == false && slider.IsChecked == false, "Opening loads both volume controls independently");
+            Check(editor.SearchSections("громкость колесиком").Any(section => section.Id == "components"),
+                "Wheel volume is discoverable through settings search");
+            wheel.IsChecked = true;
+            Check(editor.DraftComponents.VolumeWheel && !editor.DraftComponents.Volume,
+                "Turning on wheel volume leaves the slider hidden");
+            slider.IsChecked = true;
+            wheel.IsChecked = false;
+            Check(editor.DraftComponents.Volume && !editor.DraftComponents.VolumeWheel,
+                "Turning off wheel volume leaves the slider visible");
+            foreach (string name in new[] { "Music", "Volume", "VolumeWheel", "Time", "Date", "Battery", "Cpu", "Gpu", "Memory", "Fps", "Charts",
                 "GpuTemperature", "CpuTemperature", "MemoryTemperature", "Low", "FrameTime" })
                 Named<CheckBox>(editor, name + "CheckBox").IsChecked = true;
             Check(editor.CommitDraft(), "An initially empty HUD can enable all components together");
             Check(editor.DraftComponents == ComponentSettings.Default with { Cpu = true, Gpu = true, Memory = true, Fps = true,
-                Charts = true, GpuTemperature = true, CpuTemperature = true, MemoryTemperature = true, OnePercentLow = true, FrameTime = true },
-                "Every one of the fifteen component checkboxes maps to the corresponding stored field");
-            foreach (string name in new[] { "Music", "Volume", "Time", "Date", "Battery", "Cpu", "Gpu", "Memory", "Fps", "Charts",
+                Charts = true, GpuTemperature = true, CpuTemperature = true, MemoryTemperature = true, OnePercentLow = true, FrameTime = true,
+                VolumeWheel = true }, "All component checkboxes map to their corresponding stored fields");
+            foreach (string name in new[] { "Music", "Volume", "VolumeWheel", "Time", "Date", "Battery", "Cpu", "Gpu", "Memory", "Fps", "Charts",
                 "GpuTemperature", "CpuTemperature", "MemoryTemperature", "Low", "FrameTime" })
                 Named<CheckBox>(editor, name + "CheckBox").IsChecked = false;
             Check(editor.CommitDraft() && editor.DraftComponents == empty,

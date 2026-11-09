@@ -19,7 +19,8 @@ public sealed record ComponentSettings(
     bool CpuTemperature = false,
     bool MemoryTemperature = false,
     bool OnePercentLow = false,
-    bool FrameTime = false)
+    bool FrameTime = false,
+    bool VolumeWheel = false)
 {
     public static ComponentSettings Default { get; } = new();
 }
