@@ -18,13 +18,20 @@ public partial class MainWindow
     private string? _presentationRowsKey;
     private string[]? PresentationCapsuleItems { get; set; }
     private string[][]? PresentationRows { get; set; }
+    private bool _appliedInstanceMode;
+    private bool _previewInstanceMode;
+    private HudLayoutNode? _previewCapsuleTree;
+    private HudLayoutNode? PresentedCapsuleTree => _previewCapsuleTree ?? (_islandOwner ?? this).LayoutSettings.Capsules?.Islands
+        .FirstOrDefault(capsule => capsule.Id == (_capsuleId ?? HudCapsuleLayout.MainId))?.Root;
+    private bool PresentsComponentInstances => _previewInstanceMode || (_islandOwner ?? this).LayoutSettings.Capsules?.HasInstances == true;
 
     private ComponentSettings PresentedComponents => _presentedComponents ?? Components;
     private HudLayoutSettings PresentationLayout => _presentationLayout ?? LayoutSettings;
     private bool IsCapsuleLayoutActive => _capsuleId is not null || (_islandOwner is null && LayoutSettings.Capsules is not null);
     private bool CapsuleWindowsVisible => _capsuleWindows.Values.Any(window => window.IsVisible && window.HasCapsuleContent);
     private bool AnyCapsuleIsDragging => _capsuleWindows.Values.Any(window => window._placement?.IsDragging == true);
-    private bool HasCapsuleContent => HudHeaderContentHeight > 0 || HasHardwareMetrics || MusicInThisIsland ||
+    private bool HasCapsuleContent => IsCapsuleLayoutEditing && PresentedCapsuleTree is not null ||
+        HudHeaderContentHeight > 0 || HasHardwareMetrics || MusicInThisIsland ||
         VolumeInThisIsland || PresentedComponents.Date || PresentedComponents.FrameTime || EnabledChartCount > 0 || Appearance.Alerts.NeedsCpuTemperature ||
         Appearance.Alerts.NeedsGpuTemperature || Appearance.Alerts.NeedsMemoryTemperature || Appearance.Alerts.NeedsFrames;
 
@@ -52,6 +59,7 @@ public partial class MainWindow
 
     private void RefreshCapsuleProjection()
     {
+        _appliedInstanceMode = PresentsComponentInstances;
         if (_capsuleId is not null || _islandOwner is not null || LayoutSettings.Capsules is not { } layout)
         {
             _presentedComponents = null;
@@ -59,7 +67,7 @@ public partial class MainWindow
             SetPresentationOrder(_capsuleItems, _capsuleRows);
             return;
         }
-        var projection = ProjectCapsule(Appearance, Components, layout.Islands[0]);
+        var projection = ProjectCapsule(Appearance, Components, layout.Islands[0], layout.HasInstances);
         _presentedComponents = projection.Components;
         _presentationLayout = projection.Appearance.Layout;
         SetPresentationOrder(projection.Items, projection.Rows);
@@ -94,46 +102,47 @@ public partial class MainWindow
     };
 
     internal static (AppearanceSettings Appearance, ComponentSettings Components, string Items, string? Rows) ProjectCapsule(
-        AppearanceSettings appearance, ComponentSettings components, HudCapsule capsule)
+        AppearanceSettings appearance, ComponentSettings components, HudCapsule capsule, bool hasInstances = false)
     {
         string[] items = capsule.GetItems();
+        string[] kinds = hasInstances ? items.Select(HudCapsuleLayout.KindOf).ToArray() : items;
         bool primary = capsule.Id == HudCapsuleLayout.MainId;
-        bool cpu = items.Contains("cpu");
-        bool gpu = items.Contains("gpu");
-        bool memory = items.Contains("memory");
+        bool Has(string kind, bool enabled) => kinds.Contains(kind) && (hasInstances || enabled);
+        bool HasTemperature(string metric, bool enabled) => hasInstances ? kinds.Contains(metric + "-temp") : enabled && kinds.Contains(metric);
         var projected = components with
         {
-            Music = items.Contains("music") && components.Music,
-            Volume = items.Contains("volume") && components.Volume,
-            Time = items.Contains("time") && components.Time,
-            Date = items.Contains("date") && components.Date,
-            Battery = items.Contains("battery") && components.Battery,
-            Cpu = cpu && components.Cpu,
-            CpuTemperature = cpu && components.CpuTemperature,
-            Gpu = gpu && components.Gpu,
-            GpuTemperature = gpu && components.GpuTemperature,
-            Memory = memory && components.Memory,
-            MemoryTemperature = memory && components.MemoryTemperature,
-            Fps = items.Contains("fps") && components.Fps,
-            OnePercentLow = items.Contains("low") && components.OnePercentLow,
-            FrameTime = items.Contains("frame-time") && components.FrameTime,
-            CpuChart = items.Contains("cpu-chart") && components.ShowCpuChart,
-            GpuChart = items.Contains("gpu-chart") && components.ShowGpuChart,
-            MemoryChart = items.Contains("memory-chart") && components.ShowMemoryChart,
-            FpsChart = items.Contains("fps-chart") && components.ShowFpsChart
+            Music = Has("music", components.Music),
+            Volume = Has("volume", components.Volume),
+            Time = Has("time", components.Time),
+            Date = Has("date", components.Date),
+            Battery = Has("battery", components.Battery),
+            Cpu = Has("cpu", components.Cpu),
+            CpuTemperature = HasTemperature("cpu", components.CpuTemperature),
+            Gpu = Has("gpu", components.Gpu),
+            GpuTemperature = HasTemperature("gpu", components.GpuTemperature),
+            Memory = Has("memory", components.Memory),
+            MemoryTemperature = HasTemperature("memory", components.MemoryTemperature),
+            Fps = Has("fps", components.Fps),
+            OnePercentLow = Has("low", components.OnePercentLow),
+            FrameTime = Has("frame-time", components.FrameTime),
+            CpuChart = Has("cpu-chart", components.ShowCpuChart),
+            GpuChart = Has("gpu-chart", components.ShowGpuChart),
+            MemoryChart = Has("memory-chart", components.ShowMemoryChart),
+            FpsChart = Has("fps-chart", components.ShowFpsChart)
         };
         var layout = HudLayoutSettings.Normalize(appearance.Layout with
         {
             BlockOrder = string.Join(',', items.Select(HudCapsuleLayout.Group).Where(item => item is "header" or "metrics" or "music").Distinct()),
-            MetricOrder = string.Join(',', items.Where(HudCapsuleLayout.IsMetric)),
+            MetricOrder = string.Join(',', kinds.Where(kind => kind is "cpu" or "gpu" or "memory").Distinct()),
             DetachedMusic = false,
             MusicPosition = null,
             Capsules = null
         });
         string presentedItems = string.Join(',', items.Where(item => !HudCapsuleLayout.IsChart(item) ||
-            ChartEnabled(projected, item[..^"-chart".Length])));
+            ChartEnabled(projected, HudCapsuleLayout.KindOf(item)[..^"-chart".Length])));
+        string? rows = hasInstances ? string.Join(';', capsule.GetRows().Select(row => string.Join(',', row))) : capsule.Rows;
         return (appearance with { Layout = layout, Alerts = primary ? appearance.Alerts : AlertSettings.Default },
-            projected, presentedItems, capsule.Rows);
+            projected, presentedItems, rows);
     }
 
     private void SynchronizeCapsules(HudCapsuleLayout layout)
@@ -148,11 +157,12 @@ public partial class MainWindow
         foreach (var capsule in layout.Islands)
         {
             if (capsule.Id == HudCapsuleLayout.MainId) continue;
-            var (appearance, components, items, rows) = ProjectCapsule(Appearance with { ClickThrough = IsClickThrough }, Components, capsule);
+            var (appearance, components, items, rows) = ProjectCapsule(Appearance with { ClickThrough = IsClickThrough }, Components, capsule, layout.HasInstances);
             if (!(components.Music || components.Volume || components.Cpu || components.Gpu || components.Memory ||
                 components.CpuTemperature || components.GpuTemperature || components.MemoryTemperature ||
                 components.Fps || components.OnePercentLow || components.FrameTime || components.Time || components.Date ||
-                components.Battery && (BatteryAvailable || IsCapsuleLayoutEditing) || components.HasCharts)) continue;
+                components.Battery && (BatteryAvailable || IsCapsuleLayoutEditing) || components.HasCharts ||
+                IsCapsuleLayoutEditing && capsule.Root is not null)) continue;
 
             retained.Add(capsule.Id);
             if (!_capsuleWindows.TryGetValue(capsule.Id, out var child))
@@ -173,7 +183,8 @@ public partial class MainWindow
                 child.Closed += OnCapsuleClosed;
             }
             bool appearanceChanged = child.Appearance != appearance;
-            if (appearanceChanged || child.Components != components || child._capsuleItems != items || child._capsuleRows != rows || !child.IsLoaded)
+            if (appearanceChanged || child.Components != components || child._capsuleItems != items || child._capsuleRows != rows ||
+                child._appliedInstanceMode != layout.HasInstances || capsule.Root is not null || !child.IsLoaded)
             {
                 child.Appearance = appearance;
                 child.Components = components;

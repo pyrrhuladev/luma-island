@@ -1,0 +1,132 @@
+<Window x:Class="Luma.Island.LayoutEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Редактор HUD · Luma" Width="286" Height="680" MinWidth="250" MinHeight="360"
+        ShowInTaskbar="False" ShowActivated="False" Topmost="True" Background="#131B23"
+        Foreground="#EDF4F1" FontFamily="Segoe UI" FontSize="13" ResizeMode="CanResizeWithGrip"
+        UseLayoutRounding="True" SnapsToDevicePixels="True">
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="#22313A"/>
+            <Setter Property="Foreground" Value="#EDF4F1"/>
+            <Setter Property="BorderBrush" Value="#3D555C"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+                <Border x:Name="Surface" Background="{TemplateBinding Background}" CornerRadius="7"
+                        BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="#30474F"/></Trigger>
+                    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="#9DE6D1"/></Trigger>
+                    <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.4"/></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
+        <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style>
+        <Style x:Key="Caption" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#A9BCC3"/><Setter Property="Margin" Value="0,5,0,10"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="7"/><Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar">
+                <Track x:Name="PART_Track" Orientation="Vertical" IsDirectionReversed="True"
+                       Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}"
+                       Value="{TemplateBinding Value}" ViewportSize="{TemplateBinding ViewportSize}">
+                    <Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0" Focusable="False"/></Track.DecreaseRepeatButton>
+                    <Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Opacity="0" Focusable="False"/></Track.IncreaseRepeatButton>
+                    <Track.Thumb><Thumb MinHeight="22"><Thumb.Template><ControlTemplate TargetType="Thumb">
+                        <Border Background="#466168" CornerRadius="3" Margin="1,0"/>
+                    </ControlTemplate></Thumb.Template></Thumb></Track.Thumb>
+                </Track>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="#0E161E"/><Setter Property="Foreground" Value="#EDF4F1"/>
+            <Setter Property="CaretBrush" Value="#9DE6D1"/><Setter Property="BorderBrush" Value="#3D555C"/>
+            <Setter Property="Padding" Value="8,7"/>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Background" Value="#DCE9E7"/><Setter Property="Foreground" Value="#15232A"/>
+            <Setter Property="Padding" Value="7,5"/><Setter Property="Margin" Value="0,5,0,13"/>
+        </Style>
+        <Style TargetType="Slider"><Setter Property="Margin" Value="0,6,0,14"/></Style>
+        <Style TargetType="TabItem">
+            <Setter Property="Foreground" Value="#C4D2D4"/><Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem">
+                <Border x:Name="TabSurface" Background="#1C2831" CornerRadius="7,7,0,0" Margin="0,0,3,0"
+                        Padding="{TemplateBinding Padding}"><ContentPresenter ContentSource="Header"/></Border>
+                <ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True">
+                    <Setter TargetName="TabSurface" Property="Background" Value="#30484D"/>
+                    <Setter Property="Foreground" Value="#ACF0D9"/>
+                </Trigger></ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
+    </Window.Resources>
+    <Grid x:Name="CaptureSurface" Margin="14">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock x:Name="PanelHeading" Text="Редактор HUD" FontSize="20" FontWeight="SemiBold"/>
+            <TextBlock x:Name="PanelCaption" Text="Перетащите компонент на HUD или свободное место." Style="{StaticResource Caption}"/>
+        </StackPanel>
+        <Grid x:Name="PaletteArea" Grid.Row="1">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <TextBox x:Name="PaletteSearch" ToolTip="Поиск компонентов" AutomationProperties.Name="Поиск компонентов" Margin="0,0,0,12"/>
+            <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
+                <TabItem Header="Компоненты"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="ComponentCards" Margin="0,10,3,0"/>
+                </ScrollViewer></TabItem>
+                <TabItem Header="Контейнеры"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="ContainerCards" Margin="0,10,3,0"/>
+                </ScrollViewer></TabItem>
+            </TabControl>
+        </Grid>
+        <ScrollViewer x:Name="InspectorArea" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="0,0,4,0">
+                <TextBlock x:Name="SelectionPath" Text="Выберите компонент на HUD." Style="{StaticResource Caption}"/>
+                <TextBlock x:Name="SelectionTitle" FontSize="17" FontWeight="SemiBold"/>
+                <TextBlock x:Name="SelectionDescription" Style="{StaticResource Caption}"/>
+                <StackPanel x:Name="ContainerProperties" Visibility="Collapsed">
+                    <StackPanel x:Name="ColumnsField">
+                        <TextBlock x:Name="ColumnsLabel" Text="Колонки"/>
+                        <Slider x:Name="ColumnsSlider" Minimum="1" Maximum="8" TickFrequency="1" IsSnapToTickEnabled="True" AutomationProperties.Name="Колонки сетки"/>
+                    </StackPanel>
+                    <TextBlock x:Name="GapLabel" Text="Интервал"/>
+                    <Slider x:Name="GapSlider" Minimum="0" Maximum="32" TickFrequency="1" IsSnapToTickEnabled="True" AutomationProperties.Name="Интервал контейнера"/>
+                    <TextBlock x:Name="PaddingLabel" Text="Внутренний отступ"/>
+                    <Slider x:Name="PaddingSlider" Minimum="0" Maximum="32" TickFrequency="1" IsSnapToTickEnabled="True" AutomationProperties.Name="Внутренний отступ"/>
+                    <TextBlock Text="Выравнивание"/>
+                    <ComboBox x:Name="AlignmentChoice" AutomationProperties.Name="Выравнивание контейнера">
+                        <ComboBoxItem Content="По началу" Tag="start"/><ComboBoxItem Content="По центру" Tag="center"/>
+                        <ComboBoxItem Content="По концу" Tag="end"/><ComboBoxItem Content="Растянуть" Tag="stretch"/>
+                    </ComboBox>
+                    <StackPanel x:Name="SizingField">
+                        <TextBlock Text="Ширина"/>
+                        <ComboBox x:Name="SizingChoice" AutomationProperties.Name="Ширина контейнера">
+                            <ComboBoxItem Content="По содержимому" Tag="content"/><ComboBoxItem Content="Заполнить доступное место" Tag="stretch"/>
+                        </ComboBox>
+                    </StackPanel>
+                </StackPanel>
+                <StackPanel x:Name="SelectionActions" Orientation="Horizontal" Margin="0,12,0,6" Visibility="Collapsed">
+                    <Button x:Name="DuplicateButton" Content="Дублировать" ToolTip="Ctrl+D"/>
+                    <Button x:Name="RemoveButton" Content="Удалить" ToolTip="Delete"/>
+                </StackPanel>
+                <TextBlock Text="Контейнер переносится вместе с содержимым. Его границы видны при редактировании." Style="{StaticResource Caption}"/>
+            </StackPanel>
+        </ScrollViewer>
+        <StackPanel Grid.Row="2" Margin="0,12,0,0">
+            <TextBlock x:Name="EditorStatus" Foreground="#E7C18F" Margin="0,0,0,8"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <Button x:Name="UndoButton" Content="↶" Width="42" ToolTip="Отменить шаг · Ctrl+Z" AutomationProperties.Name="Отменить шаг"/>
+                <Button x:Name="RedoButton" Content="↷" Width="42" ToolTip="Повторить шаг · Ctrl+Y" AutomationProperties.Name="Повторить шаг"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="FinishButton" Content="Готово" Foreground="#AEF0D8" Width="105"/>
+                <Button x:Name="CancelButton" Content="Отмена" Width="105"/>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Window>

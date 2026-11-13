@@ -34,6 +34,16 @@ public sealed record ComponentSettings(
     [JsonIgnore] public bool ShowMemoryChart => MemoryChart ?? (Charts && Memory);
     [JsonIgnore] public bool ShowFpsChart => FpsChart ?? (Charts && Fps);
     [JsonIgnore] public bool HasCharts => ShowCpuChart || ShowGpuChart || ShowMemoryChart || ShowFpsChart;
+
+    internal bool HasWidget(string kind) => kind switch
+    {
+        "music" => Music, "volume" => Volume, "time" => Time, "date" => Date, "battery" => Battery,
+        "cpu" => Cpu, "gpu" => Gpu, "memory" => Memory, "fps" => Fps,
+        "cpu-temp" => CpuTemperature, "gpu-temp" => GpuTemperature, "memory-temp" => MemoryTemperature,
+        "cpu-chart" => ShowCpuChart, "gpu-chart" => ShowGpuChart, "memory-chart" => ShowMemoryChart,
+        "fps-chart" => ShowFpsChart, "low" => OnePercentLow, "frame-time" => FrameTime,
+        _ => false
+    };
 }
 
 /// <summary>Component choices only; reading settings does not start any system monitors.</summary>

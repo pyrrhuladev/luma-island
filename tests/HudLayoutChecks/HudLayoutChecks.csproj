@@ -8,5 +8,7 @@
   <ItemGroup>
     <Compile Include="../../src/Luma.Island/Services/HudLayoutSettings.cs" Link="HudLayoutSettings.cs" />
     <Compile Include="../../src/Luma.Island/Services/HudCapsuleLayout.cs" Link="HudCapsuleLayout.cs" />
+    <Compile Include="../../src/Luma.Island/Services/HudCapsuleLayout.Tree.cs" Link="HudCapsuleLayout.Tree.cs" />
+    <Compile Include="../../src/Luma.Island/Services/HudLayoutNode.cs" Link="HudLayoutNode.cs" />
   </ItemGroup>
 </Project>

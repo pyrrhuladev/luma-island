@@ -93,6 +93,20 @@ Check(File.ReadAllText(path) == before, "failed replacement preserves old file b
 Check(new AppearanceStore(path).Load() == glass, "old settings survive a failed save");
 Check(Directory.GetFiles(directory, "*.tmp").Length == 0, "temporary files cleaned after failure");
 
+var treePreferences = HudCapsuleLayout.FromLegacy(HudLayoutSettings.Default).ToTree(_ => false);
+string treeParent = treePreferences.Islands[0].Root!.Id;
+for (int depth = 1; depth < HudCapsuleLayout.MaxTreeDepth - 1; depth++)
+{
+    var container = HudLayoutNode.Create("column");
+    treePreferences = treePreferences.InsertNode(container, "main", treeParent, 0);
+    treeParent = container.Id;
+}
+treePreferences = treePreferences.AddNode("time", "main", treeParent, 0);
+var nestedAppearance = AppearanceSettings.Default with { Layout = HudLayoutSettings.Default with { Capsules = treePreferences } };
+var nestedStore = new AppearanceStore(Path.Combine(directory, "nested-tree.json"));
+Check(nestedStore.Save(nestedAppearance) && nestedStore.Load() == nestedAppearance,
+    "Every supported container nesting level saves and loads through the real appearance store");
+
 Console.WriteLine($"PASS: {checks} appearance checks. Evidence: {directory}");
 
 namespace Luma.Island

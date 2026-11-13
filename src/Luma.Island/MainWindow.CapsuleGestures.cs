@@ -18,13 +18,14 @@ public partial class MainWindow
 {
     private MainWindow? _capsuleGestureSource;
     private CapsuleGesture? _capsuleGesture;
-    private bool IsCapsuleGestureActive => (_islandOwner ?? this)._capsuleGestureSource is not null;
+    private bool IsCapsuleGestureActive => (_islandOwner ?? this)._capsuleGestureSource is not null || (_islandOwner ?? this)._treeGesture is not null;
 
     private bool TryHandleCapsulePointerDown(MouseButtonEventArgs e)
     {
         MainWindow owner = _islandOwner ?? this;
         if (!owner.IsCapsuleLayoutEditing || e.ChangedButton != MouseButton.Left) return false;
         if (e.ButtonState != MouseButtonState.Pressed || IsClickThrough || _closed) return true;
+        if (owner.CapsuleDraft.HasTree) return TryHandleTreePointerDown(e);
 
         // Keep the playback and volume controls clickable while the layout is editable.
         for (DependencyObject? node = e.OriginalSource as DependencyObject; node is not null && node != IslandSurface;
@@ -53,6 +54,7 @@ public partial class MainWindow
         string id = _capsuleId ?? HudCapsuleLayout.MainId;
         var capsule = draft.Islands.FirstOrDefault(candidate => candidate.Id == id);
         if (capsule is null) return null;
+        if (capsule.Root is { } root) return TreeNodeAt(root, origin);
         foreach (string item in capsule.GetItems())
             if (CapsuleWidgetBounds(item).Contains(origin)) return item;
         return null;
@@ -118,6 +120,13 @@ public partial class MainWindow
     private void CancelCapsuleGesture()
     {
         MainWindow owner = _islandOwner ?? this;
+        if (owner._treeGesture is not null)
+        {
+            // A reflow can close its now-empty source capsule. The stable editor
+            // owns tree capture, so disposing that child must not cancel the move.
+            if (_islandOwner is null) owner.CancelTreeGesture();
+            return;
+        }
         if (owner._capsuleGestureSource is not { } source) return;
         owner._capsuleGestureSource = null;
         var drag = source._capsuleGesture;
@@ -160,7 +169,7 @@ public partial class MainWindow
     private CapsuleDropTarget? CapsuleRowInsertion(HudCapsule capsule, string item, Point local)
     {
         string[][] rows = capsule.GetRows();
-        bool explicitRows = capsule.HasExplicitRows;
+        bool explicitRows = capsule.HasExplicitRows || (_islandOwner ?? this).CapsuleDraft.HasInstances;
         int nearest = -1;
         Rect nearestBounds = Rect.Empty;
         double nearestDistance = double.PositiveInfinity;
@@ -315,7 +324,7 @@ public partial class MainWindow
 
     private Window CreateCapsuleDragPreview(string item, Point screenPoint)
     {
-        string text = item switch
+        string text = HudCapsuleLayout.KindOf(item) switch
         {
             "cpu" => CompactCpu.Text, "gpu" => CompactGpu.Text, "memory" => CompactMemory.Text,
             "music" => string.IsNullOrWhiteSpace(CompactTitle.Text) ? "Музыка" : CompactTitle.Text,
@@ -324,8 +333,9 @@ public partial class MainWindow
             "frame-time" => "Время кадра · " + FrameTimeValue.Text,
             "volume" => "Громкость · " + VolumeLabel.Text, "date" => DateLabel.Text,
             "cpu-chart" => "График CPU", "gpu-chart" => "График GPU", "memory-chart" => "График RAM",
-            "fps-chart" => "График FPS", _ => item
+            "fps-chart" => "График FPS", "row" => "Строка", "column" => "Колонка", "grid" => "Сетка", _ => item
         };
+        if (PresentedWidget(item) is TextBlock tile && !string.IsNullOrWhiteSpace(tile.Text)) text = tile.Text;
         var preview = new Window
         {
             Owner = this, ShowActivated = false, ShowInTaskbar = false, Topmost = true,

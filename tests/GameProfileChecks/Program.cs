@@ -73,6 +73,20 @@ internal static class Program
             "Profile snapshots retain transparency and scale with the global click-through mode reserved");
         Check(loaded.Profiles[0].Settings.Components == snapshot.Components && loaded.Profiles[0].Settings.Placement == snapshot.Placement with { MonitorId = "Synthetic monitor" },
             "Every component and custom monitor-aware position survives recreation");
+        var tree = HudCapsuleLayout.FromLegacy(HudLayoutSettings.Default).ToTree(_ => false);
+        string treeParent = tree.Islands[0].Root!.Id;
+        for (int depth = 1; depth < HudCapsuleLayout.MaxTreeDepth - 1; depth++)
+        {
+            var container = HudLayoutNode.Create("grid");
+            tree = tree.InsertNode(container, "main", treeParent, 0);
+            treeParent = container.Id;
+        }
+        tree = tree.AddNode("time", "main", treeParent, 0);
+        var treeProfile = Alpha with { Settings = snapshot with { Appearance = snapshot.Appearance with
+            { Layout = HudLayoutSettings.Default with { Capsules = tree } } } };
+        var treeStore = new GameProfileStore(Path.Combine(directory, "tree-profiles.json"));
+        Check(treeStore.Save(new(true, new[] { treeProfile })) && treeStore.Load().Profiles.Single().Settings.Appearance.Layout.Capsules == tree,
+            "The deepest supported nested layout roundtrips through a game profile file");
         using (var json = JsonDocument.Parse(File.ReadAllText(path)))
         {
             JsonElement settings = json.RootElement.GetProperty("profiles")[0].GetProperty("settings");

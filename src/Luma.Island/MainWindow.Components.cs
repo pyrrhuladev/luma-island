@@ -19,8 +19,8 @@ public partial class MainWindow
         || Components.HasCharts;
     private bool HasHardwareMetrics => PresentedComponents.Cpu || PresentedComponents.Gpu || PresentedComponents.Memory
         || PresentedComponents.GpuTemperature || PresentedComponents.CpuTemperature || PresentedComponents.MemoryTemperature;
-    private double TemperatureRowHeight => (PresentedComponents.Gpu && PresentedComponents.GpuTemperature)
-        || (PresentedComponents.Cpu && PresentedComponents.CpuTemperature) || (PresentedComponents.Memory && PresentedComponents.MemoryTemperature) ? 16 : 0;
+    private double TemperatureRowHeight => !PresentsComponentInstances && ((PresentedComponents.Gpu && PresentedComponents.GpuTemperature)
+        || (PresentedComponents.Cpu && PresentedComponents.CpuTemperature) || (PresentedComponents.Memory && PresentedComponents.MemoryTemperature)) ? 16 : 0;
     private double HudHeaderContentHeight => (PresentedComponents.Fps || PresentedComponents.OnePercentLow ? 50
         : PresentedComponents.Time || _batteryVisible ? 24 : 0) * LayoutGrowth;
     private double HudMetricsContentHeight => HasHardwareMetrics ? CompactMetricGridHeight + 2 * LayoutSpacing : 0;
@@ -69,14 +69,16 @@ public partial class MainWindow
         UpdateClockAndBattery();
         ApplyComponentVisibility();
         OnMediaChanged(_media.Current);
-        if (!_componentStore.Save(settings)) System.Windows.MessageBox.Show(
+        if (!_componentStore.Save(Components)) System.Windows.MessageBox.Show(
             "Компоненты переключены, но сохранить выбор не удалось.", "Luma Island", MessageBoxButton.OK, MessageBoxImage.Warning);
-        ComponentsChanged?.Invoke(settings);
+        ComponentsChanged?.Invoke(Components);
     }
 
     private static Visibility Show(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
     private void ApplyComponentVisibility()
     {
+        if (LayoutSettings.Capsules is { HasInstances: true } instances)
+            Components = ResolveWidgetComponents(Components, instances);
         RefreshCapsuleProjection();
         CompactMusicRow.Visibility = Show(MusicInThisIsland);
         CompactArtworkFrame.Visibility = Show(MusicInThisIsland);
@@ -184,15 +186,26 @@ public partial class MainWindow
             ? $"Память: {_lastPerformance.UsedMemoryBytes / 1073741824d:0.0} / {_lastPerformance.TotalMemoryBytes / 1073741824d:0.0} ГБ" : string.Empty;
         if (PresentedComponents.CpuTemperature)
         {
-            cpuLabel += (PresentedComponents.Cpu ? "\n" : " ") + Degrees(_lastPerformance.CpuTemperatureCelsius);
-            cpuTip += (cpuTip.Length > 0 ? "\n" : "") + "Температура CPU Package / Tctl/Tdie.\n"
-                + SensorStatusText(_lastPerformance.CpuTemperatureStatus);
+            string degrees = Degrees(_lastPerformance.CpuTemperatureCelsius);
+            string tip = "Температура CPU Package / Tctl/Tdie.\n" + SensorStatusText(_lastPerformance.CpuTemperatureStatus);
+            if (PresentsComponentInstances) ShowStandaloneTemperature("cpu-temp", "CPU " + degrees, tip);
+            else
+            {
+                cpuLabel += (PresentedComponents.Cpu ? "\n" : " ") + degrees;
+                cpuTip += (cpuTip.Length > 0 ? "\n" : "") + tip;
+            }
         }
         if (PresentedComponents.MemoryTemperature)
         {
-            memoryLabel += (PresentedComponents.Memory ? "\n" : " ") + Degrees(_lastPerformance.MemoryTemperatureCelsius, memory: true);
-            memoryTip += (memoryTip.Length > 0 ? "\n" : "") + "Максимальная температура доступных модулей RAM (датчик DIMM / SPD hub).\n"
+            string degrees = Degrees(_lastPerformance.MemoryTemperatureCelsius, memory: true);
+            string tip = "Максимальная температура доступных модулей RAM (датчик DIMM / SPD hub).\n"
                 + SensorStatusText(_lastPerformance.MemoryTemperatureStatus);
+            if (PresentsComponentInstances) ShowStandaloneTemperature("memory-temp", "RAM " + degrees, tip);
+            else
+            {
+                memoryLabel += (PresentedComponents.Memory ? "\n" : " ") + degrees;
+                memoryTip += (memoryTip.Length > 0 ? "\n" : "") + tip;
+            }
         }
         CompactCpu.Text = cpuLabel;
         CompactMemory.Text = memoryLabel;
@@ -232,11 +245,15 @@ public partial class MainWindow
         {
             double? temperature = _lastPerformance.GpuTemperatureCelsius;
             string degrees = temperature is >= 0 and <= 150 && double.IsFinite(temperature.Value)
-                ? temperature.Value.ToString("0", _culture) : "—";
-            label += (PresentedComponents.Gpu ? "\n" : " ") + degrees + "\u00a0°C";
-            if (tip.Length > 0) tip += "\n";
-            tip += "Температура ядра GPU: максимум среди доступных видеокарт NVIDIA.\n"
+                ? temperature.Value.ToString("0", _culture) + "\u00a0°C" : "—\u00a0°C";
+            string temperatureTip = "Температура ядра GPU: максимум среди доступных видеокарт NVIDIA.\n"
                 + (_lastPerformance.GpuTemperatureStatus ?? "Данных пока нет.");
+            if (PresentsComponentInstances) ShowStandaloneTemperature("gpu-temp", "GPU " + degrees, temperatureTip);
+            else
+            {
+                label += (PresentedComponents.Gpu ? "\n" : " ") + degrees;
+                tip += (tip.Length > 0 ? "\n" : "") + temperatureTip;
+            }
         }
         CompactGpu.Text = label;
         CompactGpu.ToolTip = tip;

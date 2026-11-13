@@ -118,7 +118,7 @@
         <Border x:Name="IslandSurface" Width="376" Height="56" VerticalAlignment="Top"
                 Margin="12" Background="{DynamicResource SurfaceFill}" BorderBrush="{DynamicResource SurfaceStroke}" BorderThickness="1"
                 CornerRadius="16" ClipToBounds="True" PreviewMouseLeftButtonDown="OnSurfacePointerDown"
-                PreviewMouseWheel="OnSurfaceMouseWheel">
+                PreviewMouseWheel="OnSurfaceMouseWheel" ContextMenuOpening="OnCapsuleContextMenuOpening">
             <Border.ContextMenu>
                 <ContextMenu>
                     <Separator/>
@@ -328,12 +328,8 @@
                         Style="{StaticResource QuietButton}" Click="OnCapsuleEditDone"/>
                 <Button DockPanel.Dock="Right" Content="Отмена" Width="62" Height="25"
                         Style="{StaticResource QuietButton}" Click="OnCapsuleEditCancel"/>
-                <Button DockPanel.Dock="Right" Content="Сброс" Width="56" Height="25" ToolTip="Собрать блоки в одну капсулу в исходном порядке"
+                <Button DockPanel.Dock="Right" Content="Сброс" Width="56" Height="25" ToolTip="Собрать компоненты в одну капсулу"
                         AutomationProperties.Name="Сбросить раскладку" Style="{StaticResource QuietButton}" Click="OnCapsuleEditReset"/>
-                <Button x:Name="CapsuleAddWidgetButton" DockPanel.Dock="Left" Width="26" Height="25" Margin="0,0,5,0"
-                        Content="+" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Mint}"
-                        ToolTip="Добавить или убрать блок" AutomationProperties.Name="Блоки HUD"
-                        Style="{StaticResource QuietButton}" Click="OnCapsuleWidgetPickerClick"/>
                 <Border x:Name="CapsuleEditDropZone" Margin="0,2,5,2" CornerRadius="7">
                     <TextBlock x:Name="CapsuleEditHint" Text="Перетащите блок" Foreground="#D9E9E5" FontSize="11"
                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>

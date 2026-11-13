@@ -1,8 +1,8 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using Luma.Island.Services;
 
@@ -11,31 +11,10 @@ namespace Luma.Island;
 public partial class MainWindow
 {
     private CapsuleEdit? _capsuleEdit;
+    private ContextMenu? _capsuleRemovalMenu;
     private bool IsCapsuleLayoutEditing => (_islandOwner ?? this)._capsuleEdit is not null;
     private double CapsuleEditBarHeight => _islandOwner is null && IsCapsuleLayoutEditing ? 38 : 0;
     private HudCapsuleLayout CapsuleDraft => Appearance.Layout.Capsules!;
-
-    private static readonly Dictionary<string, (Func<ComponentSettings, bool> Read, Func<ComponentSettings, bool, ComponentSettings> Write)> CapsuleWidgets = new(StringComparer.Ordinal)
-    {
-        ["cpu"] = (s => s.Cpu, (s, v) => s with { Cpu = v, CpuChart = s.CpuChart ?? (s.Charts ? s.ShowCpuChart : null) }),
-        ["gpu"] = (s => s.Gpu, (s, v) => s with { Gpu = v, GpuChart = s.GpuChart ?? (s.Charts ? s.ShowGpuChart : null) }),
-        ["memory"] = (s => s.Memory, (s, v) => s with { Memory = v, MemoryChart = s.MemoryChart ?? (s.Charts ? s.ShowMemoryChart : null) }),
-        ["fps"] = (s => s.Fps, (s, v) => s with { Fps = v, FpsChart = s.FpsChart ?? (s.Charts ? s.ShowFpsChart : null) }),
-        ["cpu-chart"] = (s => s.ShowCpuChart, (s, v) => s with { CpuChart = v }),
-        ["gpu-chart"] = (s => s.ShowGpuChart, (s, v) => s with { GpuChart = v }),
-        ["memory-chart"] = (s => s.ShowMemoryChart, (s, v) => s with { MemoryChart = v }),
-        ["fps-chart"] = (s => s.ShowFpsChart, (s, v) => s with { FpsChart = v }),
-        ["cpu-temp"] = (s => s.CpuTemperature, (s, v) => s with { CpuTemperature = v }),
-        ["gpu-temp"] = (s => s.GpuTemperature, (s, v) => s with { GpuTemperature = v }),
-        ["memory-temp"] = (s => s.MemoryTemperature, (s, v) => s with { MemoryTemperature = v }),
-        ["low"] = (s => s.OnePercentLow, (s, v) => s with { OnePercentLow = v }),
-        ["frame-time"] = (s => s.FrameTime, (s, v) => s with { FrameTime = v }),
-        ["time"] = (s => s.Time, (s, v) => s with { Time = v }),
-        ["battery"] = (s => s.Battery, (s, v) => s with { Battery = v }),
-        ["date"] = (s => s.Date, (s, v) => s with { Date = v }),
-        ["music"] = (s => s.Music, (s, v) => s with { Music = v }),
-        ["volume"] = (s => s.Volume, (s, v) => s with { Volume = v })
-    };
 
     private sealed record CapsuleEdit(HudProfileSettings Original, HudCapsuleLayout InitialDraft, bool RestoreClickThrough)
     {
@@ -60,9 +39,11 @@ public partial class MainWindow
         if (!IsVisible) RestoreFromTray();
         IslandSurface.ContextMenu.IsOpen = false;
         var original = CaptureHudSettings();
-        var draft = original.Appearance.Layout.Capsules ?? HudCapsuleLayout.FromLegacy(original.Appearance.Layout);
+        var draft = (original.Appearance.Layout.Capsules ?? HudCapsuleLayout.FromLegacy(original.Appearance.Layout))
+            .ToTree(original.Components.HasWidget, LayoutSettings.MetricColumns, LayoutSpacing);
         _capsuleEdit = new(original, draft, restoreClickThrough);
         ApplyCapsuleDraft(draft);
+        OpenLayoutEditorPanels();
     }
 
     private void RefreshCapsuleEditChrome()
@@ -74,7 +55,7 @@ public partial class MainWindow
         CapsuleMoveGrip.Height = empty ? CapsuleEditBar.Height : 36;
         CapsuleMoveGrip.Margin = empty ? new Thickness(1, 0, 0, 6) : new Thickness(1, 22, 0, 0);
         CapsuleEditBar.Visibility = Show(CapsuleEditBarHeight > 0);
-        CapsuleEditHint.Text = empty ? "Вернуть блок сюда" : "Перетащите блок";
+        CapsuleEditHint.Text = empty ? "Перетащите сюда" : "Выберите компонент";
     }
 
     private void OnCapsuleGripDown(object sender, MouseButtonEventArgs e)
@@ -91,9 +72,11 @@ public partial class MainWindow
         if (owner.IsCapsuleLayoutEditing && _capsuleId is not null && before != _placement.Settings)
         {
             var after = _placement.Settings;
-            owner.ApplyCapsuleDraft(owner.CapsuleDraft.WithPosition(_capsuleId,
+            owner.ApplyEditorLayout(owner.CapsuleDraft.WithPosition(_capsuleId,
                 new HudIslandPosition(after.MonitorId, after.XFraction, after.YFraction)));
         }
+        else if (before != _placement.Settings)
+            owner.RecordCapsuleHistory(owner.CaptureHudSettings() with { Placement = before });
     }
 
     private void MoveCapsuleItem(string item, string? targetId, int insertIndex, Point screenPoint)
@@ -103,7 +86,7 @@ public partial class MainWindow
         if (targetId is not null)
         {
             var moved = previous.Move(item, targetId, insertIndex);
-            if (moved != previous) ApplyCapsuleDraft(moved);
+            if (moved != previous) ApplyEditorLayout(moved);
             return;
         }
         if (!double.IsFinite(screenPoint.X) || !double.IsFinite(screenPoint.Y)) return;
@@ -114,14 +97,15 @@ public partial class MainWindow
         var initial = PositionAt(display, screenPoint, new Size(1, 1), 0);
         var detached = previous.Move(item, null, 0, initial);
         if (detached == previous) return;
-        ApplyCapsuleDraft(detached);
+        PreviewCapsuleLayout(detached);
         var island = detached.Islands.First(capsule => capsule.GetItems().Contains(item));
         var window = LayoutWindows().FirstOrDefault(entry => entry.Id == island.Id).Window;
         if (window is null || !window.IsVisible) return;
         var bounds = DisplayService.GetWindowBounds(window);
         var position = PositionAt(display, screenPoint, bounds.Size, 8 * DisplayService.GetWindowScale(window));
         var anchored = detached.WithPosition(island.Id, position);
-        if (anchored != detached) ApplyCapsuleDraft(anchored);
+        if (anchored != detached) PreviewCapsuleLayout(anchored);
+        CommitCapsuleGesture(previous);
     }
 
     private static HudIslandPosition PositionAt(DisplayInfo display, Point point, Size size, double margin)
@@ -136,30 +120,89 @@ public partial class MainWindow
         if (_capsuleEdit is null) return;
         var previous = CapsuleDraft;
         var moved = previous.MoveToRow(item, targetId, rowIndex, columnIndex, newRow);
-        if (moved != previous) ApplyCapsuleDraft(moved);
+        if (moved != previous) ApplyEditorLayout(moved);
     }
 
     private void OnCapsuleEditorKeyDown(object sender, KeyEventArgs e)
     {
-        if (!IsCapsuleLayoutEditing || e.Key != Key.Escape) return;
+        if (!IsCapsuleLayoutEditing) return;
         var owner = _islandOwner ?? this;
-        if (owner.IsCapsuleWidgetPickerOpen) owner.CloseCapsuleWidgetPicker();
-        else if (owner.IsCapsuleGestureActive) owner.CancelCapsuleGesture();
+        if (owner.HandleLayoutEditorKey(e) || e.Key != Key.Escape) return;
+        if (owner.IsCapsuleGestureActive) owner.CancelCapsuleGesture();
         else owner.EndCapsuleEdit(save: false);
         e.Handled = true;
     }
 
-    private static bool CapsuleWidgetEnabled(ComponentSettings settings, string id) =>
-        CapsuleWidgets.TryGetValue(id, out var widget) && widget.Read(settings);
-
-    private void SetCapsuleWidget(string id, bool enabled)
+    private void AddCapsuleWidget(string kind)
     {
-        if (_capsuleEdit is null || !CapsuleWidgets.TryGetValue(id, out var widget) || widget.Read(Components) == enabled) return;
+        if (_capsuleEdit is null) return;
         CancelCapsuleGesture();
-        var previous = Components;
-        Components = widget.Write(previous, enabled);
-        ApplyCapsuleDraft(CapsuleDraft);
-        NotifyCapsuleComponentsChanged(previous);
+        var parent = SelectedCapsuleNodeId is { } id ? CapsuleDraft.GetNode(id) : null;
+        if (parent?.IsContainer != true) parent = parent is null ? null : CapsuleDraft.FindNodeParent(parent.Id);
+        var capsule = parent is null ? CapsuleDraft.Islands[0] : CapsuleDraft.FindNodeCapsule(parent.Id)!;
+        var updated = CapsuleDraft.AddNode(kind, capsule.Id, parent?.Id, int.MaxValue);
+        if (updated != CapsuleDraft) ApplyCapsuleInstanceChange(updated);
+        else _layoutPalette?.SetStatus("Достигнут предел компонентов или вложенности.");
+    }
+
+    private void RemoveCapsuleWidget(string id)
+    {
+        if (_capsuleEdit is null) return;
+        CancelCapsuleGesture();
+        var updated = CapsuleDraft.RemoveNode(id);
+        if (updated != CapsuleDraft) ApplyCapsuleInstanceChange(updated);
+    }
+
+    private void ApplyCapsuleInstanceChange(HudCapsuleLayout layout)
+    {
+        CancelCapsuleGesture();
+        ApplyEditorLayout(layout);
+    }
+
+    private static ComponentSettings ResolveWidgetComponents(ComponentSettings settings, HudCapsuleLayout layout)
+    {
+        var kinds = layout.Islands.SelectMany(capsule => capsule.GetItems()).Select(HudCapsuleLayout.KindOf).ToHashSet(StringComparer.Ordinal);
+        return settings with
+        {
+            Music = kinds.Contains("music"), Volume = kinds.Contains("volume"), Time = kinds.Contains("time"),
+            Date = kinds.Contains("date"), Battery = kinds.Contains("battery"), Cpu = kinds.Contains("cpu"),
+            Gpu = kinds.Contains("gpu"), Memory = kinds.Contains("memory"), Fps = kinds.Contains("fps"),
+            CpuTemperature = kinds.Contains("cpu-temp"), GpuTemperature = kinds.Contains("gpu-temp"),
+            MemoryTemperature = kinds.Contains("memory-temp"), OnePercentLow = kinds.Contains("low"),
+            FrameTime = kinds.Contains("frame-time"), CpuChart = kinds.Contains("cpu-chart"), GpuChart = kinds.Contains("gpu-chart"),
+            MemoryChart = kinds.Contains("memory-chart"), FpsChart = kinds.Contains("fps-chart")
+        };
+    }
+
+    private void OnCapsuleContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (!IsCapsuleLayoutEditing || e.CursorLeft < 0 || CapsuleItemAt(Mouse.GetPosition(IslandSurface)) is not { } id) return;
+        e.Handled = true;
+        var owner = _islandOwner ?? this;
+        owner.CloseCapsuleRemovalMenu();
+        var menu = new ContextMenu { PlacementTarget = IslandSurface, Placement = PlacementMode.MousePoint };
+        owner.SelectCapsuleNode(id);
+        bool isRoot = CapsuleDraft.FindNodeParent(id) is null;
+        var duplicate = new MenuItem { Header = "Дублировать", InputGestureText = "Ctrl+D", IsEnabled = !isRoot };
+        duplicate.Click += (_, _) => { owner.CloseCapsuleRemovalMenu(); owner.DuplicateCapsuleSelection(); };
+        var remove = new MenuItem { Header = "Удалить компонент", IsEnabled = !isRoot };
+        remove.Click += (_, _) =>
+        {
+            owner.CloseCapsuleRemovalMenu();
+            owner.RemoveCapsuleWidget(id);
+        };
+        menu.Items.Add(duplicate);
+        menu.Items.Add(remove);
+        QuickMenuTheme.Apply(menu);
+        owner._capsuleRemovalMenu = menu;
+        menu.IsOpen = true;
+    }
+
+    private void CloseCapsuleRemovalMenu()
+    {
+        if (_capsuleRemovalMenu is not { } menu) return;
+        _capsuleRemovalMenu = null;
+        menu.IsOpen = false;
     }
 
     private void NotifyCapsuleComponentsChanged(ComponentSettings previous)
@@ -178,13 +221,14 @@ public partial class MainWindow
     {
         if (_capsuleEdit is null) return;
         CancelCapsuleGesture();
-        ApplyCapsuleDraft(HudCapsuleLayout.FromLegacy(HudLayoutSettings.Default));
+        ApplyEditorLayout(CapsuleDraft.ResetInstances());
     }
 
     private void EndCapsuleEdit(bool save)
     {
         if (_capsuleEdit is not { } edit || _placement is null) return;
-        CloseCapsuleWidgetPicker();
+        CompleteCapsulePropertyEdit();
+        CloseCapsuleRemovalMenu();
         CancelCapsuleGesture();
         var draft = CaptureHudSettings();
         if (CapsuleDraft == edit.InitialDraft)
@@ -212,6 +256,7 @@ public partial class MainWindow
         var next = save ? draft : edit.Original;
         var previousComponents = Components;
         _capsuleEdit = null;
+        CloseLayoutEditorPanels();
         Appearance = next.Appearance;
         Components = next.Components;
         if (_placement.Settings != next.Placement) _placement.ApplySettings(next.Placement);

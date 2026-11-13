@@ -25,7 +25,7 @@ public class AppearanceStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
-        MaxDepth = 16
+        MaxDepth = 40
     };
 
     public AppearanceStore(string? path = null)

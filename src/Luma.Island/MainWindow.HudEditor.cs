@@ -176,10 +176,13 @@ public partial class MainWindow
         public BitmapSource Render(AppearanceSettings appearance, ComponentSettings components) =>
             Render(appearance, components, capsuleItems: null, capsuleRows: null);
 
-        private BitmapSource Render(AppearanceSettings appearance, ComponentSettings components, string? capsuleItems, string? capsuleRows)
+        private BitmapSource Render(AppearanceSettings appearance, ComponentSettings components, string? capsuleItems, string? capsuleRows,
+            bool hasInstances = false, HudLayoutNode? capsuleTree = null)
         {
             _window._capsuleItems = capsuleItems;
             _window._capsuleRows = capsuleRows;
+            _window._previewInstanceMode = hasInstances;
+            _window._previewCapsuleTree = capsuleTree;
             _window.Appearance = AppearanceStore.Normalize(appearance);
             _window.Components = components;
             _window.ApplyComponentVisibility();
@@ -213,9 +216,9 @@ public partial class MainWindow
                 if (_window.HasCapsuleContent) pictures.Add(bitmap);
                 foreach (var capsule in capsules.Islands.Skip(1))
                 {
-                    var projected = ProjectCapsule(_window.Appearance, components, capsule);
+                    var projected = ProjectCapsule(_window.Appearance, components, capsule, capsules.HasInstances);
                     _capsulePreview ??= new HudPreviewSession(capsuleId: "preview");
-                    BitmapSource picture = _capsulePreview.Render(projected.Appearance, projected.Components, projected.Items, projected.Rows);
+                    BitmapSource picture = _capsulePreview.Render(projected.Appearance, projected.Components, projected.Items, projected.Rows, capsules.HasInstances, capsule.Root);
                     if (_capsulePreview._window.HasCapsuleContent) pictures.Add(picture);
                 }
                 return pictures.Count == 0 ? bitmap : Compose(pictures);

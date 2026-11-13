@@ -226,4 +226,158 @@ var explicitRestored = HudLayoutSettings.Normalize(JsonSerializer.Deserialize<Hu
 Check(explicitRestored == explicitSettings && explicitRestored.GetHashCode() == explicitSettings.GetHashCode() &&
       explicitRestored.Capsules != dateBesideTime,
     "JSON round-trips explicit rows and compares both widget order and row boundaries by value");
+
+var legacyInstances = dateBesideTime.Move("cpu", null, 0, canonicalPosition);
+var migratedInstances = legacyInstances.ToInstances(kind => kind is "time" or "date" or "cpu" or "cpu-temp" or "gpu-temp");
+Check(migratedInstances.HasInstances && !legacyInstances.HasInstances && migratedInstances.Islands[0].GetRows().Length == 2 &&
+      migratedInstances.Islands[0].GetRows()[0].SequenceEqual(new[] { "time", "date" }) &&
+      migratedInstances.Islands[0].GetRows()[1].SequenceEqual(new[] { "gpu-temp" }) &&
+      migratedInstances.Islands[1].GetItems().SequenceEqual(new[] { "cpu", "cpu-temp" }) &&
+      migratedInstances.Islands[1].Position == canonicalPosition,
+    "Instance migration retains visible rows, floating anchors and temperatures including a temperature with no numeric tile");
+Check(ReferenceEquals(migratedInstances.ToInstances(_ => false), migratedInstances),
+    "An existing instance layout is independent of legacy visibility preferences");
+
+var clocks = initial.ToInstances(kind => kind == "time");
+for (int i = 1; i < 20; i++) clocks = clocks.AddInstance("time");
+string[] clockIds = clocks.Islands[0].GetItems();
+Check(clockIds.Length == 20 && clockIds.Distinct().Count() == clockIds.Length &&
+      clockIds.All(id => HudCapsuleLayout.IsMovable(id) && HudCapsuleLayout.KindOf(id) == "time") &&
+      clocks.Islands[0].GetRows().All(row => row.Length == 4) && clocks.Islands[0].Items.Length > 256,
+    "Twenty clocks have independent identities and fit ordinary rows beyond the legacy text limit");
+var savedClocks = JsonSerializer.Serialize(HudLayoutSettings.Default with { Capsules = clocks }, jsonOptions);
+var loadedClocks = HudLayoutSettings.Normalize(JsonSerializer.Deserialize<HudLayoutSettings>(savedClocks, jsonOptions)).Capsules!;
+Check(loadedClocks == clocks && loadedClocks.GetHashCode() == clocks.GetHashCode() &&
+      ReferenceEquals(HudCapsuleLayout.Normalize(loadedClocks), loadedClocks),
+    "All instances and their rows survive JSON and canonicalize without changing their identities");
+
+string movedClock = clockIds[7];
+var floatingClock = clocks.Move(movedClock, null, 0, canonicalPosition);
+string clockCapsule = floatingClock.Islands[1].Id;
+Check(floatingClock.HasInstances && floatingClock.Islands[1].GetItems().SequenceEqual(new[] { movedClock }) &&
+      !floatingClock.Islands[0].GetItems().Contains(movedClock) &&
+      floatingClock.WithPosition(clockCapsule, new("DISPLAY2", .1, .2)).HasInstances,
+    "Moving and positioning a duplicate retains its exact instance ID and schema");
+var regroupedClocks = floatingClock.MoveToRow(movedClock, HudCapsuleLayout.MainId, 0, 1, newRow: false);
+Check(regroupedClocks.HasInstances && regroupedClocks.Islands.Length == 1 &&
+      regroupedClocks.Islands[0].GetRows()[0][1] == movedClock,
+    "A row drop targets one duplicate and removes its empty capsule");
+var removedClock = floatingClock.RemoveInstance(movedClock);
+Check(removedClock.HasInstances && removedClock.Islands.Length == 1 &&
+      removedClock.Islands[0].GetItems().SequenceEqual(clockIds.Where(id => id != movedClock)),
+    "Deleting a duplicate removes just its instance and prunes an empty detached capsule");
+var resetClocks = floatingClock.ResetInstances();
+Check(resetClocks.HasInstances && resetClocks.Islands.Length == 1 &&
+      resetClocks.Islands[0].GetItems().Order().SequenceEqual(clockIds.Order()),
+    "Reset gathers all instances without discarding identities");
+
+var noWidgets = initial.ToInstances(_ => false);
+var blankWidgets = noWidgets.AddInstance("cpu-temp");
+blankWidgets = blankWidgets.RemoveInstance(blankWidgets.Islands[0].GetItems().Single());
+Check(noWidgets.HasInstances && noWidgets.Islands.Length == 1 && blankWidgets.HasInstances &&
+      HudCapsuleLayout.Normalize(blankWidgets).Islands[0].GetItems().Length == 0 &&
+      !blankWidgets.ResetInstances().Islands[0].GetItems().Any(),
+    "An intentional empty layout and resetting it never recreate old defaults");
+var invalidInstances = new HudCapsuleLayout([
+    new("main", "") { Rows = $"TIME,{movedClock.ToUpperInvariant()},time@invalid;CPU-TEMP" },
+    new("side", $"{movedClock},bogus@{Guid.NewGuid():N}")
+]) { HasInstances = true };
+var cleanInstances = HudCapsuleLayout.Normalize(invalidInstances);
+Check(cleanInstances.Islands.Length == 1 && cleanInstances.Islands[0].GetItems().SequenceEqual(new[] { "time", movedClock, "cpu-temp" }) &&
+      ReferenceEquals(cleanInstances.AddInstance(movedClock), cleanInstances) &&
+      ReferenceEquals(cleanInstances.AddInstance("time", "missing"), cleanInstances),
+    "Normalization and add reject malformed IDs, duplicate references and unknown destinations");
+
+var capacity = noWidgets;
+for (int i = 0; i < HudCapsuleLayout.MaxInstances; i++) capacity = capacity.AddInstance("memory-chart");
+Check(capacity.Islands[0].GetItems().Length == HudCapsuleLayout.MaxInstances &&
+      ReferenceEquals(HudCapsuleLayout.Normalize(capacity), capacity) && !capacity.CanAddInstance &&
+      ReferenceEquals(capacity.AddInstance("time"), capacity),
+    "The defensive limit keeps all accepted instances intact and rejects additions at capacity");
+var tree = initial.ToTree(kind => kind is "time" or "cpu" or "gpu" or "memory" or "cpu-temp" or
+    "cpu-chart" or "gpu-chart" or "memory-chart" or "fps-chart", metricColumns: 1, spacing: 8);
+var treeRoot = tree.Islands[0].Root!;
+Check(tree.HasTree && tree.HasInstances && treeRoot.Kind == "column" && treeRoot.Gap == 8 &&
+      tree.GetNode("cpu-temp") is not null && treeRoot.GetChildren().Where(node => node.Kind == "row").All(node => node.GetChildren().Length == 2),
+    "Tree migration materializes the saved one-column metrics and two-column charts with independent temperature");
+Check(ReferenceEquals(tree.ToTree(_ => true), tree) && ReferenceEquals(HudCapsuleLayout.Normalize(tree), tree),
+    "Tree migration and structural normalization retain identities and do not churn snapshots");
+var treeJson = JsonSerializer.Serialize(tree, jsonOptions);
+var treeReload = JsonSerializer.Deserialize<HudCapsuleLayout>(treeJson, jsonOptions)!;
+Check(HudCapsuleLayout.Normalize(treeReload) == tree && treeReload.GetHashCode() == tree.GetHashCode(),
+    "A nested layout roundtrips with structural equality and stable hashes");
+
+var groupNode = HudLayoutNode.Create("row") with { Gap = 9, Padding = 4, Alignment = "center", Sizing = "stretch" };
+var nested = tree.InsertNode(groupNode, "main", null, 1);
+var innerGrid = HudLayoutNode.Create("grid") with { Columns = 3 };
+nested = nested.InsertNode(innerGrid, "main", groupNode.Id, 0);
+var extraClock = HudLayoutNode.Create("time");
+nested = nested.InsertNode(extraClock, "main", innerGrid.Id, 0);
+Check(nested.GetNode(innerGrid.Id)?.Columns == 3 && nested.FindNodeParent(extraClock.Id)?.Id == innerGrid.Id &&
+      nested.FindNodeCapsule(extraClock.Id)?.Id == "main" && nested.Islands[0].GetItems().Contains(extraClock.Id),
+    "Containers nest without losing leaf providers and every parent and capsule can be resolved");
+Check(ReferenceEquals(nested.MoveNode(groupNode.Id, "main", innerGrid.Id, 0), nested) &&
+      ReferenceEquals(nested.MoveNode(innerGrid.Id, "main", innerGrid.Id, 0), nested),
+    "A container cannot move into itself or its descendants");
+var movedToGrid = nested.MoveNode("time", "main", innerGrid.Id, 0);
+Check(movedToGrid.GetNode(innerGrid.Id)!.GetChildren().Select(node => node.Id).SequenceEqual(new[] { "time", extraClock.Id }),
+    "Moving an existing leaf inserts at the supplied post-removal position");
+var reorderedGrid = movedToGrid.MoveNode("time", "main", innerGrid.Id, 1);
+Check(reorderedGrid.GetNode(innerGrid.Id)!.GetChildren().Select(node => node.Id).SequenceEqual(new[] { extraClock.Id, "time" }) &&
+      ReferenceEquals(reorderedGrid.MoveNode("time", "main", innerGrid.Id, 1), reorderedGrid),
+    "Reordering in the same parent uses post-removal indexes and an unchanged slot is a no-op");
+var copiedGroup = reorderedGrid.DuplicateNode(groupNode.Id);
+var copies = copiedGroup.Islands[0].Root!.GetChildren().Where(node => node.Kind == "row" && node.Padding == 4).ToArray();
+Check(copies.Length == 2 && copies[1].GetChildren().Single().Kind == "grid" &&
+      copies[0].DescendantsAndSelf().All(node => copies[1].DescendantsAndSelf().All(copy => copy.Id != node.Id)),
+    "Duplicating a group copies its settings and nested contents with independent IDs");
+var changedGroup = copiedGroup.UpdateNode(innerGrid.Id, node => node with
+    { Columns = 99, Gap = double.NaN, Padding = -10, Alignment = "unknown", Sizing = "unknown", Id = "bogus", Children = [] });
+var changedGrid = changedGroup.GetNode(innerGrid.Id)!;
+Check(changedGrid.Columns == 12 && changedGrid.Gap == 6 && changedGrid.Padding == 0 && changedGrid.Alignment == "start" &&
+      changedGrid.Sizing == "content" && changedGrid.GetChildren().Length == 2,
+    "Editing layout properties validates sizes while preserving node identity and children");
+var floatedGroup = changedGroup.MoveNode(groupNode.Id, null, null, 0, new(null, .7, .4));
+Check(floatedGroup.Islands.Length == 2 && floatedGroup.FindNodeCapsule(groupNode.Id)?.Id != "main" &&
+      floatedGroup.FindNodeCapsule(groupNode.Id)?.Position == new HudIslandPosition(null, .7, .4) &&
+      floatedGroup.GetNode(groupNode.Id) == changedGroup.GetNode(groupNode.Id),
+    "Detaching a nested group keeps its complete subtree and assigns one positioned capsule");
+var deletedGroup = floatedGroup.RemoveNode(groupNode.Id);
+Check(deletedGroup.Islands.Length == 1 && deletedGroup.GetNode(groupNode.Id) is null &&
+      deletedGroup.Islands[0].GetItems().Length == changedGroup.Islands[0].GetItems().Length - changedGroup.GetNode(groupNode.Id)!.LeafIds().Count(),
+    "Deleting a detached group removes its subtree and prunes only its now-empty capsule");
+var emptyGroup = nested.RemoveNode(extraClock.Id);
+Check(emptyGroup.GetNode(innerGrid.Id) is { IsContainer: true } empty && empty.GetChildren().Length == 0 &&
+      HudCapsuleLayout.Normalize(emptyGroup).GetNode(innerGrid.Id) is not null,
+    "An explicitly created empty container remains available as a drop target");
+var blankTree = noWidgets.ToTree(_ => false);
+Check(blankTree.HasTree && blankTree.Islands[0].Root is { IsContainer: true } && blankTree.Islands[0].GetItems().Length == 0 &&
+      ReferenceEquals(HudCapsuleLayout.Normalize(blankTree), blankTree),
+    "An intentionally empty tree root is stable and does not recreate widgets");
+var gatheredTree = floatedGroup.ResetInstances();
+Check(gatheredTree.HasTree && gatheredTree.Islands.Length == 1 &&
+      gatheredTree.Islands[0].GetItems().Order().SequenceEqual(floatedGroup.Islands.SelectMany(capsule => capsule.GetItems()).Order()) &&
+      gatheredTree.GetNode(innerGrid.Id)?.Columns == 12,
+    "Gathering a tree preserves all leaf identities and nested group settings");
+
+var boundedTree = blankTree;
+var boundedParent = boundedTree.Islands[0].Root!.Id;
+for (int depth = 1; depth < HudCapsuleLayout.MaxTreeDepth; depth++)
+{
+    var level = HudLayoutNode.Create("column");
+    boundedTree = boundedTree.InsertNode(level, "main", boundedParent, 0);
+    boundedParent = level.Id;
+}
+Check(boundedTree.GetNode(boundedParent) is not null &&
+      ReferenceEquals(boundedTree.AddNode("time", "main", boundedParent, 0), boundedTree),
+    "The nesting limit rejects additions atomically without dropping existing groups");
+var sixtyFourTree = blankTree;
+for (int index = 0; index < HudCapsuleLayout.MaxInstances; index++) sixtyFourTree = sixtyFourTree.AddNode("time", "main", null, int.MaxValue);
+Check(sixtyFourTree.Islands[0].GetItems().Length == HudCapsuleLayout.MaxInstances &&
+      ReferenceEquals(sixtyFourTree.AddNode("time", "main", null, 0), sixtyFourTree),
+    "The tree accepts all 64 component instances and rejects a further leaf without mutation");
+Check(ReferenceEquals(nested.InsertNode(extraClock, "main", null, 0), nested) &&
+      ReferenceEquals(nested.AddNode("alien", "main", null, 0), nested) &&
+      ReferenceEquals(nested.AddNode("time", "main", extraClock.Id, 0), nested),
+    "Duplicate references, unknown component kinds and insertion into a leaf are rejected");
 Console.WriteLine($"PASS: {count} HUD layout settings checks.");

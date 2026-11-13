@@ -47,6 +47,7 @@ internal static partial class Program
                 await RunWidgetPickerUiChecks();
                 await RunWidgetDraftChecks();
                 await RunCapsuleProfileChecks();
+                await RunTreeGestureChecks();
                 Check(preferences.OrderBy(p => p.Key).SequenceEqual(RealPreferences().OrderBy(p => p.Key)),
                     "All actual user preference files remain byte-for-byte unchanged");
             }
@@ -478,9 +479,9 @@ internal static partial class Program
         Check(window.IsHudDragging && !window.IsClickThrough && (Style(window) & InputMask) == 0 &&
               Named<Border>(window, "CapsuleEditBar").IsVisible && Named<Border>(window, "CapsuleMoveGrip").IsVisible,
             "The edit command temporarily restores interaction and displays the draft bar and outside handle");
-        Check(window.Appearance.Layout.Capsules == HudCapsuleLayout.FromLegacy(original.Appearance.Layout) &&
+        Check(window.Appearance.Layout.Capsules is { HasTree: true } migrated && migrated.Islands[0].GetItems().Contains("cpu-temp") &&
               fixture.BaseHashes().SequenceEqual(originalBytes),
-            "Opening live editing creates a compatible draft and leaves the preferences untouched");
+            "Opening live editing converts visible components into a nested draft without writing preferences");
         CheckCapsuleGestureGeometry(window);
 
         Call(window, "MoveCapsuleItem", "cpu", null, 0, drop); await Settle();
@@ -490,7 +491,8 @@ internal static partial class Program
               Named<Border>(cpuWindow, "CapsuleMoveGrip").IsVisible,
             "An outside drop opens a smaller owned capsule on the drop monitor with its own grip");
         Check(Named<TextBlock>(cpuWindow, "CompactCpu").IsVisible && !Named<TextBlock>(window, "CompactCpu").IsVisible &&
-              !Named<TextBlock>(cpuWindow, "CompactGpu").IsVisible && window.Components == configured,
+              !Named<TextBlock>(cpuWindow, "CompactGpu").IsVisible && window.Components.Cpu == configured.Cpu &&
+              window.Components.Gpu == configured.Gpu && window.Components.HasCharts == configured.HasCharts,
             "The CPU presentation has exactly one visible home and keeps the global collector configuration");
         Check(Named<Border>(window, "CpuChartCard").IsVisible && !Named<Border>(cpuWindow, "CpuChartCard").IsVisible,
             "Detaching the numeric CPU value leaves the independently movable chart where it was");
@@ -506,11 +508,11 @@ internal static partial class Program
               Named<TextBlock>(cpuWindow, "CompactGpu").IsVisible &&
               !Named<TextBlock>(window, "CompactGpu").IsVisible && Named<TextBlock>(window, "CompactMemory").IsVisible,
             "Merging a second metric reuses the destination window and keeps unassigned RAM in the root");
-        Check(Grid.GetRow(Named<Grid>(window, "CompactMusicRow")) < Grid.GetRow(Named<UniformGrid>(window, "CompactPerformance")),
+        Check(((Rect)Call(window, "CapsuleNodeBounds", "music")!).Bottom <= ((Rect)Call(window, "CapsuleNodeBounds", "memory")!).Top + 1,
             "Moving music above the hardware group changes the actual rendered order");
         window.ApplyPerformanceDisplay(new(43, 76, 48, 16UL << 30, 32UL << 30, 68, "Fixture", 62, "Fixture", 51, "Fixture"));
         Check(Named<TextBlock>(cpuWindow, "CompactCpu").Text.StartsWith("CPU 43%", StringComparison.Ordinal) &&
-              Named<TextBlock>(cpuWindow, "CompactCpu").Text.Contains("62", StringComparison.Ordinal) &&
+              Call(window, "PresentedWidget", "cpu-temp") is TextBlock cpuTemperature && cpuTemperature.Text.Contains("62", StringComparison.Ordinal) &&
               Named<TextBlock>(cpuWindow, "CompactGpu").Text.StartsWith("GPU 76%", StringComparison.Ordinal) &&
               Named<TextBlock>(window, "CompactMemory").Text.StartsWith("RAM 48%", StringComparison.Ordinal),
             "One incoming performance snapshot updates every visible metric and its associated temperature");
@@ -585,12 +587,13 @@ internal static partial class Program
 
         Call(window, "BeginCapsuleEdit");
         Call(window, "MoveCapsuleItem", "memory", "music", 0, new Point()); await Settle();
-        Call(window, "SetCapsuleWidget", "fps-chart", true);
-        Call(window, "SetCapsuleWidget", "time", false);
+        Call(window, "AddCapsuleWidget", "fps-chart");
+        Call(window, "RemoveCapsuleWidget", "time");
         var layout = window.Appearance.Layout.Capsules!;
-        Check(layout.Islands.Single(capsule => capsule.Id == "music") == new HudCapsule("music", "memory,music,volume", musicAnchor) &&
+        var editedIsland = layout.Islands.Single(capsule => capsule.Id == "music");
+        Check(layout.HasTree && editedIsland.GetItems().SequenceEqual(new[] { "memory", "music", "volume" }) && editedIsland.Position == musicAnchor &&
               !window.ActivateGameProfile(second) && window.ActiveGameProfileId == first,
-            "Moving RAM into the legacy music island keeps its anchor and defers game switching while editing");
+            "Migrating the music island preserves separate RAM identity, its anchor and profile lock while editing");
         Check(fixture.BaseHashes().SequenceEqual(ordinaryBytes) && Hash(Path.Combine(fixture.Root, "profiles.json")) == profileHash,
             "A profile draft writes neither the ordinary stores nor profiles.json");
         Call(window, "EndCapsuleEdit", true); await Settle();
@@ -671,14 +674,16 @@ internal static partial class Program
         Call(window, "EndCapsuleEdit", true); await Settle();
         Check(fixture.Appearance.Load().Layout.Capsules == draft && CapsuleWindows(window).Length >= 8,
             "Done persists separate non-hardware tile and chart assignments");
+        var draftComponents = window.Components;
 
         Call(window, "BeginCapsuleEdit");
         Call(window, "ResetCapsuleDraft"); await Settle();
-        Check(CapsuleWindows(window).Length == 1 && window.Appearance.Layout.Capsules == HudCapsuleLayout.FromLegacy(HudLayoutSettings.Default),
-            "Reset in the live editor reunites all tiles in the default arrangement");
+        Check(CapsuleWindows(window).Length == 1 && window.Appearance.Layout.Capsules is { HasTree: true } reset &&
+              reset.Islands[0].GetItems().OrderBy(id => id).SequenceEqual(draft.Islands.SelectMany(capsule => capsule.GetItems()).OrderBy(id => id)),
+            "Reset reunites every existing component while retaining its identity");
         Check(fixture.Appearance.Load().Layout.Capsules == draft, "Reset remains a reversible draft until Done");
         Call(window, "EndCapsuleEdit", false); await Settle();
-        Check(window.Appearance.Layout.Capsules == draft && window.CaptureHudSettings().Components == original.Components,
+        Check(window.Appearance.Layout.Capsules == draft && window.CaptureHudSettings().Components == draftComponents,
             "Cancel restores all prior capsule assignments without changing enabled components");
 
         Call(window, "BeginCapsuleEdit");
@@ -687,10 +692,8 @@ internal static partial class Program
         await Settle();
         var surface = Named<Border>(window, "IslandSurface");
         var editBar = Named<Border>(window, "CapsuleEditBar");
-        var returnZone = Named<FrameworkElement>(window, "CapsuleEditDropZone");
-        var hint = Named<TextBlock>(window, "CapsuleEditHint");
-        Check(!surface.IsVisible && editBar.IsVisible && returnZone.IsVisible && hint.Text == "Вернуть блок сюда",
-            "Moving the last tile out hides the empty surface immediately and leaves the editor controls and return hint visible");
+        Check(surface.IsVisible && editBar.IsVisible && !window.Appearance.Layout.Capsules!.Islands[0].GetItems().Any(),
+            "Empty containers remain visible and editable after the last component leaves the main capsule");
 
         Call(window, "EndCapsuleEdit", true); await Settle();
         var emptyMainLayout = window.Appearance.Layout.Capsules!;
@@ -700,24 +703,14 @@ internal static partial class Program
             "An empty main capsule disappears while its remaining windows keep the HUD visible");
 
         Call(window, "BeginCapsuleEdit"); await Settle();
-        Check(!surface.IsVisible && editBar.IsVisible && returnZone.IsVisible && hint.Text == "Вернуть блок сюда",
-            "Reopening the editor keeps the saved empty surface hidden and exposes its compact return zone");
+        Check(surface.IsVisible && editBar.IsVisible &&
+              !((Rect)Call(window, "CapsuleNodeBounds", emptyMain.Root!.Id)!).IsEmpty,
+            "Reopening the editor exposes the empty root as a container drop area");
         var grip = Named<Border>(window, "CapsuleMoveGrip");
-        Point gripCenter = grip.TranslatePoint(new Point(grip.ActualWidth / 2, grip.ActualHeight / 2), editBar);
-        Check(grip.IsVisible && gripCenter.Y >= 0 && gripCenter.Y <= editBar.ActualHeight,
-            "The move grip stays with the editor bar while the main surface is hidden");
-
-        Point formerSurfacePoint = surface.PointToScreen(new Point(surface.ActualWidth / 2, 4));
-        Point hintCenter = hint.PointToScreen(new Point(hint.ActualWidth / 2, hint.ActualHeight / 2));
-        Check(Call(window, "CapsuleDropTargetAt", emptyMain, "time", formerSurfacePoint) is null,
-            "The hidden main surface no longer intercepts drops in its former bounds");
-        object? returnTarget = Call(window, "CapsuleDropTargetAt", emptyMain, "time", hintCenter);
-        var targetType = returnTarget?.GetType();
-        Check(ReferenceEquals(targetType?.GetProperty("Surface")?.GetValue(returnTarget), returnZone) &&
-              Equals(targetType?.GetProperty("InsertIndex")?.GetValue(returnTarget), 0),
-            "The arranged return hint targets the empty main capsule at insertion index zero");
-        var targetId = (string)targetType!.GetProperty("Id")!.GetValue(returnTarget)!;
-        Call(window, "MoveCapsuleItem", "time", targetId, 0, hintCenter); await Settle();
+        Check(grip.IsVisible, "The empty main capsule retains its external move grip during editing");
+        var rootBounds = (Rect)Call(window, "CapsuleNodeBounds", emptyMain.Root!.Id)!;
+        Point rootCenter = surface.PointToScreen(new Point(rootBounds.Left + rootBounds.Width / 2, rootBounds.Top + rootBounds.Height / 2));
+        Call(window, "MoveCapsuleItem", "time", HudCapsuleLayout.MainId, 0, rootCenter); await Settle();
         Check(surface.IsVisible && Named<TextBlock>(window, "CompactClock").IsVisible &&
               CapsuleWindows(window).All(capsule => capsule.Id != timeId),
             "Returning the clock restores the main surface and closes its previous window");

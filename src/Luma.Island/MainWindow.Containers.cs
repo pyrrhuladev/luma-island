@@ -16,15 +16,19 @@ public partial class MainWindow
     private Size? _containerContentSize;
 
     private FrameworkElement? CapsuleContainerCell(string item) => _containerCells.GetValueOrDefault(item);
+    private FrameworkElement? PrimaryContainerCell(string kind) => CapsuleContainerCell(_primaryInstanceIds.GetValueOrDefault(kind, kind));
 
     private bool ApplyContainerRows()
     {
+        if (PresentedCapsuleTree is { } tree) return ApplyTreeContainers(tree);
+        RestoreTreeContainers();
         if (PresentationRows is not { } rows)
         {
             RestoreClassicContainers();
             return false;
         }
 
+        PrepareInstanceWidgets(rows);
         string[][] visibleRows = rows
             .Select(row => row.Where(item => PresentedWidget(item)?.Visibility == Visibility.Visible).ToArray())
             .Where(row => row.Length > 0)
@@ -50,7 +54,7 @@ public partial class MainWindow
     private IEnumerable<string[]> WrapContainerRow(string[] row)
     {
         if (row.All(HudCapsuleLayout.IsChart)) return row.Chunk(2);
-        if (row.All(HudCapsuleLayout.IsMetric)) return row.Chunk(LayoutMetricColumns);
+        if (row.All(HudCapsuleLayout.IsMetric)) return row.Chunk(PresentsComponentInstances ? LayoutSettings.MetricColumns : LayoutMetricColumns);
         return [row];
     }
 
@@ -66,9 +70,12 @@ public partial class MainWindow
             {
                 FrameworkElement widget = PresentedWidget(item)!;
                 var parent = widget.Parent as Panel;
-                _classicWidgetParents.TryAdd(widget, parent);
-                parent?.Children.Remove(widget);
-                var cell = new Border { Child = widget, UseLayoutRounding = item is not ("fps" or "low") };
+                if (parent is not null)
+                {
+                    _classicWidgetParents.TryAdd(widget, parent);
+                    parent.Children.Remove(widget);
+                }
+                var cell = new Border { Child = widget, UseLayoutRounding = HudCapsuleLayout.KindOf(item) is not ("fps" or "low") };
                 _containerCells.Add(item, cell);
                 panel.Children.Add(cell);
             }
@@ -107,16 +114,16 @@ public partial class MainWindow
     }
 
     private static bool IsFlexibleContainerTile(string item) => HudCapsuleLayout.IsChart(item) ||
-        item is "music" or "volume" or "frame-time";
+        HudCapsuleLayout.KindOf(item) is "music" or "volume" or "frame-time";
 
-    private double ContainerTileWidth(string item) => LayoutGrowth * (item switch
+    private double ContainerTileWidth(string item) => LayoutGrowth * (HudCapsuleLayout.KindOf(item) switch
     {
         "time" => 52, "battery" => 62, "low" => 72, "fps" => 120, "date" => 132,
         "music" => 184, "volume" => 160, "frame-time" => 208,
         _ => HudCapsuleLayout.IsChart(item) ? 126 : 96
     });
 
-    private double ContainerTileHeight(string item) => item switch
+    private double ContainerTileHeight(string item) => HudCapsuleLayout.KindOf(item) switch
     {
         "fps" or "low" => 50 * LayoutGrowth,
         "time" or "battery" => 24 * LayoutGrowth,
@@ -127,6 +134,7 @@ public partial class MainWindow
 
     private void RestoreClassicContainers()
     {
+        RestoreTreeContainers();
         if (_containerStack is null) return;
         foreach (Border cell in _containerCells.Values) cell.Child = null;
         foreach (var (widget, parent) in _classicWidgetParents)
@@ -137,6 +145,7 @@ public partial class MainWindow
         _containerStack = null;
         _containerContentSize = null;
         _appliedContainerRows = null;
+        ClearInstanceWidgets();
         _appliedBlockOrder = _appliedMetricOrder = null;
         _appliedHeaderOrder = string.Empty;
         CompactContentGrid.Visibility = Visibility.Visible;

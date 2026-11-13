@@ -1,8 +1,9 @@
+using System.IO;
 using System.Windows;
-using System.Windows.Automation;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Luma.Island;
 using Luma.Island.Services;
 
@@ -10,56 +11,85 @@ internal static partial class Program
 {
     private static async Task RunWidgetPickerUiChecks()
     {
-        using var fixture = new Fixture("widget-picker", AppearanceSettings.Default, ComponentSettings.Default);
+        using var fixture = new Fixture("layout-editor-panels", AppearanceSettings.Default, ComponentSettings.Default);
         var window = fixture.Window;
         window.Show(); await Settle();
         var original = window.CaptureHudSettings();
-        var originalBytes = fixture.BaseHashes();
-        var plus = Named<Button>(window, "CapsuleAddWidgetButton");
-        Check(!plus.IsVisible && Field<Popup?>(window, "_capsuleWidgetPickerPopup") is null,
-            "The widget picker is absent from ordinary HUD rendering and remains lazy");
+        string[] originalBytes = fixture.BaseHashes();
+        Check(Field<LayoutEditorWindow?>(window, "_layoutPalette") is null && window.FindName("CapsuleAddWidgetButton") is null,
+            "The HUD does not allocate an editor or display a plus during normal use");
 
         Call(window, "BeginCapsuleEdit"); await Settle();
-        Check(plus.IsVisible && AutomationProperties.GetName(plus) == "Блоки HUD" &&
-              Field<Popup?>(window, "_capsuleWidgetPickerPopup") is null,
-            "The screen editor presents an accessible plus without allocating the catalog");
+        var palette = Field<LayoutEditorWindow>(window, "_layoutPalette");
+        var inspector = Field<LayoutEditorWindow>(window, "_layoutInspector");
+        var components = Named<StackPanel>(palette, "ComponentCards").Children.OfType<Border>().ToArray();
+        var containers = Named<StackPanel>(palette, "ContainerCards").Children.OfType<Border>().ToArray();
+        Check(!palette.IsVisible && !inspector.IsVisible && !window.IsActive && window.Appearance.Layout.Capsules!.HasTree,
+            "Opening a hidden fixture constructs isolated editor panels and a migrated tree without activation");
+        Check(components.Length == 18 && containers.Select(card => (string)card.Tag).SequenceEqual(new[] { "row", "column", "grid" }),
+            "The palette provides eighteen component drag cards and three container drag cards");
+        Named<TextBox>(palette, "PaletteSearch").Text = "температура";
+        Check(components.Count(card => card.Visibility == Visibility.Visible) == 3,
+            "The palette search narrows the list to the three temperature components");
+        Named<TextBox>(palette, "PaletteSearch").Clear();
 
-        // Exercise the real WPF popup with no visible surface or desktop mouse capture.
-        var picker = (CapsuleWidgetPicker)Call(window, "GetCapsuleWidgetPicker")!;
-        var popup = Field<Popup>(window, "_capsuleWidgetPickerPopup");
-        picker.Opacity = 0;
-        popup.StaysOpen = true;
-        Click(plus); await Settle();
-        Check(popup.IsOpen && !window.IsActive, "The plus opens the isolated popup without activating the test HUD");
+        var clockCard = components.Single(card => (string)card.Tag == "time");
+        var source = PresentationSource.FromVisual(window)!;
+        for (int i = 0; i < 20; i++)
+            clockCard.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Enter) { RoutedEvent = Keyboard.KeyDownEvent });
+        var tree = window.Appearance.Layout.Capsules!;
+        Check(tree.Islands.SelectMany(capsule => capsule.GetItems()).Count(id => HudCapsuleLayout.KindOf(id) == "time") == 21 &&
+              fixture.BaseHashes().SequenceEqual(originalBytes), "The accessible palette adds twenty unique copies without writing the draft");
+        Call(window, "UndoCapsuleEdit");
+        Check(window.Appearance.Layout.Capsules!.Islands.SelectMany(capsule => capsule.GetItems()).Count(id => HudCapsuleLayout.KindOf(id) == "time") == 20,
+            "A single undo removes only the most recently added clock");
+        Call(window, "RedoCapsuleEdit");
+        Call(window, "AddCapsuleWidget", "grid");
+        var layout = window.Appearance.Layout.Capsules!;
+        var grid = layout.Islands.SelectMany(capsule => capsule.Root!.DescendantsAndSelf()).Last(node => node.Kind == "grid");
+        Call(window, "SelectCapsuleNode", grid.Id);
+        Check(Named<StackPanel>(inspector, "ContainerProperties").Visibility == Visibility.Visible &&
+              Named<StackPanel>(inspector, "ColumnsField").Visibility == Visibility.Visible,
+            "Selecting a grid displays its layout properties in the inspector");
+        Named<Slider>(inspector, "ColumnsSlider").Value = 3;
+        Named<Slider>(inspector, "GapSlider").Value = 11;
+        Check(window.Appearance.Layout.Capsules!.GetNode(grid.Id) is { Columns: 3, Gap: 11 },
+            "Changing inspector controls updates the real grid draft");
+        Call(window, "UndoCapsuleEdit");
+        Check(window.Appearance.Layout.Capsules!.GetNode(grid.Id)?.Gap == 6,
+            "The inspector property change participates in editor history");
+        Call(window, "DuplicateCapsuleSelection");
+        Check(window.Appearance.Layout.Capsules!.Islands.SelectMany(capsule => capsule.Root!.DescendantsAndSelf()).Count(node => node.Kind == "grid") == 2,
+            "The inspector can duplicate an empty container");
+        Call(window, "RemoveCapsuleSelection");
+        Check(window.Appearance.Layout.Capsules!.GetNode(grid.Id) is null,
+            "Delete removes the selected empty container without affecting its copy");
 
-        var options = Named<StackPanel>(picker, "WidgetGroups").Children.OfType<UniformGrid>()
-            .SelectMany(group => group.Children.OfType<CheckBox>()).ToDictionary(option => (string)option.Tag);
-        Check(options.Count == 18 && options.Values.All(option => !string.IsNullOrEmpty(AutomationProperties.GetName(option))) &&
-              new[] { "cpu-chart", "gpu-chart", "memory-chart", "fps-chart", "cpu-temp", "gpu-temp", "memory-temp" }.All(options.ContainsKey),
-            "The catalog exposes separately named metrics, charts and temperature switches");
-        Check(options["date"].IsChecked == true && options["cpu-chart"].IsChecked == false,
-            "The catalog opens with the current widget selection");
+        var remainingGrid = window.Appearance.Layout.Capsules!.Islands.SelectMany(capsule => capsule.Root!.DescendantsAndSelf()).Single(node => node.Kind == "grid");
+        Call(window, "SelectCapsuleNode", remainingGrid.Id);
 
-        options["date"].IsChecked = false;
-        Click(options["date"]);
-        options["cpu-chart"].IsChecked = true;
-        Click(options["cpu-chart"]);
-        Check(popup.IsOpen && !window.Components.Date && !window.Components.Cpu && window.Components.ShowCpuChart &&
-              fixture.BaseHashes().SequenceEqual(originalBytes),
-            "Multiple catalog toggles affect the visible draft and keep the popup open without saving");
-
-        var popupSource = PresentationSource.FromVisual(picker) ?? throw new InvalidOperationException("The open catalog has no presentation source.");
-        var escape = new KeyEventArgs(Keyboard.PrimaryDevice, popupSource, Environment.TickCount, Key.Escape)
-            { RoutedEvent = Keyboard.PreviewKeyDownEvent };
-        picker.RaiseEvent(escape); await Settle();
-        Check(escape.Handled && !popup.IsOpen && window.IsHudDragging && window.Components.ShowCpuChart,
-            "Escape dismisses the catalog without canceling the active draft");
-
-        Click(plus); await Settle();
-        Check(popup.IsOpen && options["date"].IsChecked == false && options["cpu-chart"].IsChecked == true,
-            "Reopening the catalog reflects the unsaved draft");
+        RenderEditorPanel(palette, "layout-palette.png");
+        RenderEditorPanel(inspector, "layout-inspector.png");
         Call(window, "EndCapsuleEdit", false); await Settle();
-        Check(!popup.IsOpen && !plus.IsVisible && window.CaptureHudSettings() == original && fixture.BaseHashes().SequenceEqual(originalBytes),
-            "Cancel closes the picker and restores the previous HUD without writing preferences");
+        Check(Field<LayoutEditorWindow?>(window, "_layoutPalette") is null && Field<LayoutEditorWindow?>(window, "_layoutInspector") is null &&
+              window.CaptureHudSettings() == original && fixture.BaseHashes().SequenceEqual(originalBytes),
+            "Cancel disposes both panels and restores every original store and layout");
+    }
+
+    private static void RenderEditorPanel(Window panel, string name)
+    {
+        var content = (FrameworkElement)panel.Content;
+        content.Measure(new Size(270, 660));
+        content.Arrange(new Rect(0, 0, 270, 660));
+        content.UpdateLayout();
+        var bitmap = new RenderTargetBitmap(270, 660, 96, 96, PixelFormats.Pbgra32);
+        var background = new DrawingVisual();
+        using (var drawing = background.RenderOpen()) drawing.DrawRectangle(panel.Background, null, new Rect(0, 0, 270, 660));
+        bitmap.Render(background);
+        bitmap.Render(content);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = File.Create(Path.Combine(Output, name));
+        encoder.Save(stream);
     }
 }

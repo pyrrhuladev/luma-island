@@ -30,7 +30,7 @@ public sealed class GameProfileStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
-        MaxDepth = 16,
+        MaxDepth = 40,
         Converters =
         {
             new JsonStringEnumConverter<IslandPlacement>(allowIntegerValues: false)

@@ -46,10 +46,12 @@ public partial class MainWindow
         if (_closed) return;
         var normalized = HudLayoutSettings.Normalize(layout);
         if (Appearance.Layout == normalized) return;
+        var previous = Components;
         Appearance = Appearance with { Layout = normalized };
         ApplyComponentVisibility();
         OnMediaChanged(_lastMedia ?? _media.Current);
         SaveAppearance();
+        NotifyCapsuleComponentsChanged(previous);
     }
 
     private void ApplyHudLayout()
@@ -125,7 +127,10 @@ public partial class MainWindow
 
     private TextBlock CompactMetric(string key) => key switch { "cpu" => CompactCpu, "gpu" => CompactGpu, _ => CompactMemory };
 
-    private FrameworkElement? PresentedWidget(string id) => id switch
+    private FrameworkElement? PresentedWidget(string id) => PresentsComponentInstances
+        ? _instanceWidgets.GetValueOrDefault(id) : ClassicPresentedWidget(id);
+
+    private FrameworkElement? ClassicPresentedWidget(string kind) => kind switch
     {
         "fps" => CompactFpsPanel, "low" => CompactLowPanel, "time" => CompactClock, "battery" => CompactBattery,
         "cpu" => CompactCpu, "gpu" => CompactGpu, "memory" => CompactMemory, "music" => CompactMusicRow,
@@ -135,7 +140,7 @@ public partial class MainWindow
 
     private FrameworkElement PresentedWidgetGroup(string group) => group switch
     {
-        "header" => HudHeader, "metrics" => CompactPerformance, "charts" => ChartsPanel, _ => PresentedWidget(group)!
+        "header" => HudHeader, "metrics" => CompactPerformance, "charts" => ChartsPanel, _ => ClassicPresentedWidget(group)!
     };
 
     private void ApplyHeaderOrder()
@@ -171,7 +176,7 @@ public partial class MainWindow
         {
             if (index == firstClock && lastFrame < firstClock && _capsuleId is null)
                 HudHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            FrameworkElement widget = PresentedWidget(items[index])!;
+            FrameworkElement widget = ClassicPresentedWidget(items[index])!;
             Grid.SetColumn(widget, HudHeader.ColumnDefinitions.Count);
             HudHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             HudHeader.Children.Add(widget);
@@ -198,17 +203,19 @@ public partial class MainWindow
             element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             return element.DesiredSize.Width;
         }
+        static double CellWidth(FrameworkElement element) => double.IsFinite(element.Width)
+            ? element.Width : Math.Max(element.MinWidth, element.DesiredSize.Width);
         if (PresentationRows is not null)
         {
-            if (CapsuleContainerCell("fps") is { } fpsCell)
+            if (PrimaryContainerCell("fps") is { } fpsCell)
             {
-                double fpsFit = Math.Min(1, fpsCell.Width / Math.Max(1, Width(CompactFpsPanel)));
+                double fpsFit = Math.Min(1, Math.Max(1, CellWidth(fpsCell)) / Math.Max(1, Width(CompactFpsPanel)));
                 CompactFps.FontSize *= fpsFit;
                 CompactFpsUnit.FontSize *= fpsFit;
             }
-            if (CapsuleContainerCell("low") is { } lowCell)
+            if (PrimaryContainerCell("low") is { } lowCell)
             {
-                double lowFit = Math.Min(1, lowCell.Width / Math.Max(1, Width(CompactLowPanel)));
+                double lowFit = Math.Min(1, Math.Max(1, CellWidth(lowCell)) / Math.Max(1, Width(CompactLowPanel)));
                 CompactOnePercentLow.FontSize *= lowFit;
                 if (CompactLowPanel.Children[0] is TextBlock lowTitle) lowTitle.FontSize *= lowFit;
             }
